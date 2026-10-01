@@ -10,8 +10,14 @@ This document serves as a guideline for AI agents working on the Output Merger p
 - **Frontend**: `artifacts/output-merger.UI` - Vite + React + TypeScript application
 - **Backend**: `artifacts/output-merger.API` - Future Nest.js implementation (planned for V1)
 
+### Routing Behavior
+- The application uses Tanstack Router for routing
+- In MVP (v0), accessing the application redirects to `"{base_url}/session/0"`
+- In future versions (v2), this pattern extends to `"{base_url}/session/{id}"` for accessing different sessions
+
 ### Technology Stack
 - **Frontend**: React 18 + TypeScript + Vite
+- **Routing**: Tanstack Router
 - **Styling**: MUI and Styled Components
 - **Design System**: Guided by `design.md` (to be created)
 - **Testing**: Vitest
@@ -29,6 +35,11 @@ Whenever there is a necessity to implement a component for the UI:
 2. Place the component in the `artifacts/output-merger.UI/src/components` folder
 3. The components folder should have an alias configured to be called globally via `@components`
 4. Every component should be implemented following the `components/Example` template (to be established)
+
+### Internationalization/Localization
+- Agents must always add texts to translation files (en-US and pt-BR) when adding texts to the front-end
+- Translation files should be located in `src/locales/` with separate files for each language
+- Use React-i18next or similar library for translation implementation
 
 ### Testing
 - All tests should be implemented using Vitest
