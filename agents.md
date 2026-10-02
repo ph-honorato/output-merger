@@ -2,46 +2,41 @@
 
 This document serves as a guideline for AI agents working on the Output Merger project. It defines the rules, conventions, and structure that agents should follow when implementing features.
 
-## Project Context
-
-**Output Merger** is an AI Output Comparison Platform that allows users to compare and merge AI-generated outputs with live preview.
-
-### Project Structure
-- **Frontend**: `artifacts/output-merger.UI` - Vite + React + TypeScript application
-- **Backend**: `artifacts/output-merger.API` - Future Nest.js implementation (planned for V1)
-
-### Routing Behavior
-- The application uses Tanstack Router for routing
-- In MVP (v0), accessing the application redirects to `"{base_url}/session/0"`
-- In future versions (v2), this pattern extends to `"{base_url}/session/{id}"` for accessing different sessions
-
-### Technology Stack
-- **Frontend**: React 18 + TypeScript + Vite
-- **Routing**: Tanstack Router
-- **Styling**: MUI and Styled Components
-- **Design System**: Guided by `design.md` (to be created)
-- **Testing**: Vitest
-- **State Management**: React Context + useReducer (current), potentially evolving
+**Project Context**: See [context.md](./context.md) for project overview, technology stack, routing, and planned features.
 
 ## Implementation Rules
 
 ### Folder-Specific Implementation
+
 - **Frontend/Interface Changes**: All modifications must be made exclusively in the `artifacts/output-merger.UI` folder
 - **Backend/API Changes**: All modifications must be made exclusively in the `artifacts/output-merger.API` folder
 
 ### Component Development (Frontend)
+
 Whenever there is a necessity to implement a component for the UI:
+
 1. Create a sub-agent for that component to save context
 2. Place the component in the `artifacts/output-merger.UI/src/components` folder
 3. The components folder should have an alias configured to be called globally via `@components`
-4. Every component should be implemented following the `components/Example` template (to be established)
+4. When creating new components, agents should follow this structure (example in `components/Example/`):
+
+```
+Example.tsx           // Component implementation file
+Example.hook.tsx      // Hooks implementation file
+Example.test.tsx      // Unit tests implementation file
+Example.styles.ts     // Styled-components file
+Example.types.ts      // Component's interface and types implementation file
+index.ts              // Index file to export
+```
 
 ### Internationalization/Localization
+
 - Agents must always add texts to translation files (en-US and pt-BR) when adding texts to the front-end
-- Translation files should be located in `src/locales/` with separate files for each language
+- Translation files are be located in `src/i18n/resources/` with separate files for each language
 - Use React-i18next or similar library for translation implementation
 
 ### Testing
+
 - All tests should be implemented using Vitest
 - **Features should only have integration tests** - test complete user workflows and interactions
 - **Unit tests should only be implemented on:**
@@ -49,30 +44,10 @@ Whenever there is a necessity to implement a component for the UI:
   - Future API functions (in `artifacts/output-merger.API`)
 - Test files should be placed alongside the implementation files or in a `__tests__` directory following Vitest conventions
 
-## Current Status (V0 - MVP)
-As described in README.md:
-- Users can add up to 3 different texts and start a merge session
-- Users can select text parts with the mouse to auto-include in the preview
-- In the preview area, users can drag highlighted text snippets, create line breaks, split snippets between words, and add own text
-- Status: Started
-
-## Planned Features
-
-### V1 ("Merges" CRUD)
-- User authentication and login requirement
-- Sessions screen to start new merge sessions or return to existing ones
-- Additional tools may be added to the text preview interface
-- Backend API implementation (Nest.js) for session persistence
-
-### V2 (AI Integration)
-- Option to choose between manual input or model output
-- Screen to integrate with desired AI models alongside entered prompts
-- Ability to reuse prompts from previous inputs via "copy from…" functionality
-- Generated prompt outputs made available for merging as in previous versions
-
 ## Agent Workflow Guidelines
 
 When working on this project, agents should:
+
 1. First understand the current feature or bug being addressed
 2. Check if similar implementations exist in the codebase for reference
 3. Follow the established patterns and conventions
@@ -80,13 +55,4 @@ When working on this project, agents should:
 5. Ensure proper separation of concerns between frontend and backend
 6. Write tests for new functionality
 7. Update documentation when necessary
-
-## Component Template Reference
-When creating new components, agents should follow this structure (to be created in `src/components/Example/`):
-- Component file (.tsx)
-- Styles file (.module.css or styled components)
-- Index file for export
-- Test file (.test.tsx)
-- Any necessary hooks or utilities in subfolders
-
-This guideline will evolve as the project develops and more specific patterns are established.
+8. After a feature is implementad, go back to [roadmap.md](./roadmap.md) and update the status
