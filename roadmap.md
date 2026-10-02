@@ -8,7 +8,7 @@
 
 #### Tasks for v0
 - [x] 1. Set up the project structure (frontend with Vite, React, TypeScript)
-- [ ] 2. Set-up styled-components and MUI
+- [x] 2. Set-up styled-components and MUI
 - [ ] 3. Create Header component with the name of the project on the left (should be responsive)
 - [ ] 4. Set up translation for en-US and pt-BR (There is already a basic implementation and translation files). And add a translation button on the Header component.
 - [ ] 5. Install and set-up tanstack react router. 
