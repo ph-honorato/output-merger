@@ -9,8 +9,8 @@
 #### Tasks for v0
 - [x] 1. Set up the project structure (frontend with Vite, React, TypeScript)
 - [x] 2. Set-up styled-components and MUI
-- [ ] 3. Create Header component with the name of the project on the left (should be responsive)
-- [ ] 4. Set up translation for en-US and pt-BR (There is already a basic implementation and translation files). And add a translation button on the Header component.
+- [x] 3. Create Header component with the name of the project on the left (should be responsive)
+- [x] 4. Set up translation for en-US and pt-BR (There is already a basic implementation and translation files). And add a translation button on the Header component.
 - [ ] 5. Install and set-up tanstack react router. 
 - [ ] 6. Create a "MergeSession" Page. It should be empty by now, just follow the design.md patterns. Set-up "/quickMerge" in react router for this Page. Set-up react router to always redirect user to {base_url}/quickMerge.
 - [ ] 7. Implement the UI for adding up to 3 text inputs in the MergeSession page
