@@ -1,12 +1,14 @@
-import styled from 'styled-components';
-import type { DefaultTheme } from 'styled-components';
-import type { Theme } from '@mui/material/styles';
+import styled from "styled-components";
+import type { DefaultTheme } from "styled-components";
+import type { Theme } from "@mui/material/styles";
 
 type StyledTheme = DefaultTheme & Theme;
 
-export const StyledHeader = styled.div`
-  background-color: ${({ theme }) => (theme as StyledTheme).palette.background.paper};
-  border-bottom: 1px solid ${({ theme }) => (theme as StyledTheme).palette.divider};
+export const StyledHeader = styled.header`
+  background-color: ${({ theme }) =>
+    (theme as StyledTheme).palette.background.paper};
+  border-bottom: 1px solid
+    ${({ theme }) => (theme as StyledTheme).palette.divider};
   box-shadow: ${({ theme }) => (theme as StyledTheme).shadows[1]};
   position: sticky;
   top: 0;
@@ -37,7 +39,11 @@ export const LogoIcon = styled.div`
   width: 40px;
   height: 40px;
   border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
-  background: linear-gradient(135deg, ${({ theme }) => (theme as StyledTheme).palette.primary.main}, ${({ theme }) => (theme as StyledTheme).palette.secondary.main});
+  background: linear-gradient(
+    135deg,
+    ${({ theme }) => (theme as StyledTheme).palette.primary.main},
+    ${({ theme }) => (theme as StyledTheme).palette.secondary.main}
+  );
   color: white;
   font-size: 1.5rem;
 `;
@@ -48,7 +54,7 @@ export const LogoText = styled.h1`
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   white-space: nowrap;
   margin: 0;
-  
+
   @media (max-width: 600px) {
     font-size: 1.25rem;
   }
@@ -72,9 +78,10 @@ export const LanguageMenuButton = styled.button`
   justify-content: center;
   border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
   color: ${({ theme }) => (theme as StyledTheme).palette.action.active};
-  
+
   &:hover {
-    background-color: ${({ theme }) => (theme as StyledTheme).palette.action.hover};
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.action.hover};
   }
 `;
 
@@ -83,7 +90,8 @@ export const LanguageMenu = styled.div`
   top: 100%;
   right: 0;
   margin-top: ${({ theme }) => (theme as StyledTheme).spacing(1)};
-  background-color: ${({ theme }) => (theme as StyledTheme).palette.background.paper};
+  background-color: ${({ theme }) =>
+    (theme as StyledTheme).palette.background.paper};
   border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
   box-shadow: ${({ theme }) => (theme as StyledTheme).shadows[4]};
   min-width: 180px;
@@ -102,13 +110,15 @@ export const LanguageMenuItem = styled.button`
   text-align: left;
   font-size: 0.875rem;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
-  
+
   &:hover {
-    background-color: ${({ theme }) => (theme as StyledTheme).palette.action.hover};
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.action.hover};
   }
-  
+
   &.selected {
-    background-color: ${({ theme }) => (theme as StyledTheme).palette.action.selected};
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.action.selected};
     font-weight: 600;
   }
 `;
@@ -132,11 +142,12 @@ export const MobileMenuButton = styled.button`
   justify-content: center;
   border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
   color: ${({ theme }) => (theme as StyledTheme).palette.action.active};
-  
+
   &:hover {
-    background-color: ${({ theme }) => (theme as StyledTheme).palette.action.hover};
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.action.hover};
   }
-  
+
   @media (min-width: 600px) {
     display: none;
   }
@@ -146,7 +157,7 @@ export const DesktopActions = styled.div`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
-  
+
   @media (max-width: 599px) {
     display: none;
   }
@@ -156,7 +167,7 @@ export const MobileActions = styled.div`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
-  
+
   @media (min-width: 600px) {
     display: none;
   }
@@ -167,7 +178,8 @@ export const MobileMenu = styled.div`
   top: 100%;
   right: 0;
   margin-top: ${({ theme }) => (theme as StyledTheme).spacing(1)};
-  background-color: ${({ theme }) => (theme as StyledTheme).palette.background.paper};
+  background-color: ${({ theme }) =>
+    (theme as StyledTheme).palette.background.paper};
   border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
   box-shadow: ${({ theme }) => (theme as StyledTheme).shadows[4]};
   min-width: 180px;

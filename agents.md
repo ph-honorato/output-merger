@@ -29,6 +29,19 @@ Example.types.ts      // Component's interface and types implementation file
 index.ts              // Index file to export
 ```
 
+### Routing (Frontend)
+
+When adding new routes to the application:
+
+1. Create the page component in `src/pages/` following the component structure
+2. Add the route to `src/routes/routeTree.gen.ts`:
+   - Import the page component
+   - Create a route using `createRoute` with path and component
+   - Add the route to the route tree in `rootRoute.addChildren([...])`
+   - For redirects, use `beforeLoad` with `{ redirect: '/target-path' }`
+3. Update the routes documentation in `context.md` with the new route
+4. Add translations for any new text in the page component
+
 ### Internationalization/Localization
 
 - Agents must always add texts to translation files (en-US and pt-BR) when adding texts to the front-end

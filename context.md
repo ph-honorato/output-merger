@@ -18,13 +18,27 @@ The application uses Tanstack Router for routing.
 ### Routes
 
 #### MVP (v0):
-- `"{base_url}/quickMerge"` -> Merge Session Page (always redirect this router when user enters the app)
+- `"{base_url}/"` -> Merge Session Page
 
 #### V1:
 - `"{base_url}"` -> Landing page with login
 - `"{base_url}/login"` -> Login Page
 - `"{base_url}/sessions"` -> Sessions Page (accessed after user authentication)
 - `"{base_url}/sessions/{merge_session_id}"` -> Merge Session Page (MVP implementation but with persisted information from user)
+
+### Route Configuration
+
+Routes are defined in `src/routes/routeTree.gen.ts`. This file contains:
+- Root route with layout (Header, Container, etc.)
+- Individual route definitions with paths and components
+- Route tree composition
+- Router instance creation
+
+When adding new routes:
+1. Import the page component
+2. Create a route using `createRoute` with path and component
+3. Add the route to the route tree in `rootRoute.addChildren([...])`
+4. For redirects, use `beforeLoad` with `{ redirect: '/target-path' }`
 
 ## Technology Stack
 
