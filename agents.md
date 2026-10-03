@@ -1,6 +1,5 @@
 # Agents Guidelines for Output Merger Project
 
-This document serves as a guideline for AI agents working on the Output Merger project. It defines the rules, conventions, and structure that agents should follow when implementing features.
 
 **Project Context**: See [context.md](./context.md) for project overview, technology stack, routing, and planned features.
 
@@ -69,3 +68,4 @@ When working on this project, agents should:
 6. Write tests for new functionality
 7. Update documentation when necessary
 8. After a feature is implementad, go back to [roadmap.md](./roadmap.md) and update the status
+9. If there's a big decision is needed, ask before implementing!
