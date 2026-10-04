@@ -1,6 +1,5 @@
 # Agents Guidelines for Output Merger Project
 
-
 **Project Context**: See [context.md](./context.md) for project overview, technology stack, routing, and planned features.
 
 ## Implementation Rules
@@ -47,16 +46,7 @@ When adding new routes to the application:
 - Translation files are be located in `src/i18n/resources/` with separate files for each language
 - Use React-i18next or similar library for translation implementation
 
-### Testing
-
-- All tests should be implemented using Vitest
-- **Features should only have integration tests** - test complete user workflows and interactions
-- **Unit tests should only be implemented on:**
-  - UI components (in `src/components`)
-  - Future API functions (in `artifacts/output-merger.API`)
-- Test files should be placed alongside the implementation files or in a `__tests__` directory following Vitest conventions
-
-## Agent Workflow Guidelines
+### Agent Workflow Guidelines
 
 When working on this project, agents should:
 
@@ -69,3 +59,12 @@ When working on this project, agents should:
 7. Update documentation when necessary
 8. After a feature is implementad, go back to [roadmap.md](./roadmap.md) and update the status
 9. If there's a big decision is needed, ask before implementing!
+
+## Implementation Guidelines
+
+| Guideline             | Description                                                                                                                                                                            | Applies To                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| **Styling**           | Implement styling using MUI and Styled Components consistently across all components                                                                                                   | All UI components                      |
+| **State Management**  | Implement state management using React Context + useReducer for global state                                                                                                           | All features requiring shared state    |
+| **Integration Tests** | Write integration tests for key user workflows using Vitest. Test files should be placed alongside the implementation files or in a `__tests__` directory following Vitest conventions | All features (complete user workflows) |
+| **Unit Tests**        | Implement unit tests only for UI components (in `src/components`) and future API functions (in `artifacts/output-merger.API`)                                                          | Components and API functions only      |
