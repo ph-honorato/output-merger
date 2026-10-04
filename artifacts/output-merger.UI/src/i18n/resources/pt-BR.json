@@ -1,0 +1,11 @@
+{
+  "app.title": "Output Merger",
+  "language.selector": "Idioma",
+  "language.english": "Inglês (EUA)",
+  "language.portuguese": "Português (BR)",
+  "landing.title": "Bem-vindo ao Output Merger",
+  "landing.description": "Compare e faça merge de saídas geradas por IA com visualização ao vivo. Adicione até 3 textos diferentes e inicie uma sessão de merge.",
+  "landing.start.button": "Iniciar Sessão de Merge",
+  "mergeSession.title": "Merge",
+  "mergeSession.description": "Página de sessão de merge - implementação em breve"
+}
