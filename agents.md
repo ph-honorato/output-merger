@@ -4,6 +4,10 @@
 
 ## Implementation Rules
 
+### Terminal Usage
+
+- **Always use Git Bash as the terminal** for all command-line operations, git commands, and script execution
+
 ### Folder-Specific Implementation
 
 - **Frontend/Interface Changes**: All modifications must be made exclusively in the `artifacts/output-merger.UI` folder
