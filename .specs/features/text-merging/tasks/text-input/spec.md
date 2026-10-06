@@ -216,45 +216,45 @@ Each requirement gets a unique ID for tracking across design, tasks, and validat
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| TXTIN-01 | P1: Compose source text | Specify | Pending |
-| TXTIN-02 | P1: Compose source text | Specify | Pending |
-| TXTIN-03 | P1: Compose source text | Specify | Pending |
-| TXTIN-04 | P1: Compose source text | Specify | Pending |
-| TXTIN-05 | P1: Compose source text | Specify | Pending |
-| TXTIN-06 | P1: Read source text in view mode | Specify | Pending |
-| TXTIN-07 | P1: Read source text in view mode | Specify | Pending |
-| TXTIN-08 | P1: Read source text in view mode | Specify | Pending |
-| TXTIN-09 | P1: Read source text in view mode | Specify | Pending |
-| TXTIN-10 | P1: Word stops | Specify | Pending |
-| TXTIN-11 | P1: Word stops | Specify | Pending |
-| TXTIN-12 | P1: Word stops | Specify | Pending |
-| TXTIN-13 | P1: Create a snippet by dragging a needle | Specify | Pending |
-| TXTIN-14 | P1: Create a snippet by dragging a needle | Specify | Pending |
-| TXTIN-15 | P1: Create a snippet by dragging a needle | Specify | Pending |
-| TXTIN-16 | P1: Create a snippet by dragging a needle | Specify | Pending |
-| TXTIN-17 | P1: Create a snippet by dragging a needle | Specify | Pending |
-| TXTIN-18 | P1: Create a snippet by dragging a needle | Specify | Pending |
-| TXTIN-19 | P1: Resize, multiple snippets, and delete | Specify | Pending |
-| TXTIN-20 | P1: Resize, multiple snippets, and delete | Specify | Pending |
-| TXTIN-21 | P1: Resize, multiple snippets, and delete | Specify | Pending |
-| TXTIN-22 | P1: Resize, multiple snippets, and delete | Specify | Pending |
-| TXTIN-23 | P1: Resize, multiple snippets, and delete | Specify | Pending |
-| TXTIN-24 | P1: Resize, multiple snippets, and delete | Specify | Pending |
-| TXTIN-25 | P1: Callback, identity, and color | Specify | Pending |
-| TXTIN-26 | P1: Callback, identity, and color | Specify | Pending |
-| TXTIN-27 | P1: Callback, identity, and color | Specify | Pending |
-| TXTIN-28 | P1: Callback, identity, and color | Specify | Pending |
-| TXTIN-29 | P1: Callback, identity, and color | Specify | Pending |
-| TXTIN-30 | P1: Touch parity | Specify | Pending |
-| TXTIN-31 | P1: Touch parity | Specify | Pending |
-| TXTIN-32 | P1: Touch parity | Specify | Pending |
-| TXTIN-33 | P1: Touch parity | Specify | Pending |
+| TXTIN-01 | P1: Compose source text | Specify | Deviated |
+| TXTIN-02 | P1: Compose source text | Specify | Deviated |
+| TXTIN-03 | P1: Compose source text | Specify | Verified |
+| TXTIN-04 | P1: Compose source text | Specify | Deviated |
+| TXTIN-05 | P1: Compose source text | Specify | Verified |
+| TXTIN-06 | P1: Read source text in view mode | Specify | Verified |
+| TXTIN-07 | P1: Read source text in view mode | Specify | Deviated |
+| TXTIN-08 | P1: Read source text in view mode | Specify | Verified |
+| TXTIN-09 | P1: Read source text in view mode | Specify | Deviated |
+| TXTIN-10 | P1: Word stops | Specify | Deviated |
+| TXTIN-11 | P1: Word stops | Specify | Deviated |
+| TXTIN-12 | P1: Word stops | Specify | Verified |
+| TXTIN-13 | P1: Create a snippet by dragging a needle | Specify | Verified |
+| TXTIN-14 | P1: Create a snippet by dragging a needle | Specify | Verified |
+| TXTIN-15 | P1: Create a snippet by dragging a needle | Specify | Verified |
+| TXTIN-16 | P1: Create a snippet by dragging a needle | Specify | Verified |
+| TXTIN-17 | P1: Create a snippet by dragging a needle | Specify | Deviated |
+| TXTIN-18 | P1: Create a snippet by dragging a needle | Specify | Verified |
+| TXTIN-19 | P1: Resize, multiple snippets, and delete | Specify | Verified |
+| TXTIN-20 | P1: Resize, multiple snippets, and delete | Specify | Verified |
+| TXTIN-21 | P1: Resize, multiple snippets, and delete | Specify | Deviated |
+| TXTIN-22 | P1: Resize, multiple snippets, and delete | Specify | Verified |
+| TXTIN-23 | P1: Resize, multiple snippets, and delete | Specify | Deferred |
+| TXTIN-24 | P1: Resize, multiple snippets, and delete | Specify | Deviated |
+| TXTIN-25 | P1: Callback, identity, and color | Specify | Verified |
+| TXTIN-26 | P1: Callback, identity, and color | Specify | Verified |
+| TXTIN-27 | P1: Callback, identity, and color | Specify | Verified |
+| TXTIN-28 | P1: Callback, identity, and color | Specify | Deviated |
+| TXTIN-29 | P1: Callback, identity, and color | Specify | Verified |
+| TXTIN-30 | P1: Touch parity | Specify | Deferred |
+| TXTIN-31 | P1: Touch parity | Specify | Deviated |
+| TXTIN-32 | P1: Touch parity | Specify | Deferred |
+| TXTIN-33 | P1: Touch parity | Specify | Deviated |
 
 **ID format:** `TXTIN-NN`
 
-**Status values:** Pending → In Design → In Tasks → Implementing → Verified
+**Status values:** Pending → In Design → In Tasks → Implementing → Verified; additionally **Deviated** (implemented with a changed contract — see `implementation.md` §7) and **Deferred** (not implemented — see `implementation.md` §9).
 
-**Coverage:** 33 total, 0 mapped to tasks, 33 unmapped (Tasks phase not started). Roadmap mapping: 1.1 → TXTIN-01–05; 1.2 → TXTIN-06–09; 1.3 → TXTIN-10–12, TXTIN-13; 1.4 → TXTIN-13–18; 1.5 → TXTIN-20–21, TXTIN-24; 1.6 → TXTIN-19, TXTIN-22–23; 1.7 → TXTIN-25–27; 1.8 → TXTIN-28–29; touch (grilled) → TXTIN-30–33.
+**Coverage:** 33 total. 17 Verified, 13 Deviated, 3 Deferred. Roadmap mapping: 1.1 → TXTIN-01–05; 1.2 → TXTIN-06–09; 1.3 → TXTIN-10–12, TXTIN-13; 1.4 → TXTIN-13–18; 1.5 → TXTIN-20–21, TXTIN-24; 1.6 → TXTIN-19, TXTIN-22–23; 1.7 → TXTIN-25–27; 1.8 → TXTIN-28–29; touch (grilled) → TXTIN-30–33. Per-requirement outcomes: `.specs/features/text-input/implementation.md`.
 
 ---
 

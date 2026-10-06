@@ -2,7 +2,7 @@
 
 **Gathered:** 2026-10-06
 **Spec:** `.specs/features/text-input/spec.md`
-**Status:** Ready for design
+**Status:** Implemented — see `implementation.md`
 
 ---
 
