@@ -8,6 +8,12 @@
 
 - **Always use Git Bash as the terminal** for all command-line operations, git commands, and script execution
 
+### Scope Restriction
+
+- **Only modify files located inside this project's root directory**
+- Never create, edit, or delete files outside this project, including system directories or other repositories
+- If a task appears to require changes outside this project, stop and ask the user before proceeding
+
 ### Folder-Specific Implementation
 
 - **Frontend/Interface Changes**: All modifications must be made exclusively in the `artifacts/output-merger.UI` folder
