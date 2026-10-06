@@ -64,6 +64,12 @@ When working on this project, agents should:
 8. After a feature is implementad, go back to [roadmap.md](./roadmap.md) and update the status
 9. If there's a big decision is needed, ask before implementing!
 
+### Git Operations
+
+- **Only create branches, commit, or push changes when explicitly instructed by the user**
+- If the agent thinks it's time to do a commit or create a branch, **ask the user first** before proceeding
+- Do not assume git operations are needed - wait for explicit user direction
+
 ## Implementation Guidelines
 
 | Guideline             | Description                                                                                                                                                                            | Applies To                             |
