@@ -7,5 +7,11 @@
   "landing.description": "Compare e faça merge de saídas geradas por IA com visualização ao vivo. Adicione até 3 textos diferentes e inicie uma sessão de merge.",
   "landing.start.button": "Iniciar Sessão de Merge",
   "mergeSession.title": "Merge",
-  "mergeSession.description": "Página de sessão de merge - implementação em breve"
+  "mergeSession.description": "Página de sessão de merge - implementação em breve",
+  "textInput.placeholder": "Digite ou cole seu texto aqui",
+  "textInput.counterLabel": "Contagem de caracteres",
+  "textInput.emptyView": "Nenhum texto adicionado ainda.",
+  "textInput.needleHover": "Arraste para destacar o texto",
+  "textInput.needleStart": "Marcador de início do trecho",
+  "textInput.needleEnd": "Marcador de fim do trecho"
 }

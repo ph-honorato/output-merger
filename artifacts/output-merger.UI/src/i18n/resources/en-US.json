@@ -7,5 +7,11 @@
   "landing.description": "Compare and merge AI-generated outputs with live preview. Add up to 3 different texts and start a merge session.",
   "landing.start.button": "Start Merge Session",
   "mergeSession.title": "Merge",
-  "mergeSession.description": "Merge session page - implementation coming soon"
+  "mergeSession.description": "Merge session page - implementation coming soon",
+  "textInput.placeholder": "Type or paste your text here",
+  "textInput.counterLabel": "Character count",
+  "textInput.emptyView": "No text added yet.",
+  "textInput.needleHover": "Drag to highlight text",
+  "textInput.needleStart": "Snippet start handle",
+  "textInput.needleEnd": "Snippet end handle"
 }

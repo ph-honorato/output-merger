@@ -15,15 +15,15 @@
   - [x] Install and set-up tanstack react router. 
   - [x] Create a "MergeSession" Page. It should be empty by now, just follow the design.md patterns. Set-up "/" in react router for this Page.
 - [ ] **Feature 2: Text Merging** - Core text merging functionality
-  - [ ] **Task 1: Text Input Component** - Core component with input/view modes and needle-based selection
-    - [ ] Task 1.1: Implement input mode with textarea (max 500 characters)
-    - [ ] Task 1.2: Implement view mode showing text without textarea
-    - [ ] Task 1.3: Implement needle system: two needles (start/end handles) appearing on hover at word boundaries for drag-to-highlight
-    - [ ] Task 1.4: Implement snippet creation on drag end with {id, text, startIndex, endIndex, color}
-    - [ ] Task 1.5: Implement snippet resizing via needle drag
-    - [ ] Task 1.6: Support multiple snippets per text
-    - [ ] Task 1.7: Implement onChange callback returning array of all snippets
-    - [ ] Task 1.8: Add default highlight color with prop override
+  - [x] **Task 1: Text Input Component** - Core component with input/view modes and needle-based selection
+    - [x] Task 1.1: Implement input mode with textarea (max 500 characters)
+    - [x] Task 1.2: Implement view mode showing text without textarea
+    - [x] Task 1.3: Implement needle system: two needles (start/end handles) appearing on hover at word boundaries for drag-to-highlight
+    - [x] Task 1.4: Implement snippet creation on drag end with {id, text, startIndex, endIndex, color}
+    - [x] Task 1.5: Implement snippet resizing via needle drag
+    - [x] Task 1.6: Support multiple snippets per text
+    - [x] Task 1.7: Implement onChange callback returning array of all snippets
+    - [x] Task 1.8: Add default highlight color with prop override
   - [ ] **Task 2: MergeSession Page Layout** - Three-column layout with ActionsBar
     - [ ] Task 2.1: Create ActionsBar component spanning full width of three columns
       - [ ] Task 2.1.1: "Start Merge" button aligned right
