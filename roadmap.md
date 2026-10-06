@@ -15,11 +15,36 @@
   - [x] Install and set-up tanstack react router. 
   - [x] Create a "MergeSession" Page. It should be empty by now, just follow the design.md patterns. Set-up "/" in react router for this Page.
 - [ ] **Feature 2: Text Merging** - Core text merging functionality
-  - [ ] Implement text input component (it should have 2 states - 1: normal input; 2: read-only) max 2.5k chars by now
-  - [ ] Add two text inputs on MergeSession Page
-  - [ ] Add a bar over all the inputs that holds the "start merge" button
-  - [ ] Add a preview area (just the component, no tools from feature 5 yet) should be on right side of input components
-  - [ ] Implement text selection on components. After "start merge", the text-inputs should be read-only. And when user selects a text part with mouse, the selected text should be displayed on the preview area (also read-only by now).
+  - [ ] **Task 1: Text Input Component** - Core component with input/view modes and needle-based selection
+    - [ ] Task 1.1: Implement input mode with textarea (max 500 characters)
+    - [ ] Task 1.2: Implement view mode showing text without textarea
+    - [ ] Task 1.3: Implement needle system: two needles (start/end handles) appearing on hover at word boundaries for drag-to-highlight
+    - [ ] Task 1.4: Implement snippet creation on drag end with {id, text, startIndex, endIndex, color}
+    - [ ] Task 1.5: Implement snippet resizing via needle drag
+    - [ ] Task 1.6: Support multiple snippets per text
+    - [ ] Task 1.7: Implement onChange callback returning array of all snippets
+    - [ ] Task 1.8: Add default highlight color with prop override
+  - [ ] **Task 2: MergeSession Page Layout** - Three-column layout with ActionsBar
+    - [ ] Task 2.1: Create ActionsBar component spanning full width of three columns
+      - [ ] Task 2.1.1: "Start Merge" button aligned right
+      - [ ] Task 2.1.2: Future: "Start Over" button (reset page without reload)
+      - [ ] Task 2.1.3: Future: "Add Text" button (add new text input, up to 6 total)
+    - [ ] Task 2.2: Add two TextInput components in columns 1 & 2 (each with unique highlight color)
+    - [ ] Task 2.3: Add PreviewArea component in column 3
+    - [ ] Task 2.4: Implement responsive three-column grid layout (stacks vertically on mobile)
+  - [ ] **Task 3: PreviewArea Component** - Display snippets from global context
+    - [ ] Task 3.1: Create PreviewArea component in column 3
+    - [ ] Task 3.2: Consume global snippets context with order property
+    - [ ] Task 3.3: Display snippets side by side with source color highlighting
+    - [ ] Task 3.4: Add a sideway copy tool to copy full built text
+  - [ ] **Task 4: Global Snippets Context** - Centralized snippet state management
+    - [ ] Task 4.1: Create global context for snippets with order property (default: user selection order)
+    - [ ] Task 4.2: Update context when user creates snippet in any input
+    - [ ] Task 4.3: Connect TextInput onChange to global context
+    - [ ] Task 4.4: Connect PreviewArea to consume global context
+  - [ ] **Task 5: Start Merge Logic** - Switch to merge mode
+    - [ ] Task 5.1: After "start merge", inputs become view mode
+    - [ ] Task 5.2: Needles enable snippet creation for preview
 - [ ] **Feature 3: Third Text Input** - Add support for a third text input
   - [ ] Add a button to add a third text input on MergeSession Page
   - [ ] Implement logic to handle three text inputs in the merge session
