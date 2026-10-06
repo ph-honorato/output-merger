@@ -42,6 +42,8 @@ export const TextViewContainer = styled.div`
   cursor: default;
   line-height: 1.8;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
+  -webkit-user-select: none;
+  user-select: none;
 `;
 
 export const Needle = styled.span`

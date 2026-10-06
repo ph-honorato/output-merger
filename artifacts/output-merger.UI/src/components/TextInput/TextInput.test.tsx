@@ -5,7 +5,7 @@ import { I18nextProvider } from 'react-i18next';
 import { theme } from '../../theme';
 import i18n from '../../i18n';
 import TextInput from './TextInput';
-import { tokenize, withAlpha } from './TextInput.hook';
+import { tokenize, withAlpha, computeNeedlePosition } from './TextInput.hook';
 import { type Snippet, type TextInputProps } from './TextInput.types';
 
 const TEXT = 'alpha beta gamma delta';
@@ -280,6 +280,49 @@ describe('TextInput Component', () => {
     setup();
     expect(screen.queryAllByTestId('text-input-needle')).toHaveLength(0);
   });
+
+  it('should position a word-end boundary needle at the preceding word right edge', () => {
+    setup({ mode: 'view' });
+
+    dragCreate('alpha', 'gamma');
+    const gamma = screen.getByText('gamma');
+    Object.defineProperty(gamma, 'offsetLeft', { value: 100, configurable: true });
+    Object.defineProperty(gamma, 'offsetWidth', { value: 50, configurable: true });
+
+    fireEvent.pointerMove(screen.getByText('beta'), {});
+    const endNeedle = getNeedleByRole('snippet-end');
+
+    expect(endNeedle).toHaveAttribute('data-boundary', '16');
+    expect(endNeedle).toHaveStyle({ left: '150px' });
+  });
+
+  it('should highlight whitespace between words inside a snippet', () => {
+    setup({ mode: 'view' });
+
+    dragCreate('alpha', 'gamma');
+
+    const spaceAfterAlpha = screen
+      .getAllByTestId('text-input-whitespace')
+      .find((el) => el.getAttribute('data-token-start') === '5');
+    const spaceAfterGamma = screen
+      .getAllByTestId('text-input-whitespace')
+      .find((el) => el.getAttribute('data-token-start') === '16');
+
+    expect(spaceAfterAlpha).toHaveStyle({
+      backgroundColor: withAlpha('#0080FF', 0.3),
+    });
+    expect(spaceAfterGamma).not.toHaveStyle({
+      backgroundColor: withAlpha('#0080FF', 0.3),
+    });
+  });
+
+  it('should disable native text selection in view mode', () => {
+    setup({ mode: 'view' });
+    expect(screen.getByTestId('text-input-view')).toHaveStyle({
+      '-webkit-user-select': 'none',
+      userSelect: 'none',
+    });
+  });
 });
 
 describe('TextInput helpers', () => {
@@ -309,5 +352,17 @@ describe('TextInput helpers', () => {
   it('should convert 3 and 6 digit hex colors to rgba', () => {
     expect(withAlpha('#0080FF', 0.3)).toBe('rgba(0, 128, 255, 0.3)');
     expect(withAlpha('#F0A', 0.5)).toBe('rgba(255, 0, 170, 0.5)');
+  });
+
+  it('should position needles at word left edge for word-start boundaries and right edge for word-end boundaries', () => {
+    const elements = new Map([
+      [0, { offsetLeft: 0, offsetWidth: 30, offsetTop: 0 }],
+      [4, { offsetLeft: 40, offsetWidth: 30, offsetTop: 20 }],
+    ]);
+
+    expect(computeNeedlePosition(0, elements)).toEqual({ left: 0, top: 0 });
+    expect(computeNeedlePosition(4, elements)).toEqual({ left: 40, top: 20 });
+    expect(computeNeedlePosition(3, elements)).toEqual({ left: 30, top: 0 });
+    expect(computeNeedlePosition(7, elements)).toEqual({ left: 70, top: 20 });
   });
 });

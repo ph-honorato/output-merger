@@ -15,7 +15,7 @@ function TextInput(props: TextInputProps) {
     handlePointerMove,
     handlePointerDown,
     registerWord,
-    getWordElement,
+    getNeedlePosition,
     getWordStyle,
   } = useTextInput(props);
 
@@ -63,11 +63,18 @@ function TextInput(props: TextInputProps) {
                 {token.value}
               </span>
             ) : (
-              <span key={`ws-${token.start}-${index}`}>{token.value}</span>
+              <span
+                key={`ws-${token.start}-${index}`}
+                data-testid="text-input-whitespace"
+                data-token-start={token.start}
+                style={getWordStyle(token.start, token.start + token.value.length)}
+              >
+                {token.value}
+              </span>
             )
           )}
           {needles.map((needle) => {
-            const wordEl = getWordElement(needle.boundary);
+            const position = getNeedlePosition(needle.boundary);
             return (
               <S.Needle
                 key={`${needle.role}-${needle.boundary}`}
@@ -77,8 +84,8 @@ function TextInput(props: TextInputProps) {
                 data-snippet-id={needle.snippetId}
                 aria-label={t(needle.labelKey)}
                 style={{
-                  left: wordEl?.offsetLeft ?? 0,
-                  top: wordEl?.offsetTop ?? 0,
+                  left: position?.left ?? 0,
+                  top: position?.top ?? 0,
                   backgroundColor: needle.color,
                   pointerEvents: isDragging ? 'none' : 'auto',
                 }}

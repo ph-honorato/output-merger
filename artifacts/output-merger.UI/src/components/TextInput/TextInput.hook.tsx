@@ -74,6 +74,46 @@ export const generateId = (): string =>
   `snippet-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
 /**
+ * A minimal box model interface for needle positioning
+ * @interface WordElementBox
+ */
+export interface WordElementBox {
+  offsetLeft: number;
+  offsetWidth: number;
+  offsetTop: number;
+}
+
+/**
+ * Computes the pixel position of a needle for a char-index boundary.
+ * Word-start boundaries sit at the word's left edge; word-end and
+ * text-end boundaries sit at the preceding word's right edge.
+ */
+export const computeNeedlePosition = (
+  boundary: number,
+  wordElements: Map<number, WordElementBox>
+): { left: number; top: number } | undefined => {
+  const exact = wordElements.get(boundary);
+  if (exact) {
+    return { left: exact.offsetLeft, top: exact.offsetTop };
+  }
+  const starts = Array.from(wordElements.keys()).sort((a, b) => a - b);
+  if (starts.length === 0) return undefined;
+  let preceding: WordElementBox | undefined;
+  for (const start of starts) {
+    if (start < boundary) {
+      preceding = wordElements.get(start);
+    } else {
+      break;
+    }
+  }
+  if (!preceding) {
+    const first = wordElements.get(starts[0])!;
+    return { left: first.offsetLeft, top: first.offsetTop };
+  }
+  return { left: preceding.offsetLeft + preceding.offsetWidth, top: preceding.offsetTop };
+};
+
+/**
  * Hook for managing the TextInput component logic
  * @returns {Object} Object containing text state, tokens, needle descriptors and interaction handlers
  */
@@ -299,27 +339,10 @@ export const useTextInput = (props: TextInputProps) => {
     []
   );
 
-  const getWordElement = useCallback(
-    (boundary: number): HTMLSpanElement | undefined => {
-      const exact = wordRefs.current.get(boundary);
-      if (exact) return exact;
-      const starts = Array.from(wordRefs.current.keys()).sort((a, b) => a - b);
-      if (starts.length === 0) return undefined;
-      if (boundary >= text.length) {
-        return wordRefs.current.get(starts[starts.length - 1]);
-      }
-      let best: number | undefined;
-      for (const start of starts) {
-        if (start < boundary) {
-          best = start;
-        } else {
-          break;
-        }
-      }
-      if (best !== undefined) return wordRefs.current.get(best);
-      return wordRefs.current.get(starts[0]);
-    },
-    [text.length]
+  const getNeedlePosition = useCallback(
+    (boundary: number): { left: number; top: number } | undefined =>
+      computeNeedlePosition(boundary, wordRefs.current),
+    []
   );
 
   const getWordStyle = useCallback(
@@ -417,7 +440,7 @@ export const useTextInput = (props: TextInputProps) => {
     handlePointerMove,
     handlePointerDown,
     registerWord,
-    getWordElement,
+    getNeedlePosition,
     getWordStyle,
   };
 };
