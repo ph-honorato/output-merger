@@ -74,6 +74,17 @@ export const generateId = (): string =>
   `snippet-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
 /**
+ * Advances a range start past any leading whitespace so snippets never begin with a space
+ */
+export const trimRangeStart = (text: string, start: number, end: number): number => {
+  let trimmed = start;
+  while (trimmed < end && /\s/.test(text[trimmed])) {
+    trimmed += 1;
+  }
+  return trimmed;
+};
+
+/**
  * A minimal box model interface for needle positioning
  * @interface WordElementBox
  */
@@ -270,8 +281,8 @@ export const useTextInput = (props: TextInputProps) => {
   const commit = useCallback(() => {
     if (!drag) return;
     if (drag.type === 'create') {
-      const start = Math.min(drag.anchor, drag.current);
       const end = Math.max(drag.anchor, drag.current);
+      const start = trimRangeStart(text, Math.min(drag.anchor, drag.current), end);
       if (start !== end) {
         const snippet: Snippet = {
           id: generateId(),
@@ -287,7 +298,11 @@ export const useTextInput = (props: TextInputProps) => {
     } else {
       const snippet = snippets.find((s) => s.id === drag.snippetId);
       if (snippet) {
-        const boundary = clampResizeBoundary(snippet, drag.edge, drag.boundary);
+        const clamped = clampResizeBoundary(snippet, drag.edge, drag.boundary);
+        const boundary =
+          drag.edge === 'start'
+            ? trimRangeStart(text, clamped, snippet.endIndex)
+            : clamped;
         const isRemoved =
           drag.edge === 'start' ? boundary >= snippet.endIndex : boundary <= snippet.startIndex;
         const next = isRemoved
@@ -349,8 +364,8 @@ export const useTextInput = (props: TextInputProps) => {
     (wordStart: number, wordEnd: number): React.CSSProperties | undefined => {
       const snippet = findSnippetAtWord(wordStart, wordEnd);
       if (drag?.type === 'create') {
-        const start = Math.min(drag.anchor, drag.current);
         const end = Math.max(drag.anchor, drag.current);
+        const start = trimRangeStart(text, Math.min(drag.anchor, drag.current), end);
         if (!snippet && start !== end && wordStart >= start && wordEnd <= end) {
           return { backgroundColor: withAlpha(color, 0.2) };
         }
@@ -358,7 +373,10 @@ export const useTextInput = (props: TextInputProps) => {
       if (drag?.type === 'resize') {
         const dragged = snippets.find((s) => s.id === drag.snippetId);
         if (dragged) {
-          const start = drag.edge === 'start' ? drag.boundary : dragged.startIndex;
+          const start =
+            drag.edge === 'start'
+              ? trimRangeStart(text, drag.boundary, dragged.endIndex)
+              : dragged.startIndex;
           const end = drag.edge === 'end' ? drag.boundary : dragged.endIndex;
           if (wordStart >= start && wordEnd <= end) {
             return { backgroundColor: withAlpha(dragged.color, 0.3) };
@@ -373,7 +391,7 @@ export const useTextInput = (props: TextInputProps) => {
       }
       return undefined;
     },
-    [drag, snippets, color, findSnippetAtWord]
+    [drag, snippets, text, color, findSnippetAtWord]
   );
 
   const getNeedles = (): NeedleDescriptor[] => {

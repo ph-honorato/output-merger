@@ -113,8 +113,8 @@ describe('TextInput Component', () => {
     const snippets = onChange.mock.calls[0][0] as Snippet[];
     expect(snippets).toHaveLength(1);
     expect(snippets[0]).toMatchObject({
-      text: ' beta gamma',
-      startIndex: 5,
+      text: 'beta gamma',
+      startIndex: 6,
       endIndex: 16,
       color: '#0080FF',
     });
@@ -165,8 +165,8 @@ describe('TextInput Component', () => {
     expect(onChange).toHaveBeenCalledTimes(2);
     const snippets = onChange.mock.calls[1][0] as Snippet[];
     expect(snippets).toHaveLength(2);
-    expect(snippets[0]).toMatchObject({ text: ' beta', startIndex: 5, endIndex: 10 });
-    expect(snippets[1]).toMatchObject({ text: ' delta', startIndex: 16, endIndex: 22 });
+    expect(snippets[0]).toMatchObject({ text: 'beta', startIndex: 6, endIndex: 10 });
+    expect(snippets[1]).toMatchObject({ text: 'delta', startIndex: 17, endIndex: 22 });
   });
 
   it('should prevent creating an overlapping snippet from inside an existing snippet', () => {
@@ -201,7 +201,7 @@ describe('TextInput Component', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     const snippets = onChange.mock.calls[0][0] as Snippet[];
     expect(snippets).toHaveLength(1);
-    expect(snippets[0]).toMatchObject({ startIndex: 5, endIndex: 16 });
+    expect(snippets[0]).toMatchObject({ startIndex: 6, endIndex: 16 });
   });
 
   it('should keep snippet needles visible while hovering them', () => {
@@ -239,8 +239,8 @@ describe('TextInput Component', () => {
     const snippets = onChange.mock.calls[1][0] as Snippet[];
     expect(snippets).toHaveLength(1);
     expect(snippets[0]).toMatchObject({
-      text: ' beta gamma delta',
-      startIndex: 5,
+      text: 'beta gamma delta',
+      startIndex: 6,
       endIndex: 22,
     });
   });
@@ -301,6 +301,9 @@ describe('TextInput Component', () => {
 
     dragCreate('alpha', 'gamma');
 
+    const spaceBetweenWords = screen
+      .getAllByTestId('text-input-whitespace')
+      .find((el) => el.getAttribute('data-token-start') === '10');
     const spaceAfterAlpha = screen
       .getAllByTestId('text-input-whitespace')
       .find((el) => el.getAttribute('data-token-start') === '5');
@@ -308,12 +311,39 @@ describe('TextInput Component', () => {
       .getAllByTestId('text-input-whitespace')
       .find((el) => el.getAttribute('data-token-start') === '16');
 
-    expect(spaceAfterAlpha).toHaveStyle({
+    expect(spaceBetweenWords).toHaveStyle({
+      backgroundColor: withAlpha('#0080FF', 0.3),
+    });
+    expect(spaceAfterAlpha).not.toHaveStyle({
       backgroundColor: withAlpha('#0080FF', 0.3),
     });
     expect(spaceAfterGamma).not.toHaveStyle({
       backgroundColor: withAlpha('#0080FF', 0.3),
     });
+  });
+
+  it('should ignore the leading whitespace while dragging and in the committed snippet', () => {
+    const onChange = vi.fn();
+    setup({ mode: 'view', onChange });
+
+    fireEvent.pointerMove(screen.getByText('alpha'), {});
+    fireEvent.pointerDown(screen.getByText('alpha'), {});
+    fireEvent.pointerMove(screen.getByText('gamma'), {});
+
+    const spaceAfterAlpha = screen
+      .getAllByTestId('text-input-whitespace')
+      .find((el) => el.getAttribute('data-token-start') === '5');
+    expect(spaceAfterAlpha).not.toHaveStyle({
+      backgroundColor: withAlpha('#0080FF', 0.2),
+    });
+    expect(screen.getByText('beta')).toHaveStyle({
+      backgroundColor: withAlpha('#0080FF', 0.2),
+    });
+
+    fireEvent.pointerUp(window);
+
+    const snippets = onChange.mock.calls[0][0] as Snippet[];
+    expect(snippets[0]).toMatchObject({ text: 'beta gamma', startIndex: 6, endIndex: 16 });
   });
 
   it('should disable native text selection in view mode', () => {
