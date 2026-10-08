@@ -1,29 +1,44 @@
 import { useTranslation } from "react-i18next";
+import Grid from "@mui/material/Grid";
 import { type MergeSessionPageProps } from "./MergeSessionPage.types";
 import * as S from "./MergeSessionPage.styles";
 import { TextInput } from "@components/TextInput";
+import { ActionsBar } from "@components/ActionsBar";
+import { PreviewArea } from "@components/PreviewArea";
 
 export function MergeSessionPage(_props: MergeSessionPageProps) {
   const { t } = useTranslation();
 
-  const LOREM =
-    "Lorem ipsum dolor sit amet consectetur adipisicing elit. Architecto iusto natus, beatae velit excepturi eveniet sint voluptate dicta unde, aut molestiae ab rem quo distinctio officiis laudantium ad quam. Enim?";
-
   return (
     <S.Wrapper data-testid="merge-session-page">
       <S.Title data-testid="merge-session-title">
-        {t("mergeSession.title")}
+        {t("pages.mergeSession.title")}
       </S.Title>
       <S.Subtitle data-testid="merge-session-subtitle">
-        {t("mergeSession.description")}
+        {t("pages.mergeSession.description")}
       </S.Subtitle>
 
-      <TextInput></TextInput>
-      <TextInput
-        mode="view"
-        initialText={LOREM}
-        onChange={(value) => console.log(value)}
-      ></TextInput>
+      <ActionsBar align="right">
+        <S.StartMergeButton
+          variant="contained"
+          disabled
+          data-testid="merge-session-start-button"
+        >
+          {t("pages.mergeSession.startMerge")}
+        </S.StartMergeButton>
+      </ActionsBar>
+
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <TextInput color="#0080FF" />
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <TextInput color="#FF1493" />
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <PreviewArea />
+        </Grid>
+      </Grid>
     </S.Wrapper>
   );
 }

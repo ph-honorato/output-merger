@@ -26,12 +26,12 @@
     - [x] Task 1.6: Support multiple snippets per text
     - [x] Task 1.7: Implement onChange callback returning array of all snippets
     - [x] Task 1.8: Add default highlight color with prop override
-  - [ ] **Task 2: MergeSession Page Layout** - Three-column layout with ActionsBar
-    - [ ] Task 2.1: Create ActionsBar component spanning full width of three columns
-      - [ ] Task 2.1.1: "Start Merge" button aligned right
-    - [ ] Task 2.2: Add two TextInput components in columns 1 & 2 (each with unique highlight color)
-    - [ ] Task 2.3: Add PreviewArea placeholder stub in column 3 (full component built in Task 4)
-    - [ ] Task 2.4: Implement responsive three-column grid layout (stacks vertically on mobile)
+  - [x] **Task 2: MergeSession Page Layout** - Three-column layout with ActionsBar
+    - [x] Task 2.1: Create ActionsBar component spanning full width of three columns
+      - [x] Task 2.1.1: "Start Merge" button aligned right
+    - [x] Task 2.2: Add two TextInput components in columns 1 & 2 (each with unique highlight color)
+    - [x] Task 2.3: Add PreviewArea placeholder stub in column 3 (full component built in Task 4)
+    - [x] Task 2.4: Implement responsive three-column grid layout (stacks vertically on mobile)
   - [ ] **Task 3: Global Snippets Context** - Centralized snippet state management
     - [ ] Task 3.1: Create global context for snippets with order property (default: user selection order)
     - [ ] Task 3.2: Update context when user creates snippet in any input
@@ -39,13 +39,13 @@
   - [ ] **Task 4: PreviewArea Component** - Display snippets from global context
     - [ ] Task 4.1: Create PreviewArea component in column 3 (replacing the placeholder stub)
     - [ ] Task 4.2: Connect PreviewArea to consume snippets from global context with order property
-
     - [ ] Task 4.3: Display snippets side by side with source color highlighting
     - [ ] Task 4.4: Add a sideway copy tool to copy full built text
 
   - [ ] **Task 5: Start Merge Logic** - Switch to merge mode
     - [ ] Task 5.1: Page loads with inputs in input mode; after "start merge", inputs become view mode
     - [ ] Task 5.2: Needles enable snippet creation; each created snippet auto-appears in the preview area
+  - [ ] **Task 6: MergeSession Page Tutorial** - In-page tutorial explaining how to use the merge session page (last task of Feature 2)
 
 - [ ] **Feature 3: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
   - [ ] "Start Over" button (reset page without reload)
