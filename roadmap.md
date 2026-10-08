@@ -36,11 +36,11 @@
     - [x] Task 3.1: Create global context for snippets with order property (default: user selection order)
     - [x] Task 3.2: Update context when user creates snippet in any input
     - [x] Task 3.3: Connect TextInput onChange to global context
-  - [ ] **Task 4: PreviewArea Component** - Display snippets from global context
-    - [ ] Task 4.1: Create PreviewArea component in column 3 (replacing the placeholder stub)
-    - [ ] Task 4.2: Connect PreviewArea to consume snippets from global context with order property
-    - [ ] Task 4.3: Display snippets side by side with source color highlighting
-    - [ ] Task 4.4: Add a sideway copy tool to copy full built text
+  - [x] **Task 4: PreviewArea Component** - Display snippets from global context
+    - [x] Task 4.1: Create PreviewArea component in column 3 (replacing the placeholder stub)
+    - [x] Task 4.2: Connect PreviewArea to consume snippets from global context with order property
+    - [x] Task 4.3: Display snippets side by side with source color highlighting
+    - [x] Task 4.4: Add a sideway copy tool to copy full built text
 
   - [ ] **Task 5: Start Merge Logic** - Switch to merge mode
     - [ ] Task 5.1: Page loads with inputs in input mode; after "start merge", inputs become view mode

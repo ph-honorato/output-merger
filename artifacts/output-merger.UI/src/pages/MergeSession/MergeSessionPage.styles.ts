@@ -30,6 +30,11 @@ export const Subtitle = styled.p`
   margin: 0 auto 1rem;
 `;
 
+export const PreviewColumn = styled.div`
+  position: relative;
+  height: 100%;
+`;
+
 export const StartMergeButton = styled(Button)`
   background-color: #0080ff;
   color: #ffffff;

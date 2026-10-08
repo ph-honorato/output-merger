@@ -4,7 +4,7 @@
  */
 export interface PreviewAreaProps {
   /**
-   * Optional className applied to the root element
+   * Optional class name applied to the root element
    */
   className?: string;
 }

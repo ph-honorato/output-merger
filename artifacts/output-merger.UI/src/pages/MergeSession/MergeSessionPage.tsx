@@ -4,7 +4,9 @@ import { type MergeSessionPageProps } from "./MergeSessionPage.types";
 import * as S from "./MergeSessionPage.styles";
 import { TextInput } from "@components/TextInput";
 import { ActionsBar } from "@components/ActionsBar";
-import { PreviewArea } from "@components/PreviewArea";
+import { PreviewArea } from "./components/PreviewArea";
+import { PreviewToolbar } from "./components/PreviewToolbar";
+import { CopyMergedTextButton } from "./components/CopyMergedTextButton";
 import { SnippetsProvider, useSnippets } from "../../context/SnippetsContext";
 
 function MergeSessionWorkspace() {
@@ -37,7 +39,12 @@ function MergeSessionWorkspace() {
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <PreviewArea />
+          <S.PreviewColumn>
+            <PreviewArea />
+            <PreviewToolbar>
+              <CopyMergedTextButton />
+            </PreviewToolbar>
+          </S.PreviewColumn>
         </Grid>
       </Grid>
     </>

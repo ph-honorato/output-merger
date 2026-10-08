@@ -19,3 +19,7 @@ _Avoid_: Highlight, selection, fragment, quote
 **Merge Order**:
 The sequence in which snippets appear in the merged output. Defaults to the order snippets were selected in; editable in the preview.
 _Avoid_: Order (alone), sequence, sort, position
+
+**Merged Text**:
+The text composed of snippets in merge order; the session's output.
+_Avoid_: Built text, preview text, result, final text
