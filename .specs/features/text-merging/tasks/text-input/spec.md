@@ -18,8 +18,8 @@ Explicitly excluded. Documented to prevent scope creep.
 | Feature | Reason |
 | ------- | ------ |
 | MergeSession three-column layout, ActionsBar, two wired inputs | Feature 2 Task 2 |
-| PreviewArea | Feature 2 Task 3 |
-| Global snippets context | Feature 2 Task 4 |
+| PreviewArea | Feature 2 Task 4 |
+| Global snippets context | Feature 2 Task 3 |
 | Start Merge switching page-level mode | Feature 2 Task 5; this spec only defines the `mode` prop the parent will set |
 | Third text input | Feature 3 |
 | Preview reorder, line breaks, split, user-typed preview text | Feature 4 |
@@ -27,7 +27,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Overlapping / stacked / merged snippets | Grilled: overlap forbidden |
 | Splitting a snippet from an interior stop | Feature 4; interior stops are hidden |
 | Keyboard needle navigation (beyond native textarea in input mode) | Assumed out until a later task |
-| Lifting snippet state into React context | Task 4; this component owns snippet state and reports via `onChange` |
+| Lifting snippet state into React context | Task 3; this component owns snippet state and reports via `onChange` |
 | Backend persistence | V1 |
 
 ---

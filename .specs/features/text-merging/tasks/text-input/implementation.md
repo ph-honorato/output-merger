@@ -161,4 +161,4 @@ Bugs found in review/user testing, each locked by a red-then-green regression te
 - Touch press-and-hold needle reveal and 44px coarse-pointer hit targets (TXTIN-30–33) — pointer events work on touch, but the dedicated touch affordances are not built.
 - Click/tap-the-highlight-to-delete (TXTIN-23/24) — removal currently only via resize collapse.
 - Keyboard needle navigation — out of scope per context.md.
-- Snippet state is component-owned; Task 4 lifts it into the global context via `onChange`.
+- Snippet state is component-owned; the snippets context (Task 3) aggregates it via `onChange`.

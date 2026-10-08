@@ -70,7 +70,7 @@ Reusable `TextInput` for Feature 2 Task 1 (roadmap 1.1–1.8) only: parent-owned
 - Live prospective highlight during drag.
 - Mouse create uses `pointerdown` on the hovered needle (no 400ms delay); 400ms press-and-hold is touch-only for revealing the nearest needle.
 - UUID ids; 44px minimum coarse-pointer needle hit target.
-- Uncontrolled snippet state inside the component until Task 4.
+- Uncontrolled snippet state inside the component; the snippets context (Task 3) aggregates via `onChange`.
 - Remaining-character counter in input mode; i18n keys at implementation.
 - Parent replacing `value` while in view clears snippets (`onChange([])`).
 - Keyboard needle control out of scope.

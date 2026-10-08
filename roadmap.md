@@ -32,10 +32,10 @@
     - [x] Task 2.2: Add two TextInput components in columns 1 & 2 (each with unique highlight color)
     - [x] Task 2.3: Add PreviewArea placeholder stub in column 3 (full component built in Task 4)
     - [x] Task 2.4: Implement responsive three-column grid layout (stacks vertically on mobile)
-  - [ ] **Task 3: Global Snippets Context** - Centralized snippet state management
-    - [ ] Task 3.1: Create global context for snippets with order property (default: user selection order)
-    - [ ] Task 3.2: Update context when user creates snippet in any input
-    - [ ] Task 3.3: Connect TextInput onChange to global context
+  - [x] **Task 3: Global Snippets Context** - Centralized snippet state management
+    - [x] Task 3.1: Create global context for snippets with order property (default: user selection order)
+    - [x] Task 3.2: Update context when user creates snippet in any input
+    - [x] Task 3.3: Connect TextInput onChange to global context
   - [ ] **Task 4: PreviewArea Component** - Display snippets from global context
     - [ ] Task 4.1: Create PreviewArea component in column 3 (replacing the placeholder stub)
     - [ ] Task 4.2: Connect PreviewArea to consume snippets from global context with order property
