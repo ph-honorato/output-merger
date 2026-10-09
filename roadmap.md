@@ -42,9 +42,9 @@
     - [x] Task 4.3: Display snippets side by side with source color highlighting
     - [x] Task 4.4: Add a sideway copy tool to copy full built text
 
-  - [ ] **Task 5: Start Merge Logic** - Switch to merge mode
-    - [ ] Task 5.1: Page loads with inputs in input mode; after "start merge", inputs become view mode
-    - [ ] Task 5.2: Needles enable snippet creation; each created snippet auto-appears in the preview area
+  - [x] **Task 5: Start Merge Logic** - Switch to merge mode
+    - [x] Task 5.1: Page loads with inputs in input mode; after "start merge", inputs become view mode
+    - [x] Task 5.2: Needles enable snippet creation; each created snippet auto-appears in the preview area
   - [ ] **Task 6: MergeSession Page Tutorial** - In-page tutorial explaining how to use the merge session page (last task of Feature 2)
 
 - [ ] **Feature 3: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar

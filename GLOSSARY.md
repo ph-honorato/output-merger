@@ -23,3 +23,7 @@ _Avoid_: Order (alone), sequence, sort, position
 **Merged Text**:
 The text composed of snippets in merge order; the session's output.
 _Avoid_: Built text, preview text, result, final text
+
+**Merge Mode**:
+The session state after Start Merge, where sources are read-only and snippet selection is enabled.
+_Avoid_: Merge state, started state, active mode
