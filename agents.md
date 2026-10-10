@@ -70,6 +70,18 @@ When working on this project, agents should:
 8. After a feature is implementad, go back to [roadmap.md](./roadmap.md) and update the status
 9. If there's a big decision is needed, ask before implementing!
 
+### Task Resolution
+
+Whenever starting the implementation of a task, the resolution must follow this sub-agent pipeline:
+
+1. **Create a sub-agent (specs)**: This sub-agent must call the `/grill-with-docs` skill and grill the user to fully understand the task implementation. After that, the sub-agent should update the `.specs/` folder following its current structure and finish
+2. **Create a sub-agent (developer)**: This sub-agent must develop the task properly following all the rules on this AGENTS.md file, create an `implementation.md` file on the `.specs/` folder following its structure, and finish
+3. **Create a sub-agent (tester)**: This sub-agent must test the task, check for security breaches, and verify the tests implementation
+4. **If the tester checks fail**: Run the `/diagnosing-bugs` skill. When the cause of the bug is identified, follow these steps:
+   1. [Optional] If the fix possibly needs another round of specs, call the specs sub-agent again passing the problem
+   2. Call the developer sub-agent to fix the problem
+5. **Report back**: If the tester sub-agent returns that everything is ok, return to the user telling everything is ready
+
 ### Git Operations
 
 - **Only create branches, commit, or push changes when explicitly instructed by the user**

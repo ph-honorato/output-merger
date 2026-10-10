@@ -45,7 +45,11 @@
   - [x] **Task 5: Start Merge Logic** - Switch to merge mode
     - [x] Task 5.1: Page loads with inputs in input mode; after "start merge", inputs become view mode
     - [x] Task 5.2: Needles enable snippet creation; each created snippet auto-appears in the preview area
-  - [ ] **Task 6: MergeSession Page Tutorial** - In-page tutorial explaining how to use the merge session page (last task of Feature 2)
+  - [ ] **Task 6: UI Adjustments** - UI refinements for the MergeSession Page (last task of Feature 2)
+    - [ ] Task 6.1: In-page tutorial explaining how to use the merge session page
+    - [ ] Task 6.2: Adjust minimal height of textareas (Input and PreviewArea) (suggestion: 400px)
+    - [ ] Task 6.3: ActionsBar should have a fixed height too, so if a button disappears it does not change height
+    - [ ] Task 6.4: The copy button should be inside at the top of a vertical bar, this bar should be placed at the right of the preview area, decoupled from the container
 
 - [ ] **Feature 3: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
   - [ ] "Start Over" button (reset page without reload)
