@@ -227,7 +227,8 @@ export const useTextInput = (props: TextInputProps) => {
       if (!el) return null;
       const start = Number(el.getAttribute('data-word-start'));
       const value = el.textContent ?? '';
-      const isLeftHalf = (e.nativeEvent.offsetX ?? 0) < (el.offsetWidth || 0) / 2;
+      const rect = el.getBoundingClientRect();
+      const isLeftHalf = e.clientX < rect.left + rect.width / 2;
       return isLeftHalf ? start : start + value.length;
     },
     []

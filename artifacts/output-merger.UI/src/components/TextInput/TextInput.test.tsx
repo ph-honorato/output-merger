@@ -57,6 +57,23 @@ const getNeedleByRole = (role: string): HTMLElement => {
   return needle;
 };
 
+const applyRect = (el: HTMLElement, left: number, width: number) => {
+  Object.defineProperty(el, 'getBoundingClientRect', {
+    value: () => ({
+      left,
+      top: 0,
+      right: left + width,
+      bottom: 19,
+      width,
+      height: 19,
+      x: left,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+    configurable: true,
+  });
+};
+
 describe('TextInput Component', () => {
   it('should render textarea and counter in input mode and call onTextChange on typing', () => {
     const onTextChange = vi.fn();
@@ -352,6 +369,43 @@ describe('TextInput Component', () => {
       '-webkit-user-select': 'none',
       userSelect: 'none',
     });
+  });
+
+  it('should show the hover needle at the word start when hovering the left half of a word', () => {
+    setup({ mode: 'view' });
+    const alpha = screen.getByText('alpha');
+    const beta = screen.getByText('beta');
+    applyRect(alpha, 94, 39);
+    applyRect(beta, 178, 31);
+
+    fireEvent.pointerMove(alpha, { clientX: 104 });
+    expect(getNeedleByRole('hover')).toHaveAttribute('data-boundary', '0');
+
+    fireEvent.pointerMove(beta, { clientX: 188 });
+    expect(getNeedleByRole('hover')).toHaveAttribute('data-boundary', '6');
+  });
+
+  it('should create a snippet covering the first word when dragging back from the needle after it', () => {
+    const onChange = vi.fn();
+    setup({ mode: 'view', onChange });
+    const alpha = screen.getByText('alpha');
+    applyRect(alpha, 94, 39);
+
+    fireEvent.pointerMove(alpha, { clientX: 125 });
+    const hoverNeedle = getNeedleByRole('hover');
+    expect(hoverNeedle).toHaveAttribute('data-boundary', '5');
+
+    fireEvent.pointerDown(hoverNeedle, {});
+    fireEvent.pointerMove(alpha, { clientX: 104 });
+
+    expect(getNeedleByRole('current')).toHaveAttribute('data-boundary', '0');
+    expect(alpha).toHaveStyle({ backgroundColor: withAlpha('#0080FF', 0.2) });
+
+    fireEvent.pointerUp(window);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const snippets = onChange.mock.calls[0][0] as Snippet[];
+    expect(snippets[0]).toMatchObject({ text: 'alpha', startIndex: 0, endIndex: 5 });
   });
 });
 
