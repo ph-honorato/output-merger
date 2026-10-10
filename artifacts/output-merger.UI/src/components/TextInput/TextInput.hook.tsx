@@ -124,6 +124,72 @@ export const computeNeedlePosition = (
   return { left: preceding.offsetLeft + preceding.offsetWidth, top: preceding.offsetTop };
 };
 
+const MIN_TEXTAREA_ROWS = 4;
+
+/**
+ * Computes how many textarea rows fit the remaining vertical space of the root card,
+ * so the textarea always shows the maximum number of rows for its height
+ */
+export const useAutoTextareaRows = (
+  rootRef: React.RefObject<HTMLDivElement | null>,
+  enabled: boolean
+) => {
+  const [rows, setRows] = useState(MIN_TEXTAREA_ROWS);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const root = rootRef.current;
+    if (!root) return;
+
+    const compute = () => {
+      const textarea = root.querySelector('textarea');
+      if (!textarea) return;
+      const taStyles = window.getComputedStyle(textarea);
+      const lineHeight = parseFloat(taStyles.lineHeight);
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) return;
+      const taExtraY =
+        parseFloat(taStyles.paddingTop) +
+        parseFloat(taStyles.paddingBottom) +
+        parseFloat(taStyles.borderTopWidth) +
+        parseFloat(taStyles.borderBottomWidth);
+
+      const rootStyles = window.getComputedStyle(root);
+      const rootPaddingY =
+        parseFloat(rootStyles.paddingTop) + parseFloat(rootStyles.paddingBottom);
+      const rowGap = parseFloat(rootStyles.rowGap) || 0;
+      const minHeight = parseFloat(rootStyles.minHeight);
+      const baseHeight =
+        Number.isFinite(minHeight) && minHeight > 0 ? minHeight : root.clientHeight;
+
+      const children = Array.from(root.children) as HTMLElement[];
+      const otherHeight = children.reduce((total, child) => {
+        if (child.contains(textarea)) return total;
+        const childStyles = window.getComputedStyle(child);
+        return (
+          total +
+          child.offsetHeight +
+          parseFloat(childStyles.marginTop) +
+          parseFloat(childStyles.marginBottom)
+        );
+      }, 0);
+      const gaps = rowGap * Math.max(children.length - 1, 0);
+
+      const available = baseHeight - rootPaddingY - otherHeight - gaps - taExtraY;
+      const usableRows = Math.floor(available / lineHeight);
+      if (!Number.isFinite(usableRows)) return;
+      setRows(Math.max(MIN_TEXTAREA_ROWS, usableRows));
+    };
+
+    compute();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(compute);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [rootRef, enabled]);
+
+  return rows;
+};
+
 /**
  * Hook for managing the TextInput component logic
  * @returns {Object} Object containing text state, tokens, needle descriptors and interaction handlers

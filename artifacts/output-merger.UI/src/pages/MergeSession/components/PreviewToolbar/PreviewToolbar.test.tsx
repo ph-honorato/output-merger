@@ -36,10 +36,10 @@ describe('PreviewToolbar Component', () => {
     expect(button).toBeVisible();
   });
 
-  it('should be absolutely positioned', () => {
+  it('should be statically positioned as a sibling beside the preview card', () => {
     renderWithProviders(<PreviewToolbar />);
     const root = screen.getByTestId('preview-toolbar');
-    expect(root).toHaveStyle({ position: 'absolute' });
+    expect(root).toHaveStyle({ position: 'static' });
   });
 
   it('should be column-oriented', () => {

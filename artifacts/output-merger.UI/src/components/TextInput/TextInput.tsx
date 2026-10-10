@@ -1,11 +1,14 @@
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useTextInput } from './TextInput.hook';
+import { useAutoTextareaRows, useTextInput } from './TextInput.hook';
 import { type TextInputProps } from './TextInput.types';
 import * as S from './TextInput.styles';
 
 function TextInput(props: TextInputProps) {
   const { mode = 'input', color = '#0080FF', maxCharacters = 500, label, id } = props;
   const { t } = useTranslation();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const textareaRows = useAutoTextareaRows(rootRef, mode === 'input');
   const {
     text,
     tokens,
@@ -20,13 +23,13 @@ function TextInput(props: TextInputProps) {
   } = useTextInput(props);
 
   return (
-    <S.TextInputRoot data-testid="text-input-root" data-mode={mode} id={id}>
+    <S.TextInputRoot data-testid="text-input-root" data-mode={mode} id={id} ref={rootRef}>
       {label ? <S.Label>{label}</S.Label> : null}
       {mode === 'input' ? (
         <>
           <S.StyledTextField
             multiline
-            rows={4}
+            rows={textareaRows}
             fullWidth
             value={text}
             placeholder={t('textInput.placeholder')}

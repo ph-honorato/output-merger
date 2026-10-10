@@ -9,6 +9,8 @@ export const ActionsBarRoot = styled.div<{ $justifyContent?: string }>`
   align-items: center;
   justify-content: ${({ $justifyContent }) => $justifyContent ?? 'flex-end'};
   width: 100%;
+  min-height: 74px;
+  box-sizing: border-box;
   padding: ${({ theme }) => (theme as StyledTheme).spacing(2)};
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};

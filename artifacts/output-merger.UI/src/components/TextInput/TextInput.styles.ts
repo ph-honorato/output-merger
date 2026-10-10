@@ -10,6 +10,8 @@ export const TextInputRoot = styled.div`
   flex-direction: column;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
   padding: ${({ theme }) => (theme as StyledTheme).spacing(2)};
+  min-height: 400px;
+  box-sizing: border-box;
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};
   border: 1px solid ${({ theme }) => (theme as StyledTheme).palette.divider};
@@ -26,6 +28,21 @@ export const Label = styled.span`
 `;
 
 export const StyledTextField = styled(TextField)<{ $accent?: string }>`
+  flex: 1;
+  min-height: 0;
+
+  & .MuiInputBase-root {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  & .MuiInputBase-input {
+    height: 100% !important;
+    box-sizing: border-box;
+    resize: none;
+  }
+
   & .MuiOutlinedInput-root.Mui-focused {
     outline: 2px solid ${({ theme, $accent }) =>
       $accent ?? (theme as StyledTheme).palette.primary.main};

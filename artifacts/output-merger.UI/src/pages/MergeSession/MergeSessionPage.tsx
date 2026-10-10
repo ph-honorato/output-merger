@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Grid from "@mui/material/Grid";
+import HelpOutlined from "@mui/icons-material/HelpOutlined";
 import { type MergeSessionPageProps } from "./MergeSessionPage.types";
 import * as S from "./MergeSessionPage.styles";
 import { TextInput } from "@components/TextInput";
@@ -8,6 +9,11 @@ import { ActionsBar } from "@components/ActionsBar";
 import { PreviewArea } from "./components/PreviewArea";
 import { PreviewToolbar } from "./components/PreviewToolbar";
 import { CopyMergedTextButton } from "./components/CopyMergedTextButton";
+import {
+  TutorialBanner,
+  readTutorialDismissed,
+  writeTutorialDismissed,
+} from "./components/TutorialBanner";
 import { SnippetsProvider, useSnippets } from "../../context/SnippetsContext";
 
 function MergeSessionWorkspace() {
@@ -21,7 +27,7 @@ function MergeSessionWorkspace() {
   }, []);
 
   const canStartMerge = Object.values(sourceTexts).some(
-    (text) => text.trim().length > 0
+    (text) => text.trim().length > 0,
   );
 
   return (
@@ -71,15 +77,38 @@ function MergeSessionWorkspace() {
 
 export function MergeSessionPage(_props: MergeSessionPageProps) {
   const { t } = useTranslation();
+  const [tutorialVisible, setTutorialVisible] = useState(
+    () => !readTutorialDismissed(),
+  );
+
+  const handleTutorialDismiss = useCallback(() => {
+    writeTutorialDismissed();
+    setTutorialVisible(false);
+  }, []);
+
+  const handleTutorialHelp = useCallback(() => {
+    setTutorialVisible(true);
+  }, []);
 
   return (
     <S.Wrapper data-testid="merge-session-page">
-      <S.Title data-testid="merge-session-title">
-        {t("pages.mergeSession.title")}
-      </S.Title>
-      <S.Subtitle data-testid="merge-session-subtitle">
-        {t("pages.mergeSession.description")}
-      </S.Subtitle>
+      <S.TitleRow>
+        <S.Title data-testid="merge-session-title">
+          {t("pages.mergeSession.title")}
+        </S.Title>
+        {tutorialVisible ? null : (
+          <S.HelpButton
+            data-testid="merge-session-help-button"
+            aria-label={t("pages.mergeSession.tutorial.help")}
+            onClick={handleTutorialHelp}
+          >
+            <HelpOutlined />
+          </S.HelpButton>
+        )}
+      </S.TitleRow>
+      {tutorialVisible ? (
+        <TutorialBanner onDismiss={handleTutorialDismiss} />
+      ) : null}
 
       <SnippetsProvider>
         <MergeSessionWorkspace />

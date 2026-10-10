@@ -5,8 +5,9 @@ import type { Theme } from '@mui/material/styles';
 type StyledTheme = DefaultTheme & Theme;
 
 export const PreviewAreaRoot = styled.div`
-  width: 100%;
-  height: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 400px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -33,7 +34,6 @@ export const SegmentFlow = styled.div`
   flex-wrap: wrap;
   align-content: flex-start;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
-  padding-right: ${({ theme }) => (theme as StyledTheme).spacing(4)};
   white-space: pre-wrap;
 `;
 
