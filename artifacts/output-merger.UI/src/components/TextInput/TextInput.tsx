@@ -52,6 +52,7 @@ function TextInput(props: TextInputProps) {
       ) : (
         <S.TextViewContainer
           data-testid="text-input-view"
+          $dragging={isDragging}
           onPointerMove={handlePointerMove}
           onPointerDown={handlePointerDown}
         >

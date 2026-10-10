@@ -382,6 +382,22 @@ describe('TextInput Component', () => {
     });
   });
 
+  it('should show a resize cursor while dragging a needle and restore it on release', () => {
+    setup({ mode: 'view' });
+    const view = screen.getByTestId('text-input-view');
+    expect(view).toHaveStyle({ cursor: 'default' });
+
+    fireEvent.pointerMove(screen.getByText('alpha'), {});
+    fireEvent.pointerDown(screen.getByText('alpha'), {});
+    expect(view).toHaveStyle({ cursor: 'ew-resize' });
+
+    fireEvent.pointerMove(screen.getByText('beta'), {});
+    expect(view).toHaveStyle({ cursor: 'ew-resize' });
+
+    fireEvent.pointerUp(window);
+    expect(view).toHaveStyle({ cursor: 'default' });
+  });
+
   it('should show the hover needle at the word start when hovering the left half of a word', () => {
     setup({ mode: 'view' });
     const alpha = screen.getByText('alpha');

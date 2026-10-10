@@ -143,6 +143,7 @@ The spec predates implementation; the component was built to the roadmap and the
 | Touch reveal | 400ms press-and-hold reveals nearest needle | not implemented | Pointer Events unify mouse/touch for drag; the hold-to-reveal gesture is deferred |
 | Coarse-pointer hit target | ≥44px | needle hit area ±6px (~16px) | Deferred with touch work |
 | Overlap reject | silent: create adds nothing / resize snaps back | silent: drags clamp live at blocking snippet edges | Same outcome (never persists overlap), better feedback |
+| Cursor during needle drag | unspecified | container cursor switches to `ew-resize` while a drag is active (`$dragging` on the view container) | Needles are `pointer-events: none` mid-drag, so the container must carry the resize cursor for continuous feedback |
 
 ## 8. Post-implementation fix log
 

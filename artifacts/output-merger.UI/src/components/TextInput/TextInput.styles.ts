@@ -51,13 +51,13 @@ export const StyledTextField = styled(TextField)<{ $accent?: string }>`
   }
 `;
 
-export const TextViewContainer = styled.div`
+export const TextViewContainer = styled.div<{ $dragging?: boolean }>`
   position: relative;
   text-align: start;
   white-space: pre-wrap;
   word-break: break-word;
   touch-action: none;
-  cursor: default;
+  cursor: ${({ $dragging }) => ($dragging ? 'ew-resize' : 'default')};
   line-height: 1.8;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   -webkit-user-select: none;
