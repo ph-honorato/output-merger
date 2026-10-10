@@ -53,6 +53,7 @@ export const StyledTextField = styled(TextField)<{ $accent?: string }>`
 
 export const TextViewContainer = styled.div`
   position: relative;
+  text-align: start;
   white-space: pre-wrap;
   word-break: break-word;
   touch-action: none;

@@ -371,6 +371,17 @@ describe('TextInput Component', () => {
     });
   });
 
+  it('should keep view text start-aligned when the page centers content', () => {
+    renderWithProviders(
+      <div style={{ textAlign: 'center' }}>
+        <TextInput initialText={TEXT} mode="view" />
+      </div>
+    );
+    expect(screen.getByTestId('text-input-view')).toHaveStyle({
+      textAlign: 'start',
+    });
+  });
+
   it('should show the hover needle at the word start when hovering the left half of a word', () => {
     setup({ mode: 'view' });
     const alpha = screen.getByText('alpha');
