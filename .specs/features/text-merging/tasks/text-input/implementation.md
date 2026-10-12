@@ -58,7 +58,15 @@ interface TextInputProps {
 
 - `tokenize(text)` splits with `text.split(/(\s+)/)` (capture group kept) producing alternating word/whitespace tokens, each with its char offset and `isWord` flag.
 - A **word boundary** is the start char of any word, plus a final boundary at `text.length`. Snippets are always word-aligned half-open `[startIndex, endIndex)` ranges.
-- `getBoundaryFromEvent` resolves the hovered word and picks start vs end boundary by cursor half: `(offsetX ?? 0) < offsetWidth / 2` → word start, else word end. In jsdom (no layout) this deterministically resolves to the word END boundary — tests rely on that.
+- `getBoundaryFromEvent` resolves the hovered word from caret geometry: `caretIndexFromPoint` (feature-detected `document.caretRangeFromPoint` / `caretPositionFromPoint`, Chromium's inline-`offsetX` quirk makes raw `offsetX` unusable — see fix log #8) → word token containing the char index → the pointer must sit inside the word's line-box rect (matching the old per-word-span hit boxes: leading gaps and empty space past the last word resolve to nothing) → half rule `clientX < rect.left + width/2` picks start vs end boundary.
+
+### View rendering (refactored: segment-based)
+
+The per-word-span DOM was replaced to scale toward a future 5000-char limit (~2500 token spans → O(snippets)):
+
+- `computeSegments(text, snippets, drag, color)` merges committed snippets and the live drag range into disjoint `{ start, end, color?, alpha? }` segments; the component renders one `<span data-segment-start>` per segment (plain or highlighted). Node count is O(snippets), independent of word count.
+- Segment boundaries always fall on token boundaries (snippet indices are word-aligned), so words are never split across a plain/highlight edge; each segment has a single text node and `data-segment-start` maps local caret offsets to global char indices.
+- Highlight spans use `box-decoration-break: clone` so wrapped lines get per-line backgrounds.
 
 ### Drag state machine (hook)
 
@@ -83,13 +91,13 @@ drag =
 
 ### Needle positioning — `computeNeedlePosition`
 
-Pure function mapping a boundary char index to `{ left, top }` from a map of word span boxes:
+Pure function mapping a boundary char index to a container-relative `{ left, top }` via an injected char-rect provider (`TextInput.geometry.ts` `rectForRange`, built on DOM `Range` rects):
 
-- word-start boundary → the word's left edge (`offsetLeft`)
-- word-end / text-end boundary → the **preceding word's right edge** (`offsetLeft + offsetWidth`)
-- fallback: first word's left edge
+- word-start boundary → left edge of the word's first char rect
+- word-end / text-end boundary → right edge of the preceding char rect
+- positions are computed in a `useLayoutEffect` after commit (text nodes change identity per render, so positions cannot be read during render) and written directly to the needle elements; `root.getBoundingClientRect()` supplies the origin
 
-The initial implementation positioned word-end needles at the preceding word's `offsetLeft`, which drew the "end of first word" needle at the same x as "start of first word" — the reported "first word ignored" bug. The right-edge rule is the fix and is locked by regression tests at both the pure-function seam and the component seam (offsets stubbed via `Object.defineProperty`).
+History: the first implementation used `offsetLeft/offsetWidth` word maps, with the "preceding word right edge" rule fixing the "first word ignored" bug (word-end needles drawn at the preceding word's left edge). The Range-based rewrite keeps that rule at the char-rect level and is locked by pure-function tests with injected rects plus a real-browser Playwright pass.
 
 ### Highlighting
 
@@ -115,10 +123,11 @@ The initial implementation positioned word-end needles at the preceding word's `
 
 ## 6. Testing strategy
 
-- jsdom has no layout: `offsetLeft/offsetWidth` are 0 and `offsetX` is undefined, so the suite pins interaction behavior through `data-*` attributes (`data-word-start`, `data-role`, `data-boundary`, `data-token-start`) and `fireEvent.pointer*` (bubbles to the window commit listener).
-- Position-dependent behavior (needle x-coordinates) is tested by stubbing offsets with `Object.defineProperty` on rendered word spans plus a pure-function unit suite for `computeNeedlePosition`.
-- Fixture text `"alpha beta gamma"` / `"alpha beta gamma delta"` with known char ranges; the jsdom half-heuristic makes drags resolve to word END boundaries, so expected indices are fully deterministic.
-- Verification: `npx vitest run` (34/34 green), `npm run lint` (oxlint, clean), `npx tsc -b` (clean).
+- jsdom has neither caret APIs nor Range geometry, so `TextInput.geometry.ts` (`caretIndexFromPoint`, `rectForRange`) is the testing seam: the suite `vi.mock`s it with a virtual monospace layout (10px per char, line box 0–19) and drives interactions with `clientX/clientY`, exercising the real caret→word→half-rule logic. Pure helpers (`computeSegments`, `findWordTokenAt`, `resolveBoundaryAt`, `computeNeedlePosition`) are unit-tested directly with injected rects.
+- The suite pins interaction behavior through `data-*` attributes (`data-segment-start`, `data-role`, `data-boundary`) and `fireEvent.pointer*` (bubbles to the window commit listener).
+- Fixture text `"alpha beta gamma delta"` with known char ranges; boundary x-coordinates map deterministically to word halves.
+- Real-browser verification (Playwright + installed Chromium, dev server): every fix-log bug re-checked live — boundary-0 needle, drag-back snippet `[0,5]`, start alignment, mid-drag cursor, resize drag, preview flow — plus a 5000-char stress page (`maxCharacters` prop override, temporary harness, not shipped): 5000 chars render as **1 segment node**, hover/drag/commit work, drag steps stay interactive.
+- Verification: `npx vitest run` (36 TextInput tests, full suite green), `npm run lint` (oxlint, clean), `npx tsc -b` (clean).
 
 ---
 
@@ -144,6 +153,8 @@ The spec predates implementation; the component was built to the roadmap and the
 | Coarse-pointer hit target | ≥44px | needle hit area ±6px (~16px) | Deferred with touch work |
 | Overlap reject | silent: create adds nothing / resize snaps back | silent: drags clamp live at blocking snippet edges | Same outcome (never persists overlap), better feedback |
 | Cursor during needle drag | unspecified | container cursor switches to `ew-resize` while a drag is active (`$dragging` on the view container) | Needles are `pointer-events: none` mid-drag, so the container must carry the resize cursor for continuous feedback |
+| View DOM model | unspecified | one span per text segment (plain or highlighted), O(snippets) nodes instead of one span per word/whitespace token | Scales to the planned 5000-char limit; hit-testing via caret geometry + line-box clamp preserves the old span hit behavior |
+| View text alignment | unspecified | `text-align: start` on the view container | The MergeSession wrapper centers page content; the component must not inherit it (fix log #9) |
 
 ## 8. Post-implementation fix log
 

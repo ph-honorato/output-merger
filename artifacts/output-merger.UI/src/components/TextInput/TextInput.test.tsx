@@ -5,8 +5,21 @@ import { I18nextProvider } from 'react-i18next';
 import { theme } from '../../theme';
 import i18n from '../../i18n';
 import TextInput from './TextInput';
-import { tokenize, withAlpha, computeNeedlePosition } from './TextInput.hook';
+import {
+  tokenize,
+  withAlpha,
+  computeNeedlePosition,
+  computeSegments,
+  findWordTokenAt,
+  resolveBoundaryAt,
+} from './TextInput.hook';
+import { caretIndexFromPoint, rectForRange } from './TextInput.geometry';
 import { type Snippet, type TextInputProps } from './TextInput.types';
+
+vi.mock('./TextInput.geometry', () => ({
+  caretIndexFromPoint: vi.fn(),
+  rectForRange: vi.fn(),
+}));
 
 const TEXT = 'alpha beta gamma delta';
 
@@ -40,10 +53,44 @@ const setup = (props: Partial<TextInputProps> = {}) => {
   };
 };
 
-const dragCreate = (fromWord: string, toWord: string) => {
-  fireEvent.pointerMove(screen.getByText(fromWord), {});
-  fireEvent.pointerDown(screen.getByText(fromWord), {});
-  fireEvent.pointerMove(screen.getByText(toWord), {});
+/**
+ * Virtual monospace layout: 10px per char, line box from 0 to 19
+ */
+const defaultRect = (start: number, end: number) => ({
+  left: start * 10,
+  top: 0,
+  right: end * 10,
+  bottom: 19,
+  width: (end - start) * 10,
+  height: 19,
+});
+
+beforeEach(() => {
+  vi.mocked(caretIndexFromPoint)
+    .mockReset()
+    .mockImplementation((x: number) => {
+      const index = Math.floor(x / 10);
+      return index >= 0 && index < TEXT.length && /\S/.test(TEXT[index]) ? index : null;
+    });
+  vi.mocked(rectForRange)
+    .mockReset()
+    .mockImplementation((_root: HTMLElement, start: number, end: number) =>
+      defaultRect(start, end)
+    );
+});
+
+const hoverAt = (clientX: number) => {
+  fireEvent.pointerMove(screen.getByTestId('text-input-view'), { clientX, clientY: 5 });
+};
+
+const pointerDownAt = (clientX: number) => {
+  fireEvent.pointerDown(screen.getByTestId('text-input-view'), { clientX, clientY: 5 });
+};
+
+const dragFromTo = (fromClientX: number, toClientX: number) => {
+  hoverAt(fromClientX);
+  pointerDownAt(fromClientX);
+  hoverAt(toClientX);
   fireEvent.pointerUp(window);
 };
 
@@ -57,22 +104,8 @@ const getNeedleByRole = (role: string): HTMLElement => {
   return needle;
 };
 
-const applyRect = (el: HTMLElement, left: number, width: number) => {
-  Object.defineProperty(el, 'getBoundingClientRect', {
-    value: () => ({
-      left,
-      top: 0,
-      right: left + width,
-      bottom: 19,
-      width,
-      height: 19,
-      x: left,
-      y: 0,
-      toJSON: () => ({}),
-    }),
-    configurable: true,
-  });
-};
+const getHighlightSegments = (): HTMLElement[] => screen.getAllByTestId('text-input-segment-highlight');
+const getPlainSegments = (): HTMLElement[] => screen.getAllByTestId('text-input-segment');
 
 describe('TextInput Component', () => {
   it('should render textarea and counter in input mode and call onTextChange on typing', () => {
@@ -104,7 +137,7 @@ describe('TextInput Component', () => {
   it('should render plain text without textarea in view mode and show empty state', () => {
     setup({ mode: 'view' });
     expect(screen.getByTestId('text-input-view')).toBeInTheDocument();
-    expect(screen.getByText('alpha')).toBeInTheDocument();
+    expect(screen.getByTestId('text-input-view')).toHaveTextContent('alpha beta gamma delta');
     expect(screen.queryByTestId('text-input-textarea')).not.toBeInTheDocument();
 
     setup({ mode: 'view', initialText: '   ' });
@@ -114,17 +147,26 @@ describe('TextInput Component', () => {
 
   it('should show a hover needle when moving the pointer over a word in view mode', () => {
     setup({ mode: 'view' });
-    fireEvent.pointerMove(screen.getByText('beta'), {});
+    hoverAt(95);
     const needle = getNeedleByRole('hover');
     expect(needle).toBeInTheDocument();
     expect(needle).toHaveAttribute('data-boundary', '10');
+  });
+
+  it('should not show a hover needle when the pointer is outside the word line box', () => {
+    setup({ mode: 'view' });
+    fireEvent.pointerMove(screen.getByTestId('text-input-view'), { clientX: 95, clientY: 40 });
+    expect(screen.queryAllByTestId('text-input-needle')).toHaveLength(0);
+
+    fireEvent.pointerMove(screen.getByTestId('text-input-view'), { clientX: 240, clientY: 5 });
+    expect(screen.queryAllByTestId('text-input-needle')).toHaveLength(0);
   });
 
   it('should create a snippet from a drag and highlight its words', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
 
-    dragCreate('alpha', 'gamma');
+    dragFromTo(41, 151);
 
     expect(onChange).toHaveBeenCalledTimes(1);
     const snippets = onChange.mock.calls[0][0] as Snippet[];
@@ -137,23 +179,24 @@ describe('TextInput Component', () => {
     });
     expect(snippets[0].id).toBeTruthy();
 
-    expect(screen.getByText('beta')).toHaveStyle({
+    const highlights = getHighlightSegments();
+    expect(highlights).toHaveLength(1);
+    expect(highlights[0]).toHaveTextContent('beta gamma');
+    expect(highlights[0]).toHaveStyle({
       backgroundColor: withAlpha('#0080FF', 0.3),
     });
-    expect(screen.getByText('gamma')).toHaveStyle({
-      backgroundColor: withAlpha('#0080FF', 0.3),
-    });
+    expect(getPlainSegments().map((el) => el.textContent)).toEqual(['alpha ', ' delta']);
   });
 
   it('should use the color prop for created snippets', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', color: '#FF1493', onChange });
 
-    dragCreate('alpha', 'gamma');
+    dragFromTo(41, 151);
 
     const snippets = onChange.mock.calls[0][0] as Snippet[];
     expect(snippets[0].color).toBe('#FF1493');
-    expect(screen.getByText('beta')).toHaveStyle({
+    expect(getHighlightSegments()[0]).toHaveStyle({
       backgroundColor: withAlpha('#FF1493', 0.3),
     });
   });
@@ -162,22 +205,18 @@ describe('TextInput Component', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
 
-    fireEvent.pointerMove(screen.getByText('alpha'), {});
-    fireEvent.pointerDown(screen.getByText('alpha'), {});
-    fireEvent.pointerUp(window);
+    dragFromTo(41, 41);
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByText('beta')).not.toHaveStyle({
-      backgroundColor: withAlpha('#0080FF', 0.3),
-    });
+    expect(screen.queryAllByTestId('text-input-segment-highlight')).toHaveLength(0);
   });
 
   it('should support multiple snippets created sequentially', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
 
-    dragCreate('alpha', 'beta');
-    dragCreate('gamma', 'delta');
+    dragFromTo(41, 95);
+    dragFromTo(151, 211);
 
     expect(onChange).toHaveBeenCalledTimes(2);
     const snippets = onChange.mock.calls[1][0] as Snippet[];
@@ -190,12 +229,12 @@ describe('TextInput Component', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
 
-    dragCreate('alpha', 'gamma');
+    dragFromTo(41, 151);
     expect(onChange).toHaveBeenCalledTimes(1);
 
-    fireEvent.pointerMove(screen.getByText('beta'), {});
-    fireEvent.pointerDown(screen.getByText('beta'), {});
-    fireEvent.pointerMove(screen.getByText('delta'), {});
+    hoverAt(95);
+    pointerDownAt(95);
+    hoverAt(211);
     fireEvent.pointerUp(window);
 
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -207,13 +246,10 @@ describe('TextInput Component', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
 
-    dragCreate('alpha', 'gamma');
+    dragFromTo(41, 151);
     expect(onChange).toHaveBeenCalledTimes(1);
 
-    fireEvent.pointerMove(screen.getByText('alpha'), {});
-    fireEvent.pointerDown(screen.getByText('alpha'), {});
-    fireEvent.pointerMove(screen.getByText('delta'), {});
-    fireEvent.pointerUp(window);
+    dragFromTo(41, 211);
 
     expect(onChange).toHaveBeenCalledTimes(1);
     const snippets = onChange.mock.calls[0][0] as Snippet[];
@@ -224,8 +260,8 @@ describe('TextInput Component', () => {
   it('should keep snippet needles visible while hovering them', () => {
     setup({ mode: 'view' });
 
-    dragCreate('alpha', 'gamma');
-    fireEvent.pointerMove(screen.getByText('beta'), {});
+    dragFromTo(41, 151);
+    hoverAt(65);
     expect(screen.getAllByTestId('text-input-needle')).toHaveLength(2);
 
     fireEvent.pointerMove(getNeedleByRole('snippet-end'), {});
@@ -236,17 +272,17 @@ describe('TextInput Component', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
 
-    dragCreate('alpha', 'gamma');
+    dragFromTo(41, 151);
 
-    fireEvent.pointerMove(screen.getByText('beta'), {});
+    hoverAt(65);
     const endNeedle = getNeedleByRole('snippet-end');
     fireEvent.pointerDown(endNeedle, {});
-    fireEvent.pointerMove(screen.getByText('delta'), {});
+    hoverAt(211);
 
-    expect(screen.getByText('beta')).toHaveStyle({
-      backgroundColor: withAlpha('#0080FF', 0.3),
-    });
-    expect(screen.getByText('delta')).toHaveStyle({
+    const highlights = getHighlightSegments();
+    expect(highlights).toHaveLength(1);
+    expect(highlights[0]).toHaveTextContent('beta gamma delta');
+    expect(highlights[0]).toHaveStyle({
       backgroundColor: withAlpha('#0080FF', 0.3),
     });
 
@@ -266,12 +302,12 @@ describe('TextInput Component', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
 
-    dragCreate('alpha', 'gamma');
+    dragFromTo(41, 151);
 
-    fireEvent.pointerMove(screen.getByText('beta'), {});
+    hoverAt(65);
     const startNeedle = getNeedleByRole('snippet-start');
     fireEvent.pointerDown(startNeedle, {});
-    fireEvent.pointerMove(screen.getByText('gamma'), {});
+    hoverAt(151);
     fireEvent.pointerUp(window);
 
     expect(onChange).toHaveBeenCalledTimes(2);
@@ -282,7 +318,7 @@ describe('TextInput Component', () => {
     const onChange = vi.fn();
     const { rerenderWithProps } = setup({ mode: 'view', onChange });
 
-    dragCreate('alpha', 'gamma');
+    dragFromTo(41, 151);
     expect(onChange).toHaveBeenCalledTimes(1);
 
     rerenderWithProps({ mode: 'input' });
@@ -301,12 +337,22 @@ describe('TextInput Component', () => {
   it('should position a word-end boundary needle at the preceding word right edge', () => {
     setup({ mode: 'view' });
 
-    dragCreate('alpha', 'gamma');
-    const gamma = screen.getByText('gamma');
-    Object.defineProperty(gamma, 'offsetLeft', { value: 100, configurable: true });
-    Object.defineProperty(gamma, 'offsetWidth', { value: 50, configurable: true });
+    dragFromTo(41, 151);
+    vi.mocked(rectForRange).mockImplementation((_root, start, end) => {
+      if (start >= 11 && end <= 16) {
+        return {
+          left: 100 + (start - 11) * 10,
+          top: 0,
+          right: 100 + (end - 11) * 10,
+          bottom: 19,
+          width: (end - start) * 10,
+          height: 19,
+        };
+      }
+      return defaultRect(start, end);
+    });
 
-    fireEvent.pointerMove(screen.getByText('beta'), {});
+    hoverAt(65);
     const endNeedle = getNeedleByRole('snippet-end');
 
     expect(endNeedle).toHaveAttribute('data-boundary', '16');
@@ -316,44 +362,27 @@ describe('TextInput Component', () => {
   it('should highlight whitespace between words inside a snippet', () => {
     setup({ mode: 'view' });
 
-    dragCreate('alpha', 'gamma');
+    dragFromTo(41, 151);
 
-    const spaceBetweenWords = screen
-      .getAllByTestId('text-input-whitespace')
-      .find((el) => el.getAttribute('data-token-start') === '10');
-    const spaceAfterAlpha = screen
-      .getAllByTestId('text-input-whitespace')
-      .find((el) => el.getAttribute('data-token-start') === '5');
-    const spaceAfterGamma = screen
-      .getAllByTestId('text-input-whitespace')
-      .find((el) => el.getAttribute('data-token-start') === '16');
-
-    expect(spaceBetweenWords).toHaveStyle({
-      backgroundColor: withAlpha('#0080FF', 0.3),
-    });
-    expect(spaceAfterAlpha).not.toHaveStyle({
-      backgroundColor: withAlpha('#0080FF', 0.3),
-    });
-    expect(spaceAfterGamma).not.toHaveStyle({
-      backgroundColor: withAlpha('#0080FF', 0.3),
-    });
+    const highlights = getHighlightSegments();
+    expect(highlights).toHaveLength(1);
+    expect(highlights[0]).toHaveTextContent('beta gamma');
+    expect(getPlainSegments().map((el) => el.textContent)).toEqual(['alpha ', ' delta']);
   });
 
   it('should ignore the leading whitespace while dragging and in the committed snippet', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
 
-    fireEvent.pointerMove(screen.getByText('alpha'), {});
-    fireEvent.pointerDown(screen.getByText('alpha'), {});
-    fireEvent.pointerMove(screen.getByText('gamma'), {});
+    hoverAt(41);
+    pointerDownAt(41);
+    hoverAt(151);
 
-    const spaceAfterAlpha = screen
-      .getAllByTestId('text-input-whitespace')
-      .find((el) => el.getAttribute('data-token-start') === '5');
-    expect(spaceAfterAlpha).not.toHaveStyle({
-      backgroundColor: withAlpha('#0080FF', 0.2),
-    });
-    expect(screen.getByText('beta')).toHaveStyle({
+    const highlights = getHighlightSegments();
+    expect(highlights).toHaveLength(1);
+    expect(highlights[0]).toHaveAttribute('data-segment-start', '6');
+    expect(highlights[0]).toHaveTextContent('beta gamma');
+    expect(highlights[0]).toHaveStyle({
       backgroundColor: withAlpha('#0080FF', 0.2),
     });
 
@@ -387,11 +416,11 @@ describe('TextInput Component', () => {
     const view = screen.getByTestId('text-input-view');
     expect(view).toHaveStyle({ cursor: 'default' });
 
-    fireEvent.pointerMove(screen.getByText('alpha'), {});
-    fireEvent.pointerDown(screen.getByText('alpha'), {});
+    hoverAt(41);
+    pointerDownAt(41);
     expect(view).toHaveStyle({ cursor: 'ew-resize' });
 
-    fireEvent.pointerMove(screen.getByText('beta'), {});
+    hoverAt(65);
     expect(view).toHaveStyle({ cursor: 'ew-resize' });
 
     fireEvent.pointerUp(window);
@@ -400,33 +429,30 @@ describe('TextInput Component', () => {
 
   it('should show the hover needle at the word start when hovering the left half of a word', () => {
     setup({ mode: 'view' });
-    const alpha = screen.getByText('alpha');
-    const beta = screen.getByText('beta');
-    applyRect(alpha, 94, 39);
-    applyRect(beta, 178, 31);
 
-    fireEvent.pointerMove(alpha, { clientX: 104 });
+    hoverAt(11);
     expect(getNeedleByRole('hover')).toHaveAttribute('data-boundary', '0');
 
-    fireEvent.pointerMove(beta, { clientX: 188 });
+    hoverAt(65);
     expect(getNeedleByRole('hover')).toHaveAttribute('data-boundary', '6');
   });
 
   it('should create a snippet covering the first word when dragging back from the needle after it', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
-    const alpha = screen.getByText('alpha');
-    applyRect(alpha, 94, 39);
 
-    fireEvent.pointerMove(alpha, { clientX: 125 });
+    hoverAt(41);
     const hoverNeedle = getNeedleByRole('hover');
     expect(hoverNeedle).toHaveAttribute('data-boundary', '5');
 
     fireEvent.pointerDown(hoverNeedle, {});
-    fireEvent.pointerMove(alpha, { clientX: 104 });
+    hoverAt(11);
 
     expect(getNeedleByRole('current')).toHaveAttribute('data-boundary', '0');
-    expect(alpha).toHaveStyle({ backgroundColor: withAlpha('#0080FF', 0.2) });
+    const highlights = getHighlightSegments();
+    expect(highlights).toHaveLength(1);
+    expect(highlights[0]).toHaveTextContent('alpha');
+    expect(highlights[0]).toHaveStyle({ backgroundColor: withAlpha('#0080FF', 0.2) });
 
     fireEvent.pointerUp(window);
 
@@ -465,15 +491,133 @@ describe('TextInput helpers', () => {
     expect(withAlpha('#F0A', 0.5)).toBe('rgba(255, 0, 170, 0.5)');
   });
 
-  it('should position needles at word left edge for word-start boundaries and right edge for word-end boundaries', () => {
-    const elements = new Map([
-      [0, { offsetLeft: 0, offsetWidth: 30, offsetTop: 0 }],
-      [4, { offsetLeft: 40, offsetWidth: 30, offsetTop: 20 }],
+  it('should produce a single plain segment when there are no snippets or drags', () => {
+    expect(computeSegments(TEXT, [], null, '#0080FF')).toEqual([
+      { start: 0, end: 22 },
+    ]);
+  });
+
+  it('should alternate plain and highlighted segments around committed snippets', () => {
+    const snippets: Snippet[] = [
+      { id: 's1', text: 'beta gamma', startIndex: 6, endIndex: 16, color: '#0080FF' },
+    ];
+    expect(computeSegments(TEXT, snippets, null, '#0080FF')).toEqual([
+      { start: 0, end: 6 },
+      { start: 6, end: 16, color: '#0080FF', alpha: 0.3 },
+      { start: 16, end: 22 },
+    ]);
+  });
+
+  it('should build the live create-drag preview with trimmed leading whitespace', () => {
+    const drag = { type: 'create' as const, anchor: 5, current: 16 };
+    expect(computeSegments(TEXT, [], drag, '#0080FF')).toEqual([
+      { start: 0, end: 6 },
+      { start: 6, end: 16, color: '#0080FF', alpha: 0.2 },
+      { start: 16, end: 22 },
     ]);
 
-    expect(computeNeedlePosition(0, elements)).toEqual({ left: 0, top: 0 });
-    expect(computeNeedlePosition(4, elements)).toEqual({ left: 40, top: 20 });
-    expect(computeNeedlePosition(3, elements)).toEqual({ left: 30, top: 0 });
-    expect(computeNeedlePosition(7, elements)).toEqual({ left: 70, top: 20 });
+    const reversed = { type: 'create' as const, anchor: 16, current: 5 };
+    expect(computeSegments(TEXT, [], reversed, '#0080FF')[1]).toEqual({
+      start: 6,
+      end: 16,
+      color: '#0080FF',
+      alpha: 0.2,
+    });
+  });
+
+  it('should keep committed snippets highlighted during a create drag', () => {
+    const snippets: Snippet[] = [
+      { id: 's1', text: 'beta gamma', startIndex: 6, endIndex: 16, color: '#0080FF' },
+    ];
+    const drag = { type: 'create' as const, anchor: 17, current: 22 };
+    expect(computeSegments(TEXT, snippets, drag, '#0080FF')).toEqual([
+      { start: 0, end: 6 },
+      { start: 6, end: 16, color: '#0080FF', alpha: 0.3 },
+      { start: 16, end: 17 },
+      { start: 17, end: 22, color: '#0080FF', alpha: 0.2 },
+    ]);
+  });
+
+  it('should show the live resize range instead of the dragged snippet', () => {
+    const snippets: Snippet[] = [
+      { id: 's1', text: 'beta gamma', startIndex: 6, endIndex: 16, color: '#0080FF' },
+    ];
+    const growEnd = { type: 'resize' as const, snippetId: 's1', edge: 'end' as const, boundary: 22 };
+    expect(computeSegments(TEXT, snippets, growEnd, '#0080FF')).toEqual([
+      { start: 0, end: 6 },
+      { start: 6, end: 22, color: '#0080FF', alpha: 0.3 },
+    ]);
+
+    const shrinkStart = {
+      type: 'resize' as const,
+      snippetId: 's1',
+      edge: 'start' as const,
+      boundary: 11,
+    };
+    expect(computeSegments(TEXT, snippets, shrinkStart, '#0080FF')).toEqual([
+      { start: 0, end: 11 },
+      { start: 11, end: 16, color: '#0080FF', alpha: 0.3 },
+      { start: 16, end: 22 },
+    ]);
+  });
+
+  it('should find the word token containing a char index', () => {
+    const tokens = tokenize(TEXT);
+    expect(findWordTokenAt(0, tokens)?.value).toBe('alpha');
+    expect(findWordTokenAt(4, tokens)?.value).toBe('alpha');
+    expect(findWordTokenAt(5, tokens)).toBeUndefined();
+    expect(findWordTokenAt(6, tokens)?.value).toBe('beta');
+    expect(findWordTokenAt(22, tokens)).toBeUndefined();
+  });
+
+  it('should resolve boundaries only for pointers inside the word line box', () => {
+    const tokens = tokenize(TEXT);
+    const rectFor = (start: number, end: number) => defaultRect(start, end);
+
+    expect(resolveBoundaryAt(null, 65, 5, tokens, rectFor)).toBeUndefined();
+    expect(resolveBoundaryAt(5, 55, 5, tokens, rectFor)).toBeUndefined();
+    expect(resolveBoundaryAt(6, 95, 40, tokens, rectFor)).toBeUndefined();
+    expect(resolveBoundaryAt(6, 240, 5, tokens, rectFor)).toBeUndefined();
+  });
+
+  it('should resolve word start on the left half and word end on the right half', () => {
+    const tokens = tokenize(TEXT);
+    const rectFor = (start: number, end: number) => defaultRect(start, end);
+
+    const left = resolveBoundaryAt(6, 65, 5, tokens, rectFor);
+    expect(left?.token.value).toBe('beta');
+    expect(left?.boundary).toBe(6);
+
+    const right = resolveBoundaryAt(9, 95, 5, tokens, rectFor);
+    expect(right?.token.value).toBe('beta');
+    expect(right?.boundary).toBe(10);
+  });
+
+  it('should position needles at word left edge for word-start boundaries and right edge for word-end boundaries', () => {
+    const tokens = tokenize('alpha beta');
+    const rectFor = (start: number, end: number) => ({
+      left: start * 10,
+      top: start < 5 ? 0 : 20,
+      right: end * 10,
+      bottom: start < 5 ? 19 : 39,
+    });
+    const origin = { left: 0, top: 0 };
+
+    expect(computeNeedlePosition(0, tokens, rectFor, origin)).toEqual({ left: 0, top: 0 });
+    expect(computeNeedlePosition(5, tokens, rectFor, origin)).toEqual({ left: 50, top: 0 });
+    expect(computeNeedlePosition(6, tokens, rectFor, origin)).toEqual({ left: 60, top: 20 });
+    expect(computeNeedlePosition(11, tokens, rectFor, origin)).toEqual({ left: 110, top: 20 });
+  });
+
+  it('should position needles relative to the given origin and handle missing rects', () => {
+    const tokens = tokenize(TEXT);
+    const rectFor = () => undefined;
+    expect(computeNeedlePosition(0, tokens, rectFor, { left: 0, top: 0 })).toBeUndefined();
+
+    const rectFor2 = (start: number, end: number) => defaultRect(start, end);
+    expect(computeNeedlePosition(5, tokens, rectFor2, { left: 41, top: 4 })).toEqual({
+      left: 9,
+      top: -4,
+    });
   });
 });

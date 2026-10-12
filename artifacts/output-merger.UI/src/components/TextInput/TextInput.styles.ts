@@ -64,6 +64,11 @@ export const TextViewContainer = styled.div<{ $dragging?: boolean }>`
   user-select: none;
 `;
 
+export const Highlight = styled.span`
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+`;
+
 export const Needle = styled.span`
   position: absolute;
   width: 4px;

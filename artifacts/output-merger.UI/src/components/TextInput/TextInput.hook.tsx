@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type Snippet, type TextInputProps } from './TextInput.types';
+import { caretIndexFromPoint, rectForRange } from './TextInput.geometry';
 
 /**
  * A single token produced by tokenize: a word or a whitespace run
@@ -30,6 +31,28 @@ export interface NeedleDescriptor {
   snippetId?: string;
   color: string;
   labelKey: string;
+}
+
+/**
+ * A rendered slice of the view text: plain, or highlighted with a color
+ * @interface Segment
+ */
+export interface Segment {
+  start: number;
+  end: number;
+  color?: string;
+  alpha?: number;
+}
+
+/**
+ * Minimal rect shape consumed by boundary and needle positioning logic
+ * @interface CharRectLike
+ */
+export interface CharRectLike {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 }
 
 type Drag =
@@ -85,43 +108,118 @@ export const trimRangeStart = (text: string, start: number, end: number): number
 };
 
 /**
- * A minimal box model interface for needle positioning
- * @interface WordElementBox
+ * Merges committed snippets and the live drag range into an ordered list of
+ * disjoint text segments, alternating plain and highlighted slices
  */
-export interface WordElementBox {
-  offsetLeft: number;
-  offsetWidth: number;
-  offsetTop: number;
-}
+export const computeSegments = (
+  text: string,
+  snippets: Snippet[],
+  drag: Drag,
+  color: string
+): Segment[] => {
+  const ranges: Segment[] = [];
+  if (drag?.type === 'create') {
+    const end = Math.max(drag.anchor, drag.current);
+    const start = trimRangeStart(text, Math.min(drag.anchor, drag.current), end);
+    if (start !== end) {
+      ranges.push({ start, end, color, alpha: 0.2 });
+    }
+  }
+  for (const snippet of snippets) {
+    if (drag?.type === 'resize' && drag.snippetId === snippet.id) {
+      const start =
+        drag.edge === 'start'
+          ? trimRangeStart(text, drag.boundary, snippet.endIndex)
+          : snippet.startIndex;
+      const end = drag.edge === 'end' ? drag.boundary : snippet.endIndex;
+      if (start < end) {
+        ranges.push({ start, end, color: snippet.color, alpha: 0.3 });
+      }
+      continue;
+    }
+    if (snippet.startIndex < snippet.endIndex) {
+      ranges.push({
+        start: snippet.startIndex,
+        end: snippet.endIndex,
+        color: snippet.color,
+        alpha: 0.3,
+      });
+    }
+  }
+  ranges.sort((a, b) => a.start - b.start);
+  const segments: Segment[] = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      segments.push({ start: cursor, end: range.start });
+    }
+    if (range.end > range.start) {
+      segments.push(range);
+    }
+    cursor = Math.max(cursor, range.end);
+  }
+  if (cursor < text.length) {
+    segments.push({ start: cursor, end: text.length });
+  }
+  return segments;
+};
 
 /**
- * Computes the pixel position of a needle for a char-index boundary.
- * Word-start boundaries sit at the word's left edge; word-end and
- * text-end boundaries sit at the preceding word's right edge.
+ * Finds the word token containing the given char index
+ */
+export const findWordTokenAt = (index: number, tokens: Token[]): Token | undefined =>
+  tokens.find(
+    (token) => token.isWord && index >= token.start && index < token.start + token.value.length
+  );
+
+/**
+ * Resolves the word boundary at a pointer position from a caret char index.
+ * The pointer must sit inside the word's line box (as with per-word span
+ * hit-testing) and the half-word rule decides between start and end boundary.
+ */
+export const resolveBoundaryAt = (
+  caretIndex: number | null,
+  clientX: number,
+  clientY: number,
+  tokens: Token[],
+  rectFor: (start: number, end: number) => CharRectLike | undefined
+): { token: Token; boundary: number } | undefined => {
+  if (caretIndex === null) return undefined;
+  const token = findWordTokenAt(caretIndex, tokens);
+  if (!token) return undefined;
+  const wordEnd = token.start + token.value.length;
+  const rect = rectFor(token.start, wordEnd);
+  if (!rect) return undefined;
+  const insideBox =
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom;
+  if (!insideBox) return undefined;
+  const isLeftHalf = clientX < rect.left + (rect.right - rect.left) / 2;
+  return { token, boundary: isLeftHalf ? token.start : wordEnd };
+};
+
+/**
+ * Computes the position of a needle for a char-index boundary, relative to the
+ * given origin rect. Word-start boundaries sit at the left edge of the word's
+ * first char; word-end boundaries sit at the right edge of the preceding char.
  */
 export const computeNeedlePosition = (
   boundary: number,
-  wordElements: Map<number, WordElementBox>
+  tokens: Token[],
+  rectFor: (start: number, end: number) => CharRectLike | undefined,
+  origin: { left: number; top: number }
 ): { left: number; top: number } | undefined => {
-  const exact = wordElements.get(boundary);
-  if (exact) {
-    return { left: exact.offsetLeft, top: exact.offsetTop };
-  }
-  const starts = Array.from(wordElements.keys()).sort((a, b) => a - b);
-  if (starts.length === 0) return undefined;
-  let preceding: WordElementBox | undefined;
-  for (const start of starts) {
-    if (start < boundary) {
-      preceding = wordElements.get(start);
-    } else {
-      break;
-    }
-  }
-  if (!preceding) {
-    const first = wordElements.get(starts[0])!;
-    return { left: first.offsetLeft, top: first.offsetTop };
-  }
-  return { left: preceding.offsetLeft + preceding.offsetWidth, top: preceding.offsetTop };
+  const isWordStart = tokens.some((token) => token.isWord && token.start === boundary);
+  const rangeStart = isWordStart ? boundary : boundary - 1;
+  if (rangeStart < 0) return undefined;
+  const rect = rectFor(rangeStart, rangeStart + 1);
+  if (!rect) return undefined;
+  return {
+    left: (isWordStart ? rect.left : rect.right) - origin.left,
+    top: rect.top - origin.top,
+  };
 };
 
 const MIN_TEXTAREA_ROWS = 4;
@@ -209,9 +307,9 @@ export const useTextInput = (props: TextInputProps) => {
   const [hoverBoundary, setHoverBoundary] = useState<number | null>(null);
   const [hoverSnippetId, setHoverSnippetId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag>(null);
-  const wordRefs = useRef(new Map<number, HTMLSpanElement>());
+  const viewRef = useRef<HTMLDivElement | null>(null);
 
-  const tokens = tokenize(text);
+  const tokens = useMemo(() => tokenize(text), [text]);
 
   const findSnippetAtWord = useCallback(
     (wordStart: number, wordEnd: number): Snippet | undefined =>
@@ -219,19 +317,25 @@ export const useTextInput = (props: TextInputProps) => {
     [snippets]
   );
 
-  const getBoundaryFromEvent = useCallback(
-    (e: React.PointerEvent): number | null => {
-      const el = (e.target as HTMLElement).closest(
-        '[data-word-start]'
-      ) as HTMLElement | null;
-      if (!el) return null;
-      const start = Number(el.getAttribute('data-word-start'));
-      const value = el.textContent ?? '';
-      const rect = el.getBoundingClientRect();
-      const isLeftHalf = e.clientX < rect.left + rect.width / 2;
-      return isLeftHalf ? start : start + value.length;
+  const getRectFor = useCallback(
+    (start: number, end: number): CharRectLike | undefined => {
+      const root = viewRef.current;
+      if (!root) return undefined;
+      return rectForRange(root, start, end);
     },
     []
+  );
+
+  const resolveEventWord = useCallback(
+    (e: React.PointerEvent): { token: Token; boundary: number } | undefined =>
+      resolveBoundaryAt(
+        caretIndexFromPoint(e.clientX, e.clientY, viewRef.current),
+        e.clientX,
+        e.clientY,
+        tokens,
+        getRectFor
+      ),
+    [tokens, getRectFor]
   );
 
   const clampResizeBoundary = useCallback(
@@ -262,7 +366,7 @@ export const useTextInput = (props: TextInputProps) => {
     (e: React.PointerEvent) => {
       if (mode !== 'view') return;
       if (drag) {
-        const boundary = getBoundaryFromEvent(e);
+        const boundary = resolveEventWord(e)?.boundary ?? null;
         if (boundary === null) return;
         if (drag.type === 'create') {
           let current = boundary;
@@ -292,23 +396,23 @@ export const useTextInput = (props: TextInputProps) => {
       if ((e.target as HTMLElement).closest('[data-testid="text-input-needle"]')) {
         return;
       }
-      const el = (e.target as HTMLElement).closest('[data-word-start]');
-      if (!el) {
+      const resolved = resolveEventWord(e);
+      if (!resolved) {
         setHoverBoundary(null);
         setHoverSnippetId(null);
         return;
       }
-      const wordStart = Number(el.getAttribute('data-word-start'));
-      const wordEnd = wordStart + (el.textContent ?? '').length;
+      const wordStart = resolved.token.start;
+      const wordEnd = wordStart + resolved.token.value.length;
       if (findSnippetAtWord(wordStart, wordEnd)) {
         setHoverSnippetId(findSnippetAtWord(wordStart, wordEnd)!.id);
         setHoverBoundary(null);
       } else {
-        setHoverBoundary(getBoundaryFromEvent(e));
+        setHoverBoundary(resolved.boundary);
         setHoverSnippetId(null);
       }
     },
-    [mode, drag, snippets, getBoundaryFromEvent, findSnippetAtWord, clampResizeBoundary]
+    [mode, drag, snippets, resolveEventWord, findSnippetAtWord, clampResizeBoundary]
   );
 
   const handlePointerDown = useCallback(
@@ -333,16 +437,15 @@ export const useTextInput = (props: TextInputProps) => {
           return;
         }
       }
-      const el = target.closest('[data-word-start]');
-      if (!el) return;
-      const wordStart = Number(el.getAttribute('data-word-start'));
-      const wordEnd = wordStart + (el.textContent ?? '').length;
+      const resolved = resolveEventWord(e);
+      if (!resolved) return;
+      const wordStart = resolved.token.start;
+      const wordEnd = wordStart + resolved.token.value.length;
       if (findSnippetAtWord(wordStart, wordEnd)) return;
-      const boundary = hoverBoundary ?? getBoundaryFromEvent(e);
-      if (boundary === null) return;
+      const boundary = hoverBoundary ?? resolved.boundary;
       setDrag({ type: 'create', anchor: boundary, current: boundary });
     },
-    [mode, hoverBoundary, findSnippetAtWord, getBoundaryFromEvent]
+    [mode, hoverBoundary, resolveEventWord, findSnippetAtWord]
   );
 
   const commit = useCallback(() => {
@@ -410,56 +513,13 @@ export const useTextInput = (props: TextInputProps) => {
     [maxCharacters, onTextChange, onChange, snippets.length]
   );
 
-  const registerWord = useCallback(
-    (start: number) => (el: HTMLSpanElement | null) => {
-      if (el) {
-        wordRefs.current.set(start, el);
-      } else {
-        wordRefs.current.delete(start);
-      }
-    },
-    []
+  const positionNeedle = useCallback(
+    (boundary: number, origin: { left: number; top: number }): { left: number; top: number } | undefined =>
+      computeNeedlePosition(boundary, tokens, getRectFor, origin),
+    [tokens, getRectFor]
   );
 
-  const getNeedlePosition = useCallback(
-    (boundary: number): { left: number; top: number } | undefined =>
-      computeNeedlePosition(boundary, wordRefs.current),
-    []
-  );
-
-  const getWordStyle = useCallback(
-    (wordStart: number, wordEnd: number): React.CSSProperties | undefined => {
-      const snippet = findSnippetAtWord(wordStart, wordEnd);
-      if (drag?.type === 'create') {
-        const end = Math.max(drag.anchor, drag.current);
-        const start = trimRangeStart(text, Math.min(drag.anchor, drag.current), end);
-        if (!snippet && start !== end && wordStart >= start && wordEnd <= end) {
-          return { backgroundColor: withAlpha(color, 0.2) };
-        }
-      }
-      if (drag?.type === 'resize') {
-        const dragged = snippets.find((s) => s.id === drag.snippetId);
-        if (dragged) {
-          const start =
-            drag.edge === 'start'
-              ? trimRangeStart(text, drag.boundary, dragged.endIndex)
-              : dragged.startIndex;
-          const end = drag.edge === 'end' ? drag.boundary : dragged.endIndex;
-          if (wordStart >= start && wordEnd <= end) {
-            return { backgroundColor: withAlpha(dragged.color, 0.3) };
-          }
-          if (wordStart >= dragged.startIndex && wordEnd <= dragged.endIndex) {
-            return undefined;
-          }
-        }
-      }
-      if (snippet) {
-        return { backgroundColor: withAlpha(snippet.color, 0.3) };
-      }
-      return undefined;
-    },
-    [drag, snippets, text, color, findSnippetAtWord]
-  );
+  const segments = mode === 'view' ? computeSegments(text, snippets, drag, color) : [];
 
   const getNeedles = (): NeedleDescriptor[] => {
     if (mode !== 'view') return [];
@@ -519,13 +579,13 @@ export const useTextInput = (props: TextInputProps) => {
     mode,
     text,
     tokens,
+    segments,
     needles: getNeedles(),
     isDragging,
+    viewRef,
     handleTextChange,
     handlePointerMove,
     handlePointerDown,
-    registerWord,
-    getNeedlePosition,
-    getWordStyle,
+    positionNeedle,
   };
 };

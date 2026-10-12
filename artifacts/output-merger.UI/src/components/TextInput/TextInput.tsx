@@ -1,6 +1,6 @@
-import { useRef } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAutoTextareaRows, useTextInput } from './TextInput.hook';
+import { useAutoTextareaRows, useTextInput, withAlpha } from './TextInput.hook';
 import { type TextInputProps } from './TextInput.types';
 import * as S from './TextInput.styles';
 
@@ -11,16 +11,36 @@ function TextInput(props: TextInputProps) {
   const textareaRows = useAutoTextareaRows(rootRef, mode === 'input');
   const {
     text,
-    tokens,
+    segments,
     needles,
     isDragging,
+    viewRef,
     handleTextChange,
     handlePointerMove,
     handlePointerDown,
-    registerWord,
-    getNeedlePosition,
-    getWordStyle,
+    positionNeedle,
   } = useTextInput(props);
+
+  const needleRefs = useRef(new Map<string, HTMLSpanElement>());
+  const registerNeedle = useCallback((key: string) => (el: HTMLSpanElement | null) => {
+    if (el) {
+      needleRefs.current.set(key, el);
+    } else {
+      needleRefs.current.delete(key);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const root = viewRef.current;
+    if (!root) return;
+    const rootRect = root.getBoundingClientRect();
+    needleRefs.current.forEach((el) => {
+      const boundary = Number(el.dataset.boundary);
+      const position = positionNeedle(boundary, rootRect);
+      el.style.left = `${position?.left ?? 0}px`;
+      el.style.top = `${position?.top ?? 0}px`;
+    });
+  });
 
   return (
     <S.TextInputRoot data-testid="text-input-root" data-mode={mode} id={id} ref={rootRef}>
@@ -51,45 +71,45 @@ function TextInput(props: TextInputProps) {
         <S.EmptyState data-testid="text-input-empty">{t('textInput.emptyView')}</S.EmptyState>
       ) : (
         <S.TextViewContainer
+          ref={viewRef}
           data-testid="text-input-view"
           $dragging={isDragging}
           onPointerMove={handlePointerMove}
           onPointerDown={handlePointerDown}
         >
-          {tokens.map((token, index) =>
-            token.isWord ? (
-              <span
-                key={`word-${token.start}-${index}`}
-                data-word-start={token.start}
-                ref={registerWord(token.start)}
-                style={getWordStyle(token.start, token.start + token.value.length)}
+          {segments.map((segment) => {
+            const content = text.slice(segment.start, segment.end);
+            return segment.color ? (
+              <S.Highlight
+                key={`seg-${segment.start}`}
+                data-segment-start={segment.start}
+                data-testid="text-input-segment-highlight"
+                style={{ backgroundColor: withAlpha(segment.color, segment.alpha ?? 0.3) }}
               >
-                {token.value}
-              </span>
+                {content}
+              </S.Highlight>
             ) : (
               <span
-                key={`ws-${token.start}-${index}`}
-                data-testid="text-input-whitespace"
-                data-token-start={token.start}
-                style={getWordStyle(token.start, token.start + token.value.length)}
+                key={`seg-${segment.start}`}
+                data-segment-start={segment.start}
+                data-testid="text-input-segment"
               >
-                {token.value}
+                {content}
               </span>
-            )
-          )}
+            );
+          })}
           {needles.map((needle) => {
-            const position = getNeedlePosition(needle.boundary);
+            const key = `${needle.role}-${needle.boundary}`;
             return (
               <S.Needle
-                key={`${needle.role}-${needle.boundary}`}
+                key={key}
+                ref={registerNeedle(key)}
                 data-testid="text-input-needle"
                 data-role={needle.role}
                 data-boundary={needle.boundary}
                 data-snippet-id={needle.snippetId}
                 aria-label={t(needle.labelKey)}
                 style={{
-                  left: position?.left ?? 0,
-                  top: position?.top ?? 0,
                   backgroundColor: needle.color,
                   pointerEvents: isDragging ? 'none' : 'auto',
                 }}
