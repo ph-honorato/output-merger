@@ -165,30 +165,63 @@ export const computeSegments = (
 };
 
 /**
- * Finds the word token containing the given char index
+ * Finds the token (word or whitespace run) containing the given char index
  */
-export const findWordTokenAt = (index: number, tokens: Token[]): Token | undefined =>
+export const findTokenAt = (index: number, tokens: Token[]): Token | undefined =>
   tokens.find(
-    (token) => token.isWord && index >= token.start && index < token.start + token.value.length
+    (token) => index >= token.start && index < token.start + token.value.length
   );
 
 /**
- * Resolves the word boundary at a pointer position from a caret char index.
- * The pointer must sit inside the word's line box (as with per-word span
- * hit-testing) and the half-word rule decides between start and end boundary.
+ * Resolves the token and word boundary at a pointer position from a caret char
+ * index. The pointer must sit inside the token's line box (as with per-word
+ * span hit-testing) and the half-word rule decides between start and end
+ * boundary.
+ *
+ * Browsers resolve the caret to the char boundary closest to the pointer, so a
+ * pointer in the right half of a word's last char yields the caret position
+ * *after* the word (the following whitespace start, or text end). Such
+ * pointers are attributed back to the preceding word whenever they lie inside
+ * its rect, keeping word-end boundaries reachable.
+ *
+ * Whitespace tokens resolve without a boundary so callers can keep snippet
+ * hover state alive over the spaces and line breaks inside a snippet. Their
+ * clamp is vertical-only: line-break rects are zero-width (the caret already
+ * proves the pointer sits in that line's flow), so a horizontal test could
+ * never pass, while the vertical test still rejects pointers in the leading
+ * between lines.
  */
-export const resolveBoundaryAt = (
+export const resolvePointerAt = (
   caretIndex: number | null,
   clientX: number,
   clientY: number,
   tokens: Token[],
   rectFor: (start: number, end: number) => CharRectLike | undefined
-): { token: Token; boundary: number } | undefined => {
+): { token: Token; boundary: number | null } | undefined => {
   if (caretIndex === null) return undefined;
-  const token = findWordTokenAt(caretIndex, tokens);
-  if (!token) return undefined;
-  const wordEnd = token.start + token.value.length;
-  const rect = rectFor(token.start, wordEnd);
+  let token = findTokenAt(caretIndex, tokens);
+  if (!token) {
+    token = tokens.find((candidate) => candidate.start + candidate.value.length === caretIndex);
+    if (!token) return undefined;
+  }
+  const tokenEnd = token.start + token.value.length;
+  if (!token.isWord) {
+    const preceding = tokens.find(
+      (candidate) => candidate.start + candidate.value.length === token!.start
+    );
+    if (preceding?.isWord) {
+      const wordBoundary = resolveWordPointer(preceding, clientX, clientY, rectFor);
+      if (wordBoundary !== undefined) {
+        return { token: preceding, boundary: wordBoundary };
+      }
+    }
+    const rect = rectFor(token.start, tokenEnd);
+    if (!rect) return undefined;
+    const insideLine = clientY >= rect.top && clientY <= rect.bottom;
+    if (!insideLine) return undefined;
+    return { token, boundary: null };
+  }
+  const rect = rectFor(token.start, tokenEnd);
   if (!rect) return undefined;
   const insideBox =
     clientX >= rect.left &&
@@ -197,7 +230,25 @@ export const resolveBoundaryAt = (
     clientY <= rect.bottom;
   if (!insideBox) return undefined;
   const isLeftHalf = clientX < rect.left + (rect.right - rect.left) / 2;
-  return { token, boundary: isLeftHalf ? token.start : wordEnd };
+  return { token, boundary: isLeftHalf ? token.start : tokenEnd };
+};
+
+const resolveWordPointer = (
+  word: Token,
+  clientX: number,
+  clientY: number,
+  rectFor: (start: number, end: number) => CharRectLike | undefined
+): number | undefined => {
+  const rect = rectFor(word.start, word.start + word.value.length);
+  if (!rect) return undefined;
+  const insideBox =
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom;
+  if (!insideBox) return undefined;
+  const isLeftHalf = clientX < rect.left + (rect.right - rect.left) / 2;
+  return isLeftHalf ? word.start : word.start + word.value.length;
 };
 
 /**
@@ -326,9 +377,9 @@ export const useTextInput = (props: TextInputProps) => {
     []
   );
 
-  const resolveEventWord = useCallback(
-    (e: React.PointerEvent): { token: Token; boundary: number } | undefined =>
-      resolveBoundaryAt(
+  const resolvePointer = useCallback(
+    (e: React.PointerEvent): { token: Token; boundary: number | null } | undefined =>
+      resolvePointerAt(
         caretIndexFromPoint(e.clientX, e.clientY, viewRef.current),
         e.clientX,
         e.clientY,
@@ -366,7 +417,7 @@ export const useTextInput = (props: TextInputProps) => {
     (e: React.PointerEvent) => {
       if (mode !== 'view') return;
       if (drag) {
-        const boundary = resolveEventWord(e)?.boundary ?? null;
+        const boundary = resolvePointer(e)?.boundary ?? null;
         if (boundary === null) return;
         if (drag.type === 'create') {
           let current = boundary;
@@ -396,23 +447,27 @@ export const useTextInput = (props: TextInputProps) => {
       if ((e.target as HTMLElement).closest('[data-testid="text-input-needle"]')) {
         return;
       }
-      const resolved = resolveEventWord(e);
+      const resolved = resolvePointer(e);
       if (!resolved) {
         setHoverBoundary(null);
         setHoverSnippetId(null);
         return;
       }
-      const wordStart = resolved.token.start;
-      const wordEnd = wordStart + resolved.token.value.length;
-      if (findSnippetAtWord(wordStart, wordEnd)) {
-        setHoverSnippetId(findSnippetAtWord(wordStart, wordEnd)!.id);
+      const tokenStart = resolved.token.start;
+      const tokenEnd = tokenStart + resolved.token.value.length;
+      const snippet = findSnippetAtWord(tokenStart, tokenEnd);
+      if (snippet) {
+        setHoverSnippetId(snippet.id);
         setHoverBoundary(null);
-      } else {
+      } else if (resolved.boundary !== null) {
         setHoverBoundary(resolved.boundary);
+        setHoverSnippetId(null);
+      } else {
+        setHoverBoundary(null);
         setHoverSnippetId(null);
       }
     },
-    [mode, drag, snippets, resolveEventWord, findSnippetAtWord, clampResizeBoundary]
+    [mode, drag, snippets, resolvePointer, findSnippetAtWord, clampResizeBoundary]
   );
 
   const handlePointerDown = useCallback(
@@ -437,15 +492,16 @@ export const useTextInput = (props: TextInputProps) => {
           return;
         }
       }
-      const resolved = resolveEventWord(e);
+      const resolved = resolvePointer(e);
       if (!resolved) return;
-      const wordStart = resolved.token.start;
-      const wordEnd = wordStart + resolved.token.value.length;
-      if (findSnippetAtWord(wordStart, wordEnd)) return;
+      const tokenStart = resolved.token.start;
+      const tokenEnd = tokenStart + resolved.token.value.length;
+      if (findSnippetAtWord(tokenStart, tokenEnd)) return;
+      if (resolved.boundary === null) return;
       const boundary = hoverBoundary ?? resolved.boundary;
       setDrag({ type: 'create', anchor: boundary, current: boundary });
     },
-    [mode, hoverBoundary, resolveEventWord, findSnippetAtWord]
+    [mode, hoverBoundary, resolvePointer, findSnippetAtWord]
   );
 
   const commit = useCallback(() => {

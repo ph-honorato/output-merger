@@ -10,8 +10,8 @@ import {
   withAlpha,
   computeNeedlePosition,
   computeSegments,
-  findWordTokenAt,
-  resolveBoundaryAt,
+  findTokenAt,
+  resolvePointerAt,
 } from './TextInput.hook';
 import { caretIndexFromPoint, rectForRange } from './TextInput.geometry';
 import { type Snippet, type TextInputProps } from './TextInput.types';
@@ -69,8 +69,11 @@ beforeEach(() => {
   vi.mocked(caretIndexFromPoint)
     .mockReset()
     .mockImplementation((x: number) => {
-      const index = Math.floor(x / 10);
-      return index >= 0 && index < TEXT.length && /\S/.test(TEXT[index]) ? index : null;
+      // mirrors browsers: the caret resolves to the char boundary closest to
+      // the pointer, so the right half of a char yields the position after it
+      const charIndex = Math.max(0, Math.min(TEXT.length - 1, Math.floor(x / 10)));
+      const localX = x - charIndex * 10;
+      return localX < 5 ? charIndex : charIndex + 1;
     });
   vi.mocked(rectForRange)
     .mockReset()
@@ -266,6 +269,118 @@ describe('TextInput Component', () => {
 
     fireEvent.pointerMove(getNeedleByRole('snippet-end'), {});
     expect(screen.getAllByTestId('text-input-needle')).toHaveLength(2);
+  });
+
+  it('should keep snippet needles visible while hovering whitespace inside the snippet', () => {
+    setup({ mode: 'view' });
+
+    dragFromTo(41, 151);
+    hoverAt(65);
+    expect(screen.getAllByTestId('text-input-needle')).toHaveLength(2);
+
+    hoverAt(101);
+    expect(screen.getAllByTestId('text-input-needle')).toHaveLength(2);
+    expect(getNeedleByRole('snippet-start')).toBeInTheDocument();
+    expect(getNeedleByRole('snippet-end')).toBeInTheDocument();
+
+    hoverAt(161);
+    expect(screen.queryAllByTestId('text-input-needle')).toHaveLength(0);
+  });
+
+  it('should not start a create drag when pressing down on whitespace inside a snippet', () => {
+    const onChange = vi.fn();
+    setup({ mode: 'view', onChange });
+
+    dragFromTo(41, 151);
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    hoverAt(101);
+    pointerDownAt(101);
+    hoverAt(211);
+    fireEvent.pointerUp(window);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByTestId('text-input-segment-highlight')).toHaveLength(1);
+  });
+
+  it('should keep snippet needles while hovering the line break inside a snippet', () => {
+    const onChange = vi.fn();
+    const text = 'alpha beta\ngamma delta';
+    setup({ mode: 'view', initialText: text, onChange });
+
+    // two-line virtual layout: line 1 = chars 0-9 (y 0-19), char 10 = '\n'
+    // (zero-width rect at x=100), line 2 = chars 11-21 (y 19-38)
+    vi.mocked(caretIndexFromPoint).mockImplementation((x: number, y: number) => {
+      if (y >= 19) {
+        const charIndex = 11 + Math.max(0, Math.min(10, Math.floor(x / 10)));
+        const localX = x - Math.floor(x / 10) * 10;
+        return localX < 5 ? Math.min(charIndex, 21) : Math.min(charIndex + 1, 22);
+      }
+      const charIndex = Math.max(0, Math.min(10, Math.floor(x / 10)));
+      const localX = x - Math.floor(x / 10) * 10;
+      return localX < 5 ? charIndex : Math.min(charIndex + 1, 10);
+    });
+    vi.mocked(rectForRange).mockImplementation((_root: HTMLElement, start: number, end: number) => {
+      if (start >= 11) {
+        return { left: (start - 11) * 10, top: 19, right: (end - 11) * 10, bottom: 38 };
+      }
+      if (start === 10) {
+        return { left: 100, top: 0, right: 100, bottom: 19 };
+      }
+      return { left: start * 10, top: 0, right: end * 10, bottom: 19 };
+    });
+
+    // drag from beta start (line 1) to gamma end (line 2)
+    hoverAt(65);
+    pointerDownAt(65);
+    fireEvent.pointerMove(screen.getByTestId('text-input-view'), { clientX: 45, clientY: 30 });
+    fireEvent.pointerUp(window);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const snippets = onChange.mock.calls[0][0] as Snippet[];
+    expect(snippets[0]).toMatchObject({
+      text: 'beta\ngamma',
+      startIndex: 6,
+      endIndex: 16,
+    });
+
+    hoverAt(75);
+    expect(screen.getAllByTestId('text-input-needle')).toHaveLength(2);
+
+    // hovering the zero-width line break (right of beta, same line) keeps the needles
+    fireEvent.pointerMove(screen.getByTestId('text-input-view'), { clientX: 105, clientY: 5 });
+    expect(screen.getAllByTestId('text-input-needle')).toHaveLength(2);
+    expect(getNeedleByRole('snippet-start')).toBeInTheDocument();
+    expect(getNeedleByRole('snippet-end')).toBeInTheDocument();
+
+    // hovering the empty trailing area of line 1 inside the snippet keeps the needles
+    fireEvent.pointerMove(screen.getByTestId('text-input-view'), { clientX: 250, clientY: 5 });
+    expect(screen.getAllByTestId('text-input-needle')).toHaveLength(2);
+
+    // hovering the space after alpha (outside the snippet) clears them
+    hoverAt(52);
+    expect(screen.queryAllByTestId('text-input-needle')).toHaveLength(0);
+  });
+
+  it('should show the word-end hover needle when hovering the right edge of a word', () => {
+    setup({ mode: 'view' });
+
+    hoverAt(49);
+    expect(getNeedleByRole('hover')).toHaveAttribute('data-boundary', '5');
+  });
+
+  it('should start a create drag from the right edge of a word', () => {
+    const onChange = vi.fn();
+    setup({ mode: 'view', onChange });
+
+    hoverAt(49);
+    pointerDownAt(49);
+    hoverAt(151);
+    fireEvent.pointerUp(window);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const snippets = onChange.mock.calls[0][0] as Snippet[];
+    expect(snippets[0]).toMatchObject({ text: 'beta gamma', startIndex: 6, endIndex: 16 });
   });
 
   it('should resize a snippet by dragging its end needle', () => {
@@ -561,36 +676,87 @@ describe('TextInput helpers', () => {
     ]);
   });
 
-  it('should find the word token containing a char index', () => {
+  it('should find the token containing a char index', () => {
     const tokens = tokenize(TEXT);
-    expect(findWordTokenAt(0, tokens)?.value).toBe('alpha');
-    expect(findWordTokenAt(4, tokens)?.value).toBe('alpha');
-    expect(findWordTokenAt(5, tokens)).toBeUndefined();
-    expect(findWordTokenAt(6, tokens)?.value).toBe('beta');
-    expect(findWordTokenAt(22, tokens)).toBeUndefined();
+    expect(findTokenAt(0, tokens)?.value).toBe('alpha');
+    expect(findTokenAt(4, tokens)?.value).toBe('alpha');
+    expect(findTokenAt(5, tokens)?.value).toBe(' ');
+    expect(findTokenAt(6, tokens)?.value).toBe('beta');
+    expect(findTokenAt(22, tokens)).toBeUndefined();
   });
 
-  it('should resolve boundaries only for pointers inside the word line box', () => {
+  it('should resolve pointers only inside the token line box', () => {
     const tokens = tokenize(TEXT);
     const rectFor = (start: number, end: number) => defaultRect(start, end);
 
-    expect(resolveBoundaryAt(null, 65, 5, tokens, rectFor)).toBeUndefined();
-    expect(resolveBoundaryAt(5, 55, 5, tokens, rectFor)).toBeUndefined();
-    expect(resolveBoundaryAt(6, 95, 40, tokens, rectFor)).toBeUndefined();
-    expect(resolveBoundaryAt(6, 240, 5, tokens, rectFor)).toBeUndefined();
+    expect(resolvePointerAt(null, 65, 5, tokens, rectFor)).toBeUndefined();
+    expect(resolvePointerAt(6, 65, 40, tokens, rectFor)).toBeUndefined();
+    expect(resolvePointerAt(6, 240, 5, tokens, rectFor)).toBeUndefined();
   });
 
   it('should resolve word start on the left half and word end on the right half', () => {
     const tokens = tokenize(TEXT);
     const rectFor = (start: number, end: number) => defaultRect(start, end);
 
-    const left = resolveBoundaryAt(6, 65, 5, tokens, rectFor);
+    const left = resolvePointerAt(6, 65, 5, tokens, rectFor);
     expect(left?.token.value).toBe('beta');
     expect(left?.boundary).toBe(6);
 
-    const right = resolveBoundaryAt(9, 95, 5, tokens, rectFor);
+    const right = resolvePointerAt(9, 95, 5, tokens, rectFor);
     expect(right?.token.value).toBe('beta');
     expect(right?.boundary).toBe(10);
+  });
+
+  it('should resolve whitespace tokens without a boundary', () => {
+    const tokens = tokenize(TEXT);
+    const rectFor = (start: number, end: number) => defaultRect(start, end);
+
+    const whitespace = resolvePointerAt(10, 101, 5, tokens, rectFor);
+    expect(whitespace?.token.value).toBe(' ');
+    expect(whitespace?.token.start).toBe(10);
+    expect(whitespace?.boundary).toBeNull();
+
+    expect(resolvePointerAt(10, 101, 40, tokens, rectFor)).toBeUndefined();
+  });
+
+  it('should resolve zero-width line-break whitespace anywhere on its line', () => {
+    const text = 'alpha beta\ngamma';
+    const tokens = tokenize(text);
+    const rectFor = (start: number, end: number) => {
+      if (start >= 11) {
+        return { left: 0, top: 19, right: (end - 11) * 10, bottom: 38 };
+      }
+      if (start === 10) {
+        return { left: 100, top: 0, right: 100, bottom: 19 };
+      }
+      return { left: start * 10, top: 0, right: end * 10, bottom: 19 };
+    };
+
+    const lineBreak = resolvePointerAt(10, 117, 5, tokens, rectFor);
+    expect(lineBreak?.token.value).toBe('\n');
+    expect(lineBreak?.boundary).toBeNull();
+
+    const trailing = resolvePointerAt(10, 175, 5, tokens, rectFor);
+    expect(trailing?.token.value).toBe('\n');
+    expect(trailing?.boundary).toBeNull();
+
+    expect(resolvePointerAt(10, 117, 40, tokens, rectFor)).toBeUndefined();
+  });
+
+  it('should attribute right-half-of-last-char carets to the preceding word', () => {
+    const tokens = tokenize(TEXT);
+    const rectFor = (start: number, end: number) => defaultRect(start, end);
+
+    const attributed = resolvePointerAt(10, 95, 5, tokens, rectFor);
+    expect(attributed?.token.value).toBe('beta');
+    expect(attributed?.boundary).toBe(10);
+
+    const atTextEnd = resolvePointerAt(TEXT.length, 215, 5, tokens, rectFor);
+    expect(atTextEnd?.token.value).toBe('delta');
+    expect(atTextEnd?.boundary).toBe(22);
+
+    const beyondText = resolvePointerAt(TEXT.length, 240, 5, tokens, rectFor);
+    expect(beyondText).toBeUndefined();
   });
 
   it('should position needles at word left edge for word-start boundaries and right edge for word-end boundaries', () => {
