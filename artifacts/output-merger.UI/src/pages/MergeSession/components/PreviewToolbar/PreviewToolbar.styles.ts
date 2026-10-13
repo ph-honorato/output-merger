@@ -6,7 +6,8 @@ type StyledTheme = DefaultTheme & Theme;
 
 export const PreviewToolbarRoot = styled.div`
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   flex-shrink: 0;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(0.5)};
   padding: ${({ theme }) => (theme as StyledTheme).spacing(0.5)};
@@ -15,4 +16,8 @@ export const PreviewToolbarRoot = styled.div`
   border: 1px solid ${({ theme }) => (theme as StyledTheme).palette.divider};
   border-radius: 0.75rem;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+
+  ${({ theme }) => (theme as StyledTheme).breakpoints.up('md')} {
+    flex-direction: column;
+  }
 `;

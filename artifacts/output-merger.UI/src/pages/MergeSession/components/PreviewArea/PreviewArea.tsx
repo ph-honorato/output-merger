@@ -15,7 +15,7 @@ function PreviewArea(props: PreviewAreaProps) {
           <span>{t('pages.mergeSession.previewArea.empty')}</span>
         </S.EmptyState>
       ) : (
-        <S.SegmentFlow>
+        <S.SegmentFlow data-testid="preview-segment-flow">
           {snippets.map((snippet) => (
             <S.Segment
               key={snippet.id}

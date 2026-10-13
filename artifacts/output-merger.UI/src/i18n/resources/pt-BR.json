@@ -15,7 +15,7 @@
   "pages.mergeSession.tutorial.step4": "Seus trechos aparecem na prévia. Copie o texto mesclado quando terminar.",
   "pages.mergeSession.tutorial.dismiss": "Fechar tutorial",
   "pages.mergeSession.tutorial.help": "Mostrar tutorial",
-  "pages.mergeSession.previewArea.empty": "Os trechos que você selecionar aparecerão aqui",
+  "pages.mergeSession.previewArea.empty": "Selecione alguns trechos nas entradas para começar",
   "pages.mergeSession.previewArea.copy.button": "Copiar texto mesclado para a área de transferência",
   "pages.mergeSession.previewArea.copy.toast": "Texto copiado para a área de transferência",
   "textInput.placeholder": "Digite ou cole seu texto aqui",

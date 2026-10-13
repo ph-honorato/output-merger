@@ -35,6 +35,7 @@ export const SegmentFlow = styled.div`
   align-content: flex-start;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
   white-space: pre-wrap;
+  text-align: left;
 `;
 
 export const Segment = styled.span`

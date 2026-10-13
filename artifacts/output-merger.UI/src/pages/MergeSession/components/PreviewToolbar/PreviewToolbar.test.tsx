@@ -42,9 +42,9 @@ describe('PreviewToolbar Component', () => {
     expect(root).toHaveStyle({ position: 'static' });
   });
 
-  it('should be column-oriented', () => {
+  it('should be row-oriented at base (column from md up)', () => {
     renderWithProviders(<PreviewToolbar />);
     const root = screen.getByTestId('preview-toolbar');
-    expect(root).toHaveStyle({ flexDirection: 'column' });
+    expect(root).toHaveStyle({ flexDirection: 'row' });
   });
 });

@@ -15,7 +15,7 @@
   "pages.mergeSession.tutorial.step4": "Your snippets appear in the preview. Copy the merged text when you are done.",
   "pages.mergeSession.tutorial.dismiss": "Dismiss tutorial",
   "pages.mergeSession.tutorial.help": "Show tutorial",
-  "pages.mergeSession.previewArea.empty": "Snippets you select will appear here",
+  "pages.mergeSession.previewArea.empty": "Select some snippets on the inputs to start",
   "pages.mergeSession.previewArea.copy.button": "Copy merged text to clipboard",
   "pages.mergeSession.previewArea.copy.toast": "Text copied to clipboard",
   "textInput.placeholder": "Type or paste your text here",

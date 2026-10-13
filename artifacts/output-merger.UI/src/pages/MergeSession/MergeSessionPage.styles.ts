@@ -33,8 +33,14 @@ export const Title = styled.h1`
 
 export const PreviewColumn = styled.div`
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
+
+  ${({ theme }) => (theme as StyledTheme).breakpoints.up('md')} {
+    flex-direction: row;
+    align-items: flex-start;
+  }
 `;
 
 export const HelpButton = styled(IconButton)`
