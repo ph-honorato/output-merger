@@ -1,4 +1,5 @@
 import PreviewIcon from '@mui/icons-material/Preview';
+import { Fragment } from 'react';
 import { usePreviewArea, withAlpha } from './PreviewArea.hook';
 import type { PreviewAreaProps } from './PreviewArea.types';
 import * as S from './PreviewArea.styles';
@@ -16,14 +17,16 @@ function PreviewArea(props: PreviewAreaProps) {
         </S.EmptyState>
       ) : (
         <S.SegmentFlow data-testid="preview-segment-flow">
-          {snippets.map((snippet) => (
-            <S.Segment
-              key={snippet.id}
-              data-testid="preview-snippet"
-              style={{ backgroundColor: withAlpha(snippet.color, 0.3) }}
-            >
-              {snippet.text}
-            </S.Segment>
+          {snippets.map((snippet, index) => (
+            <Fragment key={snippet.id}>
+              {index > 0 ? ' ' : null}
+              <S.Segment
+                data-testid="preview-snippet"
+                style={{ backgroundColor: withAlpha(snippet.color, 0.3) }}
+              >
+                {snippet.text}
+              </S.Segment>
+            </Fragment>
           ))}
         </S.SegmentFlow>
       )}

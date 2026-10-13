@@ -30,17 +30,15 @@ export const EmptyState = styled.div`
 `;
 
 export const SegmentFlow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
+  display: block;
+  overflow-wrap: break-word;
   white-space: pre-wrap;
   text-align: left;
 `;
 
 export const Segment = styled.span`
-  padding: 2px 6px;
-  border-radius: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   white-space: pre-wrap;
 `;

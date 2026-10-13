@@ -9,6 +9,7 @@ import ptBR from '../../../../i18n/resources/pt-BR.json';
 import { theme } from '../../../../theme';
 import { SnippetsProvider, useSnippets } from '../../../../context/SnippetsContext';
 import type { Snippet } from '@components/TextInput';
+import { buildMergedText } from '../CopyMergedTextButton/CopyMergedTextButton.hook';
 import PreviewArea from './PreviewArea';
 import { withAlpha } from './PreviewArea.hook';
 
@@ -106,6 +107,35 @@ describe('PreviewArea', () => {
     expect(screen.getByTestId('preview-segment-flow')).toHaveStyle({
       textAlign: 'left',
     });
+  });
+
+  it('lays out the segment flow as a block text container that breaks long words', () => {
+    renderWithProviders([['text-1', [makeSnippet('a1', 'Hello')]]]);
+    const flow = screen.getByTestId('preview-segment-flow');
+    expect(flow).toHaveStyle({ display: 'block' });
+    expect(flow).toHaveStyle({ overflowWrap: 'break-word' });
+    expect(screen.getAllByTestId('preview-snippet')[0]).toHaveStyle({
+      overflowWrap: 'break-word',
+    });
+  });
+
+  it('renders the flow text exactly as buildMergedText produces it', () => {
+    // 'b1' ends with a space: the resulting double space in the join is
+    // by-design (clipboard parity — join semantics untouched).
+    renderWithProviders([
+      ['text-1', [makeSnippet('a1', 'Hello')]],
+      ['text-2', [makeSnippet('b1', 'brave ')]],
+      ['text-1', [makeSnippet('a1', 'Hello'), makeSnippet('a2', 'world')]],
+      ['text-2', [makeSnippet('b1', 'brave '), makeSnippet('b2', 'today')]],
+    ]);
+    expect(screen.getByTestId('preview-segment-flow').textContent).toBe(
+      buildMergedText([
+        { ...makeSnippet('a1', 'Hello'), sourceId: 'text-1', order: 1 },
+        { ...makeSnippet('b1', 'brave '), sourceId: 'text-2', order: 2 },
+        { ...makeSnippet('a2', 'world'), sourceId: 'text-1', order: 3 },
+        { ...makeSnippet('b2', 'today'), sourceId: 'text-2', order: 4 },
+      ])
+    );
   });
 
   it('clears the empty state when a snippet arrives', () => {
