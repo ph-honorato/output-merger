@@ -52,10 +52,25 @@
     - [x] Task 6.4: The copy button should be inside at the top of a vertical bar, this bar should be placed at the right of the preview area, decoupled from the container
 
 - [ ] **Feature 3: Preview Area Tools** - Implement the preview area with:
-  - Sort highlighted text snippets by drag
-  - Creating line breaks
-  - Splitting snippets between words
-  - Adding own text
+  - [ ] **Task 1: Sort Snippets by Dragging** - Sort highlighted text snippets by dragging (using `@dnd-kit/core`)
+    - [ ] Task 1.1: Install and set up `@dnd-kit/core` and `@dnd-kit/sortable`
+    - [ ] Task 1.2: Add snippet reorder support to SnippetsContext (reducer action + `moveSnippet` API)
+    - [ ] Task 1.3: Configure sensors: PointerSensor with hold-to-drag activation constraint (delay + tolerance) and KeyboardSensor for accessibility
+    - [ ] Task 1.4: Make preview segments sortable (DndContext + SortableContext), wiring drag end to `moveSnippet`, keeping space separators and empty state working
+    - [ ] Task 1.5: Tests: reducer reorder unit tests + component drag/keyboard sorting tests
+  - [ ] **Task 2: Preview Area Modal** - Open the preview area on a modal (bigger view of the same preview)
+    - [ ] Task 2.1: Create PreviewModal component in MergeSession components folder (MUI Dialog, full component structure)
+    - [ ] Task 2.2: Add open-preview button to the PreviewToolbar with translations (en-US/pt-BR)
+    - [ ] Task 2.3: Manage open/close state and render the same PreviewArea inside the modal (shared state via context, no duplication)
+    - [ ] Task 2.4: Responsive + accessibility pass (ESC/backdrop close, focus trap, full-screen on mobile)
+    - [ ] Task 2.5: Tests: modal open/close, preview content rendering, copy button integration
+  - [ ] **Task 3: Editable Preview Text** - Make the text on the preview area editable (inline and in the modal)
+    - [ ] Task 3.1: Extend SnippetsContext into a preview document model (snippet tokens + own-text tokens + line breaks), migrating Task 1 reorder onto it
+    - [ ] Task 3.2: Build the editable preview surface (contentEditable rendering colored snippet tokens, textarea-like caret/selection)
+    - [ ] Task 3.3: Verify the click-vs-drag contract (click = caret, hold = drag) and add a drag on/off toggle that disables dragging only
+    - [ ] Task 3.4: Implement edit parsing/sync: own text insertion, Enter → line break, deletion at boundaries, typing inside a snippet splits it between words; focused surface owns its DOM, blurred surface re-renders from the model
+    - [ ] Task 3.5: Update merged-text building/copy to serialize the document (own text + newlines for line breaks)
+    - [ ] Task 3.6: Tests: editing workflows, parse/serialize round-trips, inline-modal sync
 - [ ] **Feature 4: Third Text Input** - Add support for a third text input
   - [ ] Add a button to add a third text input on MergeSession Page
   - [ ] Implement logic to handle three text inputs in the merge session
