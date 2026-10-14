@@ -1,4 +1,4 @@
-import type { Snippet } from '@components/TextInput';
+import type { Snippet } from '@components';
 
 /**
  * A snippet lifted into the merge sequence: the TextInput snippet plus its

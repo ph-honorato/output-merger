@@ -326,12 +326,12 @@ describe('TextInput Component', () => {
     });
     vi.mocked(rectForRange).mockImplementation((_root: HTMLElement, range: CharRange) => {
       if (range.start >= 11) {
-        return { left: (range.start - 11) * 10, top: 19, right: (range.end - 11) * 10, bottom: 38 };
+        return { left: (range.start - 11) * 10, top: 19, right: (range.end - 11) * 10, bottom: 38, width: (range.end - range.start) * 10, height: 19 };
       }
       if (range.start === 10) {
-        return { left: 100, top: 0, right: 100, bottom: 19 };
+        return { left: 100, top: 0, right: 100, bottom: 19, width: 0, height: 19 };
       }
-      return { left: range.start * 10, top: 0, right: range.end * 10, bottom: 19 };
+      return { left: range.start * 10, top: 0, right: range.end * 10, bottom: 19, width: (range.end - range.start) * 10, height: 19 };
     });
 
     // drag from beta start (line 1) to gamma end (line 2)

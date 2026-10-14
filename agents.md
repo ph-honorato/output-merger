@@ -28,7 +28,8 @@ Whenever there is a necessity to implement a component for the UI:
    - Components that can be used on more than one context/page must be placed in the `artifacts/output-merger.UI/src/components` folder
    - Components that will be used on a single context/page must be placed inside a `components` folder of that page/context (e.g. `src/pages/MergeSession/components/`)
 3. The global components folder should have an alias configured to be called globally via `@components`
-4. When creating new components, agents should follow this structure (example in `components/Example/`):
+4. Every components folder (global and page/context-level) must have an `index.ts` exporting all of its components. Whenever a file needs a component or a type from a component, it must be imported from the folder's barrel (`from "@components"` for global components, or from the page/context `components` folder for page-owned components) — never from an individual component's subfolder
+5. When creating new components, agents should follow this structure (example in `components/Example/`):
 
 ```
 Example.tsx           // Component implementation file

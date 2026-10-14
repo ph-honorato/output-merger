@@ -11,7 +11,7 @@ import {
   SnippetsProvider,
   useSnippets,
 } from "../../../../context/SnippetsContext";
-import type { Snippet } from "../../../../components";
+import type { Snippet } from "@components";
 import { buildMergedText } from "../CopyMergedTextButton/CopyMergedTextButton.hook";
 import PreviewArea from "./PreviewArea";
 import { withAlpha } from "../../../../utils/color";

@@ -4,16 +4,15 @@ import Grid from "@mui/material/Grid";
 import HelpOutlined from "@mui/icons-material/HelpOutlined";
 import { type MergeSessionPageProps } from "./MergeSessionPage.types";
 import * as S from "./MergeSessionPage.styles";
-import { TextInput } from "@components/TextInput";
-import { ActionsBar } from "@components/ActionsBar";
-import { PreviewArea } from "./components/PreviewArea";
-import { PreviewToolbar } from "./components/PreviewToolbar";
-import { CopyMergedTextButton } from "./components/CopyMergedTextButton";
+import { TextInput, ActionsBar } from "@components";
 import {
+  PreviewArea,
+  PreviewToolbar,
+  CopyMergedTextButton,
   TutorialBanner,
   readTutorialDismissed,
   writeTutorialDismissed,
-} from "./components/TutorialBanner";
+} from "./components";
 import { SnippetsProvider, useSnippets } from "../../context/SnippetsContext";
 
 function MergeSessionWorkspace() {
