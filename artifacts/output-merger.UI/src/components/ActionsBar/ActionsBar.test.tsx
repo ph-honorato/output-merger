@@ -3,7 +3,7 @@ import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
 import { theme } from '../../theme';
 import ActionsBar from './ActionsBar';
-import i18n from '../../i18n';
+import { i18n } from '@translation';
 import { I18nextProvider } from 'react-i18next';
 
 const renderWithProviders = (component: React.ReactElement) => {

@@ -3,9 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
 import { I18nextProvider } from 'react-i18next';
-import i18n from '../../../../i18n';
-import enUS from '../../../../i18n/resources/en-US.json';
-import ptBR from '../../../../i18n/resources/pt-BR.json';
+import { i18n, enUS, ptBR } from '@translation';
 import { theme } from '../../../../theme';
 import TutorialBanner from './TutorialBanner';
 

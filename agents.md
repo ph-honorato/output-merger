@@ -57,6 +57,7 @@ When adding new routes to the application:
 
 - Agents must always add texts to translation files (en-US and pt-BR) when adding texts to the front-end
 - Translation files are be located in `src/i18n/resources/` with separate files for each language
+- The `src/i18n` folder is aliased globally via `@translation` and exports named members only: import the i18n instance and resource files with `import { i18n, enUS, ptBR } from "@translation"` — never via relative paths, the default export, or individual resource subpaths
 - Use React-i18next or similar library for translation implementation
 
 ### Agent Workflow Guidelines
