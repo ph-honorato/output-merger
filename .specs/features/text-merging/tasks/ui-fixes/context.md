@@ -8,7 +8,7 @@
 
 ## Feature Boundary
 
-UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Feature 2: an in-page dismissable tutorial banner (intro text + left-aligned numbered step list, localStorage-persisted dismissal, Help reopen button, en-US + pt-BR copy), guaranteed minimum heights for the source cards and preview area (400px), a stable ActionsBar height (min-height 74px) that survives the Start Merge → hidden transition, and a decoupled PreviewToolbar that sits beside the preview card (right side, top-aligned, copy button topmost) instead of floating over its content. Not Start Over / Add Text (Feature 3), not the third input (Feature 4), not preview editing tools (Feature 5), not an interactive tooltip tour, not backend persistence (V1).
+UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Feature 2: an in-page dismissable tutorial banner (title + left-aligned numbered step list, localStorage-persisted dismissal, Help reopen button, en-US + pt-BR copy), guaranteed minimum heights for the source cards and preview area (400px), a stable ActionsBar height (min-height 74px) that survives the Start Merge → hidden transition, and a decoupled PreviewToolbar that sits beside the preview card (right side, top-aligned, copy button topmost) instead of floating over its content. Not Start Over / Add Text (Feature 3), not the third input (Feature 4), not preview editing tools (Feature 5), not an interactive tooltip tour, not backend persistence (V1).
 
 ---
 
@@ -21,7 +21,7 @@ UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Fea
 
 ### Tutorial (6.1)
 
-- **Format (user decision)**: dismissable banner at the top of the page (below the page subtitle, above the ActionsBar), containing the `tutorial.title` text, a main intro text, and a numbered (`<ol>`) step list aligned to the left **below the intro text**. Not a modal, not a tooltip tour, not a collapsible panel — rejected as heavy for v0.
+- **Format (user decision; intro text removed by user decision after implementation)**: dismissable banner at the top of the page (below the page subtitle, above the ActionsBar), containing the `tutorial.title` text and a numbered (`<ol>`) step list aligned to the left **below the title**. Not a modal, not a tooltip tour, not a collapsible panel — rejected as heavy for v0.
 - **Content (user decision)**: one static list covering the full flow (type/paste texts → Start Merge → drag handles to highlight → snippets appear in preview → copy merged text). Not mode-aware; the steps remain true in both page states.
 - **Visibility (user decision)**: shown by default on first visit; dismissable; dismissal persisted in `localStorage`; a small **Help icon button near the page title** reopens it.
 - **Copy (user decision)**: agent drafts both en-US and pt-BR texts in the spec (§ Draft Tutorial Copy); user reviews/corrects wording during implementation.
@@ -47,7 +47,7 @@ UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Fea
 
 ### i18n
 
-- All tutorial strings under `pages.mergeSession.tutorial.*` (`.title`, `.intro`, `.step1`–`.step4`, `.dismiss`, `.help`) — en-US and pt-BR. Draft wording in the spec; user reviews during implementation.
+- All tutorial strings under `pages.mergeSession.tutorial.*` (`.title`, `.step1`–`.step4`, `.dismiss`, `.help`) — en-US and pt-BR. Draft wording in the spec; user reviews during implementation.
 
 ### Testing (user decision)
 

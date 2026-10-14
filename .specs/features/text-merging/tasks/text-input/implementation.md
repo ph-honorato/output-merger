@@ -179,3 +179,9 @@ Bugs found in review/user testing, each locked by a red-then-green regression te
 - Click/tap-the-highlight-to-delete (TXTIN-23/24) — removal currently only via resize collapse.
 - Keyboard needle navigation — out of scope per context.md.
 - Snippet state is component-owned; the snippets context (Task 3) aggregates it via `onChange`.
+
+---
+
+## 10. Amendments
+
+- **2026-10-13** — `withAlpha` was unified into a shared validated util at `src/utils/color.ts` per user decision; TextInput's bare-parse copy was removed — non-`#`-prefixed/invalid values now pass through unchanged instead of producing NaN-based rgba; no change for valid `#rgb`/`#rrggbb` values.

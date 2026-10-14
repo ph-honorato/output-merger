@@ -6,7 +6,7 @@ The Merge Session page is functionally complete (Tasks 1–5) but has four usabi
 
 ## Goals
 
-- [ ] A dismissable tutorial banner renders at the top of the page (below the subtitle, above the ActionsBar): title, intro text, and a left-aligned numbered list of the four flow steps.
+- [ ] A dismissable tutorial banner renders at the top of the page (below the subtitle, above the ActionsBar): title and a left-aligned numbered list of the four flow steps.
 - [ ] Dismissal is persisted in `localStorage`; a Help icon button near the page title reopens the banner.
 - [ ] All tutorial strings exist in en-US and pt-BR under `pages.mergeSession.tutorial.*`.
 - [ ] TextInput cards and the PreviewArea card have `min-height: 400px` in both modes and on all breakpoints, growing with content; the input-mode textarea fills its card and never exceeds it.
@@ -36,7 +36,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
-| Tutorial format | Dismissable banner at top of page: title + intro text + left-aligned `<ol>` of 4 steps below the intro | User decision ("numbered list aligned to left, under the main text"); zero new dependencies, testable, i18n-friendly | y (grilled) |
+| Tutorial format | Dismissable banner at top of page: title + left-aligned `<ol>` of 4 steps below the title | User decision ("numbered list aligned to left, under the main text"); intro text removed by user decision after implementation (2026-10-13); zero new dependencies, testable, i18n-friendly | y (grilled; intro removal — user decision) |
 | Banner placement | Below the page subtitle, above the ActionsBar | "Top of the page" recommendation accepted; reads before the working area | n (agent default) |
 | Tutorial content | Static full-flow list: type texts → Start Merge → drag handles to highlight → snippets in preview → copy | User decision; not mode-aware | y (grilled) |
 | Dismissal persistence | `localStorage`, key `output-merger.tutorial.dismissed`, value `"true"` | User decision (persist across reloads); no backend in v0 | y (grilled) — key name is agent default |
@@ -50,7 +50,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 | Toolbar decoupling | Toolbar moves outside the preview card: static sibling beside its right side, top-aligned; copy topmost; children-composition and testids preserved; SegmentFlow `padding-right` dropped; toolbar `z-index` removed | User decision ("outside the card entirely... no longer overlapping"); exact flex mechanics are agent default | y (grilled) — mechanics n (agent default) |
 | Toolbar on mobile | Stays beside the card on stacked layouts (bar is ~48px wide) | Toolbar must remain reachable; no special-case hiding | n (agent default) |
 | Component ownership | `TutorialBanner` as page sub-component under `src/pages/MergeSession/components/` with standard file split | Task 4 precedent: page-owned pieces live there, not `src/components/` | n (agent default) |
-| i18n namespace | `pages.mergeSession.tutorial.*` (`.title`, `.intro`, `.step1`–`.step4`, `.dismiss`, `.help`) | Task 4 precedent: page-owned components use the page namespace | n (agent default) |
+| i18n namespace | `pages.mergeSession.tutorial.*` (`.title`, `.step1`–`.step4`, `.dismiss`, `.help`) | Task 4 precedent: page-owned components use the page namespace | n (agent default) |
 | Testing | One page-level test for the tutorial lifecycle; no new tests for 6.2–6.4; existing suites updated only if positioning/testids move | User decision | y (grilled) |
 | data-testids | `merge-session-tutorial`, `tutorial-dismiss-button`, `merge-session-help-button`; existing `preview-toolbar`, `preview-copy-button`, `preview-area` preserved | Continuity with Task 4/5 suites | n (agent default) |
 | Glossary / ADR | None | "Tutorial" is UI chrome, not domain language; all decisions trivially reversible | y (grilled) |
@@ -86,11 +86,11 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 **Acceptance Criteria**:
 
 1. WHILE no dismissal flag exists THEN the page SHALL render a tutorial banner below the page subtitle and above the ActionsBar.
-2. The banner SHALL display the `pages.mergeSession.tutorial.title` text and the `pages.mergeSession.tutorial.intro` text.
-3. The banner SHALL display an ordered list of the four steps (`step1`–`step4`) aligned to the left, below the intro text.
+2. The banner SHALL display the `pages.mergeSession.tutorial.title` text.
+3. The banner SHALL display an ordered list of the four steps (`step1`–`step4`) aligned to the left, below the title.
 4. The banner SHALL render a dismiss control (icon-only close button, aria-label `pages.mergeSession.tutorial.dismiss`); WHEN it is clicked THEN the banner SHALL disappear.
 
-**Independent Test**: Render the page with cleared localStorage: banner visible under the subtitle with title, intro, 4 steps in an `<ol>`; click the dismiss control: banner gone.
+**Independent Test**: Render the page with cleared localStorage: banner visible under the subtitle with title and 4 steps in an `<ol>`; click the dismiss control: banner gone.
 
 ---
 
@@ -135,7 +135,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 
 **Acceptance Criteria**:
 
-1. All tutorial keys (`title`, `intro`, `step1`–`step4`, `dismiss`, `help`) SHALL exist in both `en-US.json` and `pt-BR.json` under `pages.mergeSession.tutorial.*`.
+1. All tutorial keys (`title`, `step1`–`step4`, `dismiss`, `help`) SHALL exist in both `en-US.json` and `pt-BR.json` under `pages.mergeSession.tutorial.*`.
 2. WHEN the language is switched THEN all tutorial texts SHALL update to the active language.
 
 **Independent Test**: Assert the keys exist in both resource files; render in pt-BR: steps in Portuguese; switch to en-US: steps in English.
@@ -149,7 +149,6 @@ Keys under `pages.mergeSession.tutorial` (user reviews/corrects wording during i
 | Key | en-US | pt-BR |
 | --- | ----- | ----- |
 | `title` | How it works | Como funciona |
-| `intro` | Merge your texts in four simple steps: | Faça o merge dos seus textos em quatro passos simples: |
 | `step1` | Type or paste your texts into the input fields. | Digite ou cole seus textos nos campos de entrada. |
 | `step2` | Click "Start Merge" to lock your texts and start selecting. | Clique em "Iniciar Merge" para travar seus textos e começar a seleção. |
 | `step3` | Drag the handles that appear over the text to highlight the parts you want. | Arraste os marcadores que aparecem sobre o texto para destacar as partes desejadas. |
@@ -269,7 +268,7 @@ Each requirement gets a unique ID for tracking across design, tasks, and validat
 
 How we know the feature is successful:
 
-- [ ] Fresh visit (cleared storage): tutorial banner renders under the subtitle with intro text and the four left-aligned steps; dismissing hides it and writes the flag; reload keeps it hidden; the Help button reopens it; re-dismissal persists again.
+- [ ] Fresh visit (cleared storage): tutorial banner renders under the subtitle with the title and the four left-aligned steps; dismissing hides it and writes the flag; reload keeps it hidden; the Help button reopens it; re-dismissal persists again.
 - [ ] Tutorial texts read correctly in both en-US and pt-BR; switching languages updates them live.
 - [ ] Input cards and the preview render ~400px tall in both modes and on mobile, growing with content; the mode flip causes no height jump; the textarea fills its card.
 - [ ] The ActionsBar keeps identical height before and after Start Merge hides the button.

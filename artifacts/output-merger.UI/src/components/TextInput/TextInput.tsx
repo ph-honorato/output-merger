@@ -1,6 +1,8 @@
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAutoTextareaRows, useTextInput, withAlpha } from './TextInput.hook';
+import { withAlpha } from '../../utils/color';
+import { useAutoTextareaRows, useTextInput } from './TextInput.hook';
+import { parseBoundary, serializeBoundary } from './TextInput.geometry';
 import { type TextInputProps } from './TextInput.types';
 import * as S from './TextInput.styles';
 
@@ -35,7 +37,7 @@ function TextInput(props: TextInputProps) {
     if (!root) return;
     const rootRect = root.getBoundingClientRect();
     needleRefs.current.forEach((el) => {
-      const boundary = Number(el.dataset.boundary);
+      const boundary = parseBoundary(el.dataset.boundary);
       const position = positionNeedle(boundary, rootRect);
       el.style.left = `${position?.left ?? 0}px`;
       el.style.top = `${position?.top ?? 0}px`;
@@ -106,7 +108,7 @@ function TextInput(props: TextInputProps) {
                 ref={registerNeedle(key)}
                 data-testid="text-input-needle"
                 data-role={needle.role}
-                data-boundary={needle.boundary}
+                data-boundary={serializeBoundary(needle.boundary)}
                 data-snippet-id={needle.snippetId}
                 aria-label={t(needle.labelKey)}
                 style={{

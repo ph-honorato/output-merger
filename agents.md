@@ -24,8 +24,10 @@
 Whenever there is a necessity to implement a component for the UI:
 
 1. Create a sub-agent for that component to save context
-2. Place the component in the `artifacts/output-merger.UI/src/components` folder
-3. The components folder should have an alias configured to be called globally via `@components`
+2. Place the component according to its reusability:
+   - Components that can be used on more than one context/page must be placed in the `artifacts/output-merger.UI/src/components` folder
+   - Components that will be used on a single context/page must be placed inside a `components` folder of that page/context (e.g. `src/pages/MergeSession/components/`)
+3. The global components folder should have an alias configured to be called globally via `@components`
 4. When creating new components, agents should follow this structure (example in `components/Example/`):
 
 ```
@@ -95,4 +97,4 @@ Whenever starting the implementation of a task, the resolution must follow this 
 | **Styling**           | Implement styling using MUI and Styled Components consistently across all components                                                                                                   | All UI components                      |
 | **State Management**  | Implement state management using React Context + useReducer for global state                                                                                                           | All features requiring shared state    |
 | **Integration Tests** | Write integration tests for key user workflows using Vitest. Test files should be placed alongside the implementation files or in a `__tests__` directory following Vitest conventions | All features (complete user workflows) |
-| **Unit Tests**        | Implement unit tests only for UI components (in `src/components`) and future API functions (in `artifacts/output-merger.API`)                                                          | Components and API functions only      |
+| **Unit Tests**        | Implement unit tests only for UI components (in `src/components` or in a page/context `components` folder) and future API functions (in `artifacts/output-merger.API`)                                                          | Components and API functions only      |

@@ -1,6 +1,7 @@
 import PreviewIcon from '@mui/icons-material/Preview';
 import { Fragment } from 'react';
-import { usePreviewArea, withAlpha } from './PreviewArea.hook';
+import { usePreviewArea } from './PreviewArea.hook';
+import { withAlpha } from '../../../../utils/color';
 import type { PreviewAreaProps } from './PreviewArea.types';
 import * as S from './PreviewArea.styles';
 

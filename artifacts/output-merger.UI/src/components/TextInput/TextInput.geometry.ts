@@ -1,3 +1,5 @@
+import { type Boundary, type CharRange } from './TextInput.types';
+
 /**
  * Minimal rect shape produced by caret and character-range geometry
  * @interface CharRect
@@ -52,17 +54,16 @@ export const caretIndexFromPoint = (
 
 const findSegmentText = (
   root: HTMLElement,
-  start: number,
-  end: number
+  range: CharRange
 ): { node: Text; offset: number } | null => {
   const spans = root.querySelectorAll<HTMLElement>('[data-segment-start]');
   for (const span of Array.from(spans)) {
     const segmentStart = Number(span.getAttribute('data-segment-start'));
     const segmentLength = span.textContent?.length ?? 0;
-    if (start >= segmentStart && end <= segmentStart + segmentLength) {
+    if (range.start >= segmentStart && range.end <= segmentStart + segmentLength) {
       const node = span.firstChild;
       if (node && node.nodeType === Node.TEXT_NODE) {
-        return { node: node as Text, offset: start - segmentStart };
+        return { node: node as Text, offset: range.start - segmentStart };
       }
     }
   }
@@ -70,20 +71,48 @@ const findSegmentText = (
 };
 
 /**
- * Returns the viewport rect of the char range [start, end) within the root's segment text
+ * Returns the viewport rect of the given char range within the root's segment text
  */
-export const rectForRange = (
-  root: HTMLElement,
-  start: number,
-  end: number
-): CharRect | undefined => {
-  if (end <= start) return undefined;
-  const segment = findSegmentText(root, start, end);
+export const rectForRange = (root: HTMLElement, range: CharRange): CharRect | undefined => {
+  if (range.end <= range.start) return undefined;
+  const segment = findSegmentText(root, range);
   if (!segment) return undefined;
-  const range = document.createRange();
-  range.setStart(segment.node, segment.offset);
-  range.setEnd(segment.node, segment.offset + (end - start));
-  const rect = range.getBoundingClientRect();
+  const domRange = document.createRange();
+  domRange.setStart(segment.node, segment.offset);
+  domRange.setEnd(segment.node, segment.offset + (range.end - range.start));
+  const rect = domRange.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return undefined;
   return rect;
 };
+
+/**
+ * Resolves which half of a rect a pointer lies in: 'left' for the left half,
+ * 'right' for the right half, or undefined when the pointer is outside the
+ * rect (inclusive on all edges)
+ */
+export const resolveHitSide = (
+  clientX: number,
+  clientY: number,
+  rect: Pick<CharRect, 'left' | 'top' | 'right' | 'bottom'>
+): 'left' | 'right' | undefined => {
+  const insideBox =
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom;
+  if (!insideBox) return undefined;
+  return clientX < rect.left + (rect.right - rect.left) / 2 ? 'left' : 'right';
+};
+
+/**
+ * Parses a needle's data-boundary attribute back into a boundary char index.
+ * Number() semantics are preserved exactly at every call site: a missing
+ * attribute yields NaN via dataset.boundary (undefined) and 0 via
+ * getAttribute (null), and any other non-numeric string yields NaN.
+ */
+export const parseBoundary = (attr: string | null | undefined): Boundary => Number(attr);
+
+/**
+ * Serializes a boundary char index for the data-boundary attribute
+ */
+export const serializeBoundary = (boundary: Boundary): string => String(boundary);

@@ -12,7 +12,7 @@
 
 | File | Role |
 | ---- | ---- |
-| `src/pages/MergeSession/components/TutorialBanner/` | New page-owned component (standard 6-file split): dismissable banner — title, intro, left-aligned `<ol>` of the 4 flow steps, icon-only close button (top-right); storage helpers exported from `.hook.tsx` |
+| `src/pages/MergeSession/components/TutorialBanner/` | New page-owned component (standard 6-file split): dismissable banner — title, left-aligned `<ol>` of the 4 flow steps, icon-only close button (top-right); storage helpers exported from `.hook.tsx` |
 | `src/pages/MergeSession/MergeSessionPage.tsx` | Modified: `tutorialVisible` state (lazy-init from storage), Help icon button in a title row, banner between subtitle and workspace |
 | `src/pages/MergeSession/MergeSessionPage.styles.ts` | Modified: `PreviewColumn` is a flex row (`align-items: flex-start`); new `TitleRow` + `HelpButton` |
 | `src/pages/MergeSession/MergeSessionPage.test.tsx` | Modified: +2 page-level tests (tutorial lifecycle, throwing-storage tolerance); localStorage hygiene (`beforeEach` clear, `afterEach` mock restore) |
@@ -21,7 +21,7 @@
 | `src/pages/MergeSession/components/PreviewArea/PreviewArea.styles.ts` | Modified: `min-height: 400px`; `width/height: 100%` → `flex: 1; min-width: 0` (flex-row sibling); `SegmentFlow` `padding-right` workaround removed |
 | `src/components/TextInput/TextInput.styles.ts` | Modified: `TextInputRoot` `min-height: 400px` + `box-sizing: border-box`; `StyledTextField` fills the card (flex-grow chain, textarea `height: 100%`, `resize: none`) |
 | `src/components/ActionsBar/ActionsBar.styles.ts` | Modified: `ActionsBarRoot` `min-height: 74px` + `box-sizing: border-box` |
-| `src/i18n/resources/en-US.json`, `pt-BR.json` | 8 new keys under `pages.mergeSession.tutorial.*` (draft copy from the spec, both languages) |
+| `src/i18n/resources/en-US.json`, `pt-BR.json` | 7 new keys under `pages.mergeSession.tutorial.*` (draft copy from the spec, both languages) |
 
 No routes changed; no context/reducer changes; no backend files touched.
 
@@ -39,7 +39,7 @@ const handleTutorialDismiss = useCallback(() => {
 }, []);
 ```
 
-- **Banner (6.1)**: renders below the subtitle, above the ActionsBar. Card surface per DESIGN.md (paper, 1px border, 0.75rem radius, subtle shadow), `text-align: left` inside the page's centered layout. Steps render as a plain `<ol>` (`step1`–`step4`), left-aligned under the intro.
+- **Banner (6.1)**: renders below the subtitle, above the ActionsBar. Card surface per DESIGN.md (paper, 1px border, 0.75rem radius, subtle shadow), `text-align: left` inside the page's centered layout. Steps render as a plain `<ol>` (`step1`–`step4`), left-aligned under the title.
 - **Persistence**: key `output-merger.tutorial.dismissed`, value `"true"`, presence-checked (not parsed). Read lazily in `useState` initializer (no first-paint flash); both helpers swallow throwing storage (`try/catch`) — absent/broken storage ⇒ banner shows every visit, dismissal becomes session-only, nothing crashes.
 - **Help reopen**: icon-only `HelpOutlined` button beside the page title (in `S.TitleRow`, so it sits next to the title text), aria-label `pages.mergeSession.tutorial.help`, rendered only while the banner is hidden (`tutorialVisible ? null : …`). Clicking it shows the banner again; re-dismissal re-writes the same flag (idempotent).
 - **Min-heights (6.2)**: `min-height: 400px` on `TextInputRoot` (applies in input AND view mode — the root is mode-agnostic) and `PreviewAreaRoot`, all breakpoints, `min-height` semantics only (cards grow with content). The input-mode textarea fills the card's content area: `TextInputRoot` (column flex) → `StyledTextField` `flex: 1; min-height: 0` → `MuiInputBase-root` `flex: 1; align-items: stretch` → textarea `height: 100% !important` (overrides MUI's rows-derived inline height) + `resize: none` (a manual resize could exceed the card). The counter stays pinned at the bottom.
@@ -60,7 +60,7 @@ const handleTutorialDismiss = useCallback(() => {
 
 ## 4. Testing strategy
 
-- **TutorialBanner (4 new unit tests)**: title/intro/4 `<ol>` steps rendered; dismiss button aria-label + `onDismiss` fired; all 8 keys present in BOTH resource files (imports both JSONs); live language switch en-US → pt-BR → en-US updates texts.
+- **TutorialBanner (4 new unit tests)**: title/4 `<ol>` steps rendered; dismiss button aria-label + `onDismiss` fired; all 7 keys present in BOTH resource files (imports both JSONs); live language switch en-US → pt-BR → en-US updates texts.
 - **MergeSessionPage (+2 page-level tests)**: the full lifecycle in one integration test (banner renders with no flag → dismiss → flag `"true"` in localStorage + help button appears → unmount/remount skips banner → help reopens (and hides itself) → re-dismiss persists flag again); plus a throwing-`localStorage` tolerance test (`vi.spyOn(window, 'localStorage', 'get')` throwing ⇒ banner renders, dismiss/remount never crash). File gained `beforeEach` storage clearing so the flag never leaks between tests.
 - **PreviewToolbar**: only the positioning assertion changed (absolute → static sibling). No new tests for 6.2–6.4 per the user's testing decision — jsdom does not compute layout, so min-heights are code-verified and need the manual dev-server check.
 - Verification: `npx vitest run` (80/80 green), `npm run lint` (oxlint, clean), `npx tsc -b` (clean), `npm run build` (clean).
@@ -72,7 +72,7 @@ const handleTutorialDismiss = useCallback(() => {
 | ID | Outcome | Note |
 | -- | ------ | ---- |
 | UIFX-01 | Verified | Page test: banner under subtitle, above ActionsBar |
-| UIFX-02 | Verified | Page + unit tests: `tutorial.title`, `tutorial.intro` rendered |
+| UIFX-02 | Verified | Page + unit tests: `tutorial.title` rendered |
 | UIFX-03 | Verified | Unit test: 4 steps in `<ol>`, left-aligned (`text-align: left` on banner root) |
 | UIFX-04 | Verified | Unit test: icon-only close, aria-label `tutorial.dismiss`, click hides via `onDismiss`; page test: banner disappears |
 | UIFX-05 | Verified | Page test: flag written on dismiss (key/value asserted) |
@@ -104,7 +104,9 @@ const handleTutorialDismiss = useCallback(() => {
 
 ## 6. Deviations from spec.md
 
-None. The spec's own interpretations were followed, including the flagged textarea-sizing interpretation (§3 above). The only substitution: `HelpOutlined` instead of the (nonexistent in this MUI version) `HelpOutline` icon name mentioned in context.md — same glyph, cosmetic name difference.
+None at implementation time. The spec's own interpretations were followed, including the flagged textarea-sizing interpretation (§3 above). The only substitution: `HelpOutlined` instead of the (nonexistent in this MUI version) `HelpOutline` icon name mentioned in context.md — same glyph, cosmetic name difference.
+
+**Post-implementation amendment (2026-10-13, user decision):** the banner's intro text was removed from the screen on purpose — `tutorial.intro` is neither rendered nor part of the i18n key set (7 keys, not 8). spec.md and context.md were amended to drop the intro requirement (UIFX-02 now requires the title only).
 
 ---
 

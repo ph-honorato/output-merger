@@ -4,22 +4,26 @@ import { ThemeProvider as StyledThemeProvider } from 'styled-components';
 import { I18nextProvider } from 'react-i18next';
 import { theme } from '../../theme';
 import i18n from '../../i18n';
+import { withAlpha } from '../../utils/color';
 import TextInput from './TextInput';
 import {
   tokenize,
-  withAlpha,
   computeNeedlePosition,
   computeSegments,
   findTokenAt,
   resolvePointerAt,
 } from './TextInput.hook';
 import { caretIndexFromPoint, rectForRange } from './TextInput.geometry';
-import { type Snippet, type TextInputProps } from './TextInput.types';
+import { type CharRange, type Snippet, type TextInputProps } from './TextInput.types';
 
-vi.mock('./TextInput.geometry', () => ({
-  caretIndexFromPoint: vi.fn(),
-  rectForRange: vi.fn(),
-}));
+vi.mock('./TextInput.geometry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./TextInput.geometry')>();
+  return {
+    ...actual,
+    caretIndexFromPoint: vi.fn(),
+    rectForRange: vi.fn(),
+  };
+});
 
 const TEXT = 'alpha beta gamma delta';
 
@@ -77,8 +81,8 @@ beforeEach(() => {
     });
   vi.mocked(rectForRange)
     .mockReset()
-    .mockImplementation((_root: HTMLElement, start: number, end: number) =>
-      defaultRect(start, end)
+    .mockImplementation((_root: HTMLElement, range: CharRange) =>
+      defaultRect(range.start, range.end)
     );
 });
 
@@ -320,14 +324,14 @@ describe('TextInput Component', () => {
       const localX = x - Math.floor(x / 10) * 10;
       return localX < 5 ? charIndex : Math.min(charIndex + 1, 10);
     });
-    vi.mocked(rectForRange).mockImplementation((_root: HTMLElement, start: number, end: number) => {
-      if (start >= 11) {
-        return { left: (start - 11) * 10, top: 19, right: (end - 11) * 10, bottom: 38 };
+    vi.mocked(rectForRange).mockImplementation((_root: HTMLElement, range: CharRange) => {
+      if (range.start >= 11) {
+        return { left: (range.start - 11) * 10, top: 19, right: (range.end - 11) * 10, bottom: 38 };
       }
-      if (start === 10) {
+      if (range.start === 10) {
         return { left: 100, top: 0, right: 100, bottom: 19 };
       }
-      return { left: start * 10, top: 0, right: end * 10, bottom: 19 };
+      return { left: range.start * 10, top: 0, right: range.end * 10, bottom: 19 };
     });
 
     // drag from beta start (line 1) to gamma end (line 2)
@@ -413,6 +417,33 @@ describe('TextInput Component', () => {
     });
   });
 
+  it('should clamp an end-edge resize at the start of the following snippet', () => {
+    const onChange = vi.fn();
+    setup({ mode: 'view', onChange });
+
+    dragFromTo(41, 95);
+    dragFromTo(151, 211);
+    expect(onChange).toHaveBeenCalledTimes(2);
+
+    hoverAt(65);
+    const endNeedle = getNeedleByRole('snippet-end');
+    fireEvent.pointerDown(endNeedle, {});
+    hoverAt(211);
+
+    const highlights = getHighlightSegments();
+    expect(highlights).toHaveLength(2);
+    expect(highlights[0].textContent).toBe('beta gamma ');
+    expect(highlights[1].textContent).toBe('delta');
+
+    fireEvent.pointerUp(window);
+
+    expect(onChange).toHaveBeenCalledTimes(3);
+    const snippets = onChange.mock.calls[2][0] as Snippet[];
+    expect(snippets[0]).toMatchObject({ text: 'beta gamma ', startIndex: 6, endIndex: 17 });
+    expect(snippets[1]).toMatchObject({ text: 'delta', startIndex: 17, endIndex: 22 });
+    expect(snippets[0].endIndex).toBeLessThanOrEqual(snippets[1].startIndex);
+  });
+
   it('should remove a snippet when a resize collapses it to zero width', () => {
     const onChange = vi.fn();
     setup({ mode: 'view', onChange });
@@ -453,18 +484,18 @@ describe('TextInput Component', () => {
     setup({ mode: 'view' });
 
     dragFromTo(41, 151);
-    vi.mocked(rectForRange).mockImplementation((_root, start, end) => {
-      if (start >= 11 && end <= 16) {
+    vi.mocked(rectForRange).mockImplementation((_root: HTMLElement, range: CharRange) => {
+      if (range.start >= 11 && range.end <= 16) {
         return {
-          left: 100 + (start - 11) * 10,
+          left: 100 + (range.start - 11) * 10,
           top: 0,
-          right: 100 + (end - 11) * 10,
+          right: 100 + (range.end - 11) * 10,
           bottom: 19,
-          width: (end - start) * 10,
+          width: (range.end - range.start) * 10,
           height: 19,
         };
       }
-      return defaultRect(start, end);
+      return defaultRect(range.start, range.end);
     });
 
     hoverAt(65);
@@ -687,42 +718,44 @@ describe('TextInput helpers', () => {
 
   it('should resolve pointers only inside the token line box', () => {
     const tokens = tokenize(TEXT);
-    const rectFor = (start: number, end: number) => defaultRect(start, end);
+    const rectFor = ({ start, end }: CharRange) => defaultRect(start, end);
 
-    expect(resolvePointerAt(null, 65, 5, tokens, rectFor)).toBeUndefined();
-    expect(resolvePointerAt(6, 65, 40, tokens, rectFor)).toBeUndefined();
-    expect(resolvePointerAt(6, 240, 5, tokens, rectFor)).toBeUndefined();
+    expect(resolvePointerAt(null, { clientX: 65, clientY: 5, tokens, rectFor })).toBeUndefined();
+    expect(resolvePointerAt(6, { clientX: 65, clientY: 40, tokens, rectFor })).toBeUndefined();
+    expect(resolvePointerAt(6, { clientX: 240, clientY: 5, tokens, rectFor })).toBeUndefined();
   });
 
   it('should resolve word start on the left half and word end on the right half', () => {
     const tokens = tokenize(TEXT);
-    const rectFor = (start: number, end: number) => defaultRect(start, end);
+    const rectFor = ({ start, end }: CharRange) => defaultRect(start, end);
 
-    const left = resolvePointerAt(6, 65, 5, tokens, rectFor);
+    const left = resolvePointerAt(6, { clientX: 65, clientY: 5, tokens, rectFor });
     expect(left?.token.value).toBe('beta');
     expect(left?.boundary).toBe(6);
 
-    const right = resolvePointerAt(9, 95, 5, tokens, rectFor);
+    const right = resolvePointerAt(9, { clientX: 95, clientY: 5, tokens, rectFor });
     expect(right?.token.value).toBe('beta');
     expect(right?.boundary).toBe(10);
   });
 
   it('should resolve whitespace tokens without a boundary', () => {
     const tokens = tokenize(TEXT);
-    const rectFor = (start: number, end: number) => defaultRect(start, end);
+    const rectFor = ({ start, end }: CharRange) => defaultRect(start, end);
 
-    const whitespace = resolvePointerAt(10, 101, 5, tokens, rectFor);
+    const whitespace = resolvePointerAt(10, { clientX: 101, clientY: 5, tokens, rectFor });
     expect(whitespace?.token.value).toBe(' ');
     expect(whitespace?.token.start).toBe(10);
     expect(whitespace?.boundary).toBeNull();
 
-    expect(resolvePointerAt(10, 101, 40, tokens, rectFor)).toBeUndefined();
+    expect(
+      resolvePointerAt(10, { clientX: 101, clientY: 40, tokens, rectFor })
+    ).toBeUndefined();
   });
 
   it('should resolve zero-width line-break whitespace anywhere on its line', () => {
     const text = 'alpha beta\ngamma';
     const tokens = tokenize(text);
-    const rectFor = (start: number, end: number) => {
+    const rectFor = ({ start, end }: CharRange) => {
       if (start >= 11) {
         return { left: 0, top: 19, right: (end - 11) * 10, bottom: 38 };
       }
@@ -732,36 +765,48 @@ describe('TextInput helpers', () => {
       return { left: start * 10, top: 0, right: end * 10, bottom: 19 };
     };
 
-    const lineBreak = resolvePointerAt(10, 117, 5, tokens, rectFor);
+    const lineBreak = resolvePointerAt(10, { clientX: 117, clientY: 5, tokens, rectFor });
     expect(lineBreak?.token.value).toBe('\n');
     expect(lineBreak?.boundary).toBeNull();
 
-    const trailing = resolvePointerAt(10, 175, 5, tokens, rectFor);
+    const trailing = resolvePointerAt(10, { clientX: 175, clientY: 5, tokens, rectFor });
     expect(trailing?.token.value).toBe('\n');
     expect(trailing?.boundary).toBeNull();
 
-    expect(resolvePointerAt(10, 117, 40, tokens, rectFor)).toBeUndefined();
+    expect(
+      resolvePointerAt(10, { clientX: 117, clientY: 40, tokens, rectFor })
+    ).toBeUndefined();
   });
 
   it('should attribute right-half-of-last-char carets to the preceding word', () => {
     const tokens = tokenize(TEXT);
-    const rectFor = (start: number, end: number) => defaultRect(start, end);
+    const rectFor = ({ start, end }: CharRange) => defaultRect(start, end);
 
-    const attributed = resolvePointerAt(10, 95, 5, tokens, rectFor);
+    const attributed = resolvePointerAt(10, { clientX: 95, clientY: 5, tokens, rectFor });
     expect(attributed?.token.value).toBe('beta');
     expect(attributed?.boundary).toBe(10);
 
-    const atTextEnd = resolvePointerAt(TEXT.length, 215, 5, tokens, rectFor);
+    const atTextEnd = resolvePointerAt(TEXT.length, {
+      clientX: 215,
+      clientY: 5,
+      tokens,
+      rectFor,
+    });
     expect(atTextEnd?.token.value).toBe('delta');
     expect(atTextEnd?.boundary).toBe(22);
 
-    const beyondText = resolvePointerAt(TEXT.length, 240, 5, tokens, rectFor);
+    const beyondText = resolvePointerAt(TEXT.length, {
+      clientX: 240,
+      clientY: 5,
+      tokens,
+      rectFor,
+    });
     expect(beyondText).toBeUndefined();
   });
 
   it('should position needles at word left edge for word-start boundaries and right edge for word-end boundaries', () => {
     const tokens = tokenize('alpha beta');
-    const rectFor = (start: number, end: number) => ({
+    const rectFor = ({ start, end }: CharRange) => ({
       left: start * 10,
       top: start < 5 ? 0 : 20,
       right: end * 10,
@@ -769,19 +814,23 @@ describe('TextInput helpers', () => {
     });
     const origin = { left: 0, top: 0 };
 
-    expect(computeNeedlePosition(0, tokens, rectFor, origin)).toEqual({ left: 0, top: 0 });
-    expect(computeNeedlePosition(5, tokens, rectFor, origin)).toEqual({ left: 50, top: 0 });
-    expect(computeNeedlePosition(6, tokens, rectFor, origin)).toEqual({ left: 60, top: 20 });
-    expect(computeNeedlePosition(11, tokens, rectFor, origin)).toEqual({ left: 110, top: 20 });
+    expect(computeNeedlePosition(0, { tokens, rectFor }, origin)).toEqual({ left: 0, top: 0 });
+    expect(computeNeedlePosition(5, { tokens, rectFor }, origin)).toEqual({ left: 50, top: 0 });
+    expect(computeNeedlePosition(6, { tokens, rectFor }, origin)).toEqual({ left: 60, top: 20 });
+    expect(computeNeedlePosition(11, { tokens, rectFor }, origin)).toEqual({ left: 110, top: 20 });
   });
 
   it('should position needles relative to the given origin and handle missing rects', () => {
     const tokens = tokenize(TEXT);
     const rectFor = () => undefined;
-    expect(computeNeedlePosition(0, tokens, rectFor, { left: 0, top: 0 })).toBeUndefined();
+    expect(
+      computeNeedlePosition(0, { tokens, rectFor }, { left: 0, top: 0 })
+    ).toBeUndefined();
 
-    const rectFor2 = (start: number, end: number) => defaultRect(start, end);
-    expect(computeNeedlePosition(5, tokens, rectFor2, { left: 41, top: 4 })).toEqual({
+    const rectFor2 = ({ start, end }: CharRange) => defaultRect(start, end);
+    expect(
+      computeNeedlePosition(5, { tokens, rectFor: rectFor2 }, { left: 41, top: 4 })
+    ).toEqual({
       left: 9,
       top: -4,
     });
