@@ -8,7 +8,7 @@
 
 ## Feature Boundary
 
-Read-only preview for Feature 2 Task 4 (roadmap 4.1–4.4) only: a page-owned `PreviewArea` rendering the merge-ordered context snippets as colored segments, an icon+text empty state, a floating vertical `PreviewToolbar` on the preview's right side, and a `CopyMergedTextButton` writing the space-joined Merged Text to the clipboard with toast feedback. Not user text editing (deferred), not drag-sort/split/line-break tools (Feature 5), not Start Merge (Task 5).
+Read-only preview for Feature 2 Task 4 (roadmap 4.1–4.4) only: a page-owned `PreviewArea` rendering the merge-ordered context snippets as colored segments, an icon+text empty state, a floating vertical `PreviewToolbar` on the preview's right side, and a `CopyMergedTextButton` writing the space-joined Merged Text to the clipboard with toast feedback. Not user text editing (deferred), not drag-sort/split/line-break tools (Feature 3), not Start Merge (Task 5).
 
 ---
 
@@ -47,7 +47,7 @@ Read-only preview for Feature 2 Task 4 (roadmap 4.1–4.4) only: a page-owned `P
 ### Editing direction — deliberately NOT decided
 
 - User north star for later features: "the user should be able to edit the text however they want" while snippets remain reorderable.
-- The agent-proposed atomic-islands model (caret cannot enter snippets) was **not** adopted or rejected — all editing-model decisions, and the necessity of the Feature 5 tools (split, line breaks, add-own-text), are deferred to Feature 5 discussions. No ADR, no extra glossary terms.
+- The agent-proposed atomic-islands model (caret cannot enter snippets) was **not** adopted or rejected — all editing-model decisions, and the necessity of the Feature 3 tools (split, line breaks, add-own-text), are deferred to Feature 3 discussions. No ADR, no extra glossary terms.
 - Task 4 constraint recorded instead: keep the component malleable for a future editor (dumb display, data-driven).
 
 ### i18n
@@ -75,8 +75,8 @@ Read-only preview for Feature 2 Task 4 (roadmap 4.1–4.4) only: a page-owned `P
 
 ## Deferred Ideas
 
-- Editing model (free typing vs atomic snippet islands), caret behavior, paste/selection semantics — Feature 5.
-- Drag-sort snippet reordering — Feature 5.
-- Split-snippet / line-break / add-own-text tools — Feature 5; necessity to be re-discussed (typing may replace them).
+- Editing model (free typing vs atomic snippet islands), caret behavior, paste/selection semantics — Feature 3.
+- Drag-sort snippet reordering — Feature 3.
+- Split-snippet / line-break / add-own-text tools — Feature 3; necessity to be re-discussed (typing may replace them).
 - Toolbar's future buttons — added per feature as needed.
 - Persistence of preview content — V1.

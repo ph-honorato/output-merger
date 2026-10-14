@@ -8,7 +8,7 @@
 
 ## Feature Boundary
 
-Global snippet state for Feature 2 Task 3 (roadmap 3.1–3.3) only: a React Context + useReducer store holding one flat ordered list of snippet entries `{ ...Snippet, sourceId, order }`, reconciled from each source's full-array `onChange` emissions, exposed via `useSnippets`, and wired into `MergeSessionPage`'s two TextInputs with stable source ids. Not PreviewArea consumption (Task 4), not reorder actions (Task 4 / Feature 5), not Start Merge (Task 5), not source lifecycle (Feature 3), not persistence (V1).
+Global snippet state for Feature 2 Task 3 (roadmap 3.1–3.3) only: a React Context + useReducer store holding one flat ordered list of snippet entries `{ ...Snippet, sourceId, order }`, reconciled from each source's full-array `onChange` emissions, exposed via `useSnippets`, and wired into `MergeSessionPage`'s two TextInputs with stable source ids. Not PreviewArea consumption (Task 4), not reorder actions (Task 4 / Feature 3), not Start Merge (Task 5), not source lifecycle (Feature 5), not persistence (V1).
 
 ---
 
@@ -78,7 +78,7 @@ Global snippet state for Feature 2 Task 3 (roadmap 3.1–3.3) only: a React Cont
 ## Deferred Ideas
 
 - PreviewArea consumption and reorder/move action (Task 4).
-- Drag-sort editing of merge order (Feature 5 preview tools).
-- Source lifecycle management for Start Over / Add Text (Feature 3).
+- Drag-sort editing of merge order (Feature 3 preview tools).
+- Source lifecycle management for Start Over / Add Text (Feature 5).
 - Third source (Feature 4) — scales by adding a stable sourceId.
 - Persistence of snippets and merge sessions (V1).

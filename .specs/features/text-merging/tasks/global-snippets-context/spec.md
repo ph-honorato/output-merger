@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-Merge Session has two wired `TextInput` sources, but each owns its snippet list privately and reports it through `onChange` as a full per-source array. Nothing aggregates them. The PreviewArea (Task 4) must render all snippets side by side in the merge sequence, and that sequence must default to user selection order. This specification defines Task 3 of Feature 2 (roadmap 3.1–3.3): a global snippets context (React Context + useReducer) holding one flat, ordered list of snippet entries, updated from every source, consumed through `useSnippets` — not preview rendering (Task 4), not reorder actions (Task 4 / Feature 5), not Start Merge (Task 5).
+Merge Session has two wired `TextInput` sources, but each owns its snippet list privately and reports it through `onChange` as a full per-source array. Nothing aggregates them. The PreviewArea (Task 4) must render all snippets side by side in the merge sequence, and that sequence must default to user selection order. This specification defines Task 3 of Feature 2 (roadmap 3.1–3.3): a global snippets context (React Context + useReducer) holding one flat, ordered list of snippet entries, updated from every source, consumed through `useSnippets` — not preview rendering (Task 4), not reorder actions (Task 4 / Feature 3), not Start Merge (Task 5).
 
 ## Goals
 
@@ -18,9 +18,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | Feature | Reason |
 | ------- | ------ |
 | PreviewArea consumption of the context | Feature 2 Task 4 |
-| Reorder / move action on the context | Feature 2 Task 4 / Feature 5 (drag sort); `order` values are the contract |
+| Reorder / move action on the context | Feature 2 Task 4 / Feature 3 (drag sort); `order` values are the contract |
 | Start Merge mode switching | Feature 2 Task 5 |
-| Adding/removing sources at runtime (Start Over, Add Text) | Feature 3; the context tolerates but does not manage source lifecycle |
+| Adding/removing sources at runtime (Start Over, Add Text) | Feature 5; the context tolerates but does not manage source lifecycle |
 | Third text input | Feature 4 (scales by adding a third stable sourceId) |
 | Text ownership (`onTextChange` wiring) | Sources stay unwired for text; only snippets flow through the context |
 | Persistence of snippets | V1 (Merges CRUD) |

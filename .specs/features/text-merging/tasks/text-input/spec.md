@@ -21,7 +21,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | PreviewArea | Feature 2 Task 4 |
 | Global snippets context | Feature 2 Task 3 |
 | Start Merge switching page-level mode | Feature 2 Task 5; this spec only defines the `mode` prop the parent will set |
-| Third text input | Feature 3 |
+| Third text input | Feature 5 |
 | Preview reorder, line breaks, split, user-typed preview text | Feature 4 |
 | Native `window.getSelection()` snippet creation | Grilled: needles only |
 | Overlapping / stacked / merged snippets | Grilled: overlap forbidden |

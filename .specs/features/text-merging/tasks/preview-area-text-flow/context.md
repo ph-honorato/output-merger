@@ -10,7 +10,7 @@
 
 Two related fixes to the MergeSession preview's segment flow (post-Feature 2 polish — no dedicated roadmap line item; refines Task 4's PreviewArea presentation on top of preview-area-adjusts): (1) **long-word overflow bug** — a word wider than the preview card makes the snippet overflow to the right; the correct behavior is to break the word; (2) **chips → continuous text** — snippets currently render as separated boxes (spans with `padding: 2px 6px; border-radius: 4px` inside a `display: flex; flex-wrap: wrap; gap` flow) and should instead render as **continuous plain text, with each individual snippet highlighted in the same color as its origin input**. The user reports the two solutions are close and should help each other — they are: both fixes replace the same flex/chip mechanics with one plain block text flow of inline highlight spans (the flex layout is simultaneously the overflow's root cause and the chip-separation mechanic).
 
-**Process deviation (explicit):** the standard pipeline's grilling pass did **not** run for this task — the user's instruction was "You can assume the specs and go for the implementation, I'll see then if it is correct." Every design decision below is therefore an **agent default pending the user's post-implementation review** (flagged `n (agent default — user review pending)` in the spec's assumptions table); the two problem statements themselves are user reports. Not a `buildMergedText`/copy-semantics change, not Feature 5 tools (drag-sort, split, line breaks, add-own-text), not empty-state or toolbar changes (preview-area-adjusts outputs are preserved), not i18n/backend/routing changes.
+**Process deviation (explicit):** the standard pipeline's grilling pass did **not** run for this task — the user's instruction was "You can assume the specs and go for the implementation, I'll see then if it is correct." Every design decision below is therefore an **agent default pending the user's post-implementation review** (flagged `n (agent default — user review pending)` in the spec's assumptions table); the two problem statements themselves are user reports. Not a `buildMergedText`/copy-semantics change, not Feature 3 tools (drag-sort, split, line breaks, add-own-text), not empty-state or toolbar changes (preview-area-adjusts outputs are preserved), not i18n/backend/routing changes.
 
 ---
 
@@ -80,7 +80,7 @@ Two related fixes to the MergeSession preview's segment flow (post-Feature 2 pol
 - Trimming snippet edge spaces in the join (avoiding the by-design double spaces) — would change clipboard semantics (Task 4's grilled single-space separator and this task's WYSIWYG anchor); a separate deliberate change if the user wants it after review.
 - `overflow-wrap: anywhere` — more aggressive breaking that also affects min-content sizing; revisit only if `break-word` proves insufficient with real content.
 - Hyphenation (`hyphens: auto`) — typographic nicety, browser/locale-dependent; out of scope.
-- Rendering the merged text as a single flat text node — would drop per-snippet tinting and Feature 5's natural per-snippet anchors; rejected.
+- Rendering the merged text as a single flat text node — would drop per-snippet tinting and Feature 3's natural per-snippet anchors; rejected.
 - Copy-from-preview affordances (`user-select` policies, select-all) — not requested; copying goes through the toolbar's copy tool.
-- Snippet reordering/splitting/line breaks/add-own-text — Feature 5.
-- "Start Over" / "Add Text" — Feature 3; third input — Feature 4.
+- Snippet reordering/splitting/line breaks/add-own-text — Feature 3.
+- "Start Over" / "Add Text" — Feature 5; third input — Feature 4.

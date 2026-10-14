@@ -33,7 +33,7 @@ const canStartMerge = Object.values(sourceTexts).some(
 
 - **Gating**: each TextInput's `onTextChange` feeds `sourceTexts[sourceId]`; Start Merge is enabled iff at least one entry has `trim().length > 0`. Whitespace-only never enables.
 - **Transition**: clicking the enabled button sets `mergeStarted = true` — both sources receive `mode={mergeStarted ? 'view' : 'input'}`; textareas unmount (view mode), text survives (uncontrolled TextInput state; only typing clears snippets, per its contract).
-- **Button hiding**: `{mergeStarted ? null : <S.StartMergeButton … />}` — the ActionsBar remains rendered as the reserved slot for Feature 3's Start Over.
+- **Button hiding**: `{mergeStarted ? null : <S.StartMergeButton … />}` — the ActionsBar remains rendered as the reserved slot for Feature 5's Start Over.
 - **One-way**: no path back to input mode in v0; page unmount discards state.
 
 ---
@@ -54,7 +54,7 @@ None — all 9 requirements implemented/verified as specified (STMRG-01–09).
 
 ## 5. Known gaps / deferred
 
-- Start Over (reset) and back-to-input toggling — Feature 3; the ActionsBar slot is waiting.
+- Start Over (reset) and back-to-input toggling — Feature 5; the ActionsBar slot is waiting.
 - Entry animations on the mode flip (DESIGN.md motion) — later polish.
 - Manual end-to-end check of the needle → preview flow in the dev server — recommended before closing Feature 2 (mechanics covered by automated suites).
 - Persistence — V1.

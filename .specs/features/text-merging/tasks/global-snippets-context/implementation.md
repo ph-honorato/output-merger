@@ -96,6 +96,6 @@ All functional requirements implemented as specified — 18/18 Verified (SNPCTX-
 
 - Reorder / move action on the context — Task 4 (drag sort rewrites `order` values).
 - PreviewArea consumption — Task 4 (first consumer).
-- Source lifecycle (add/remove at runtime, Start Over) — Feature 3.
+- Source lifecycle (add/remove at runtime, Start Over) — Feature 5.
 - Page-level integration tests — deliberately skipped (user decision).
 - Persistence — V1 (Merges CRUD).

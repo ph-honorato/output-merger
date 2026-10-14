@@ -22,9 +22,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | Interactive tooltip tour / component-highlighting walkthrough | User decision: heavy for v0; static numbered list chosen instead |
 | Mode-aware tutorial content (input vs Merge Mode variants) | User decision: one static full-flow list; steps remain true in both states |
 | Backend persistence of tutorial dismissal | V1 (Merges CRUD); v0 uses localStorage |
-| "Start Over" / "Add Text" buttons | Feature 3; the fixed-height bar is built to host them |
+| "Start Over" / "Add Text" buttons | Feature 5; the fixed-height bar is built to host them |
 | Third text input | Feature 4 |
-| Additional toolbar tools (drag-sort, split, line breaks, add-own-text) | Feature 5; toolbar keeps its children-composition contract so tools stack below copy |
+| Additional toolbar tools (drag-sort, split, line breaks, add-own-text) | Feature 3; toolbar keeps its children-composition contract so tools stack below copy |
 | Banner entry animations (DESIGN.md motion rules) | Deferred polish task |
 | Fixed (non-growing) heights anywhere | User decision: `min-height` semantics — cards grow with content |
 
@@ -46,7 +46,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 | Tutorial copy authorship | Agent drafts en-US + pt-BR in this spec (§ Draft Tutorial Copy); user reviews during implementation | User decision | y (grilled) |
 | Min-height value & scope | 400px on TextInput cards (input AND view mode) and on the PreviewArea card, all breakpoints, grows with content | User decision; view-mode inclusion prevents the card shrink/jump on the Start Merge flip | y (grilled) |
 | Textarea sizing | Input-mode `<textarea />` fills the card's content area and never exceeds the card (flex-grow / height 100%) | User wording was "max-height 100%"; a percentage max-height against an auto-height parent is inert CSS, so the intent is interpreted as fill-the-card | n (interpreted — confirm at implementation) |
-| ActionsBar height | `min-height: 74px` (= spacing(2) padding ×2 + ~42px button height) | User decision; preserves current rendered height exactly, stays flexible for Feature 3 | y (grilled) |
+| ActionsBar height | `min-height: 74px` (= spacing(2) padding ×2 + ~42px button height) | User decision; preserves current rendered height exactly, stays flexible for Feature 5 | y (grilled) |
 | Toolbar decoupling | Toolbar moves outside the preview card: static sibling beside its right side, top-aligned; copy topmost; children-composition and testids preserved; SegmentFlow `padding-right` dropped; toolbar `z-index` removed | User decision ("outside the card entirely... no longer overlapping"); exact flex mechanics are agent default | y (grilled) — mechanics n (agent default) |
 | Toolbar on mobile | Stays beside the card on stacked layouts (bar is ~48px wide) | Toolbar must remain reachable; no special-case hiding | n (agent default) |
 | Component ownership | `TutorialBanner` as page sub-component under `src/pages/MergeSession/components/` with standard file split | Task 4 precedent: page-owned pieces live there, not `src/components/` | n (agent default) |

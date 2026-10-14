@@ -51,17 +51,17 @@
     - [x] Task 6.3: ActionsBar should have a fixed height too, so if a button disappears it does not change height
     - [x] Task 6.4: The copy button should be inside at the top of a vertical bar, this bar should be placed at the right of the preview area, decoupled from the container
 
-- [ ] **Feature 3: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
-  - [ ] "Start Over" button (reset page without reload)
-  - [ ] "Add Text" button (add new text input, up to 4 total)
-- [ ] **Feature 4: Third Text Input** - Add support for a third text input
-  - [ ] Add a button to add a third text input on MergeSession Page
-  - [ ] Implement logic to handle three text inputs in the merge session
-- [ ] **Feature 5: Preview Area Tools** - Implement the preview area with:
+- [ ] **Feature 3: Preview Area Tools** - Implement the preview area with:
   - Sort highlighted text snippets by drag
   - Creating line breaks
   - Splitting snippets between words
   - Adding own text
+- [ ] **Feature 4: Third Text Input** - Add support for a third text input
+  - [ ] Add a button to add a third text input on MergeSession Page
+  - [ ] Implement logic to handle three text inputs in the merge session
+- [ ] **Feature 5: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
+  - [ ] "Start Over" button (reset page without reload)
+  - [ ] "Add Text" button (add new text input, up to 4 total)
 - [ ] **Feature 6: Release Preparation** - Finalize and prepare for release
 
 ### v1: "Merges" CRUD

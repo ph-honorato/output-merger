@@ -47,7 +47,7 @@ No JSX/layout-composition changes to `MergeSessionPage.tsx` (DOM order already r
   export const PreviewToolbarRoot = styled.div`
     display: flex;
     flex-direction: row;      // was: column
-    flex-wrap: wrap;          // wraps instead of overflowing (DESIGN.md no-overflow; for Feature 5 tools)
+    flex-wrap: wrap;          // wraps instead of overflowing (DESIGN.md no-overflow; for Feature 3 tools)
     /* flex-shrink: 0, gap, padding, paper, border, radius, shadow unchanged */
 
     ${({ theme }) => (theme as StyledTheme).breakpoints.up('md')} {
@@ -134,6 +134,6 @@ None. All spec'd mechanics, contracts, copy values, and testing prescriptions we
 
 - **Manual responsive verification for the tester** (dev server, resize or device emulator, both sides of 900px): below `md` the toolbar renders under the area as a full-width horizontal row with the copy button leftmost (empty and populated preview alike, copy disabled at zero snippets); at `md`+ it is beside the card's right, top-aligned, vertical — unchanged from ui-fixes. jsdom cannot evaluate the media queries (source-verified), so this is deliberately the spec's prescribed manual pass.
 - **Visual left-alignment check**: `text-align: left` is asserted in jsdom as a declared style; the rendered multi-line reading experience (every line starting at the chip's left edge) is confirmed in the same manual pass.
-- **Mobile row wrap**: only reachable once Feature 5 adds tools (today one button); the `flex-wrap: wrap` rule is inert until then.
+- **Mobile row wrap**: only reachable once Feature 3 adds tools (today one button); the `flex-wrap: wrap` rule is inert until then.
 - **Copy review**: the empty-state wording is the spec's agent-drafted value shipped verbatim; the standard implementation-review pass (and the GLOSSARY "Source" vs "inputs" phrasing question flagged in the spec) belongs to the user/reviewer.
 - **Pre-existing build advisory**: vite's >500 kB chunk-size warning is unrelated to this task (no bundling changes made).

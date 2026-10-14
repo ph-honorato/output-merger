@@ -8,7 +8,7 @@
 
 ## Feature Boundary
 
-UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Feature 2: an in-page dismissable tutorial banner (title + left-aligned numbered step list, localStorage-persisted dismissal, Help reopen button, en-US + pt-BR copy), guaranteed minimum heights for the source cards and preview area (400px), a stable ActionsBar height (min-height 74px) that survives the Start Merge → hidden transition, and a decoupled PreviewToolbar that sits beside the preview card (right side, top-aligned, copy button topmost) instead of floating over its content. Not Start Over / Add Text (Feature 3), not the third input (Feature 4), not preview editing tools (Feature 5), not an interactive tooltip tour, not backend persistence (V1).
+UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Feature 2: an in-page dismissable tutorial banner (title + left-aligned numbered step list, localStorage-persisted dismissal, Help reopen button, en-US + pt-BR copy), guaranteed minimum heights for the source cards and preview area (400px), a stable ActionsBar height (min-height 74px) that survives the Start Merge → hidden transition, and a decoupled PreviewToolbar that sits beside the preview card (right side, top-aligned, copy button topmost) instead of floating over its content. Not Start Over / Add Text (Feature 5), not the third input (Feature 4), not preview editing tools (Feature 3), not an interactive tooltip tour, not backend persistence (V1).
 
 ---
 
@@ -37,11 +37,11 @@ UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Fea
 ### ActionsBar (6.3)
 
 - `min-height: 74px` on `ActionsBarRoot` (= spacing(2) padding ×2 + ~42px standard button height), preserving the current rendered height exactly.
-- Rationale: the bar collapses to ~34px today when Start Merge hides on Merge Mode entry; Feature 3's Start Over will reoccupy the slot. `min-height` (not exact height) keeps flexibility for taller future content.
+- Rationale: the bar collapses to ~34px today when Start Merge hides on Merge Mode entry; Feature 5's Start Over will reoccupy the slot. `min-height` (not exact height) keeps flexibility for taller future content.
 
 ### Decoupled toolbar (6.4)
 
-- **User decision**: the vertical bar moves **outside the preview card entirely** — its own top-aligned element beside the card's right side, no longer overlapping preview content. Copy button stays the topmost child; future tools stack below (Feature 5).
+- **User decision**: the vertical bar moves **outside the preview card entirely** — its own top-aligned element beside the card's right side, no longer overlapping preview content. Copy button stays the topmost child; future tools stack below (Feature 3).
 - `PreviewToolbar` keeps its children-composition contract and testids; only positioning styles change (absolute overlay → static sibling beside the card; `PreviewColumn` becomes a flex row, `align-items: flex-start`).
 - The `padding-right` workaround in `SegmentFlow` (added in Task 4 to keep text out from under the floating toolbar) is dropped.
 
@@ -83,7 +83,7 @@ UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Fea
 
 - Interactive tooltip tour / mode-aware tutorial content — rejected for v0 (may be revisited post-V1 if users still get lost).
 - Backend persistence of tutorial dismissal — V1 (Merges CRUD).
-- "Start Over" / "Add Text" ActionsBar buttons — Feature 3 (the fixed bar height is built to host them).
+- "Start Over" / "Add Text" ActionsBar buttons — Feature 5 (the fixed bar height is built to host them).
 - Third source — Feature 4.
-- Additional toolbar tools (drag-sort, split, line breaks, add-own-text) — Feature 5.
+- Additional toolbar tools (drag-sort, split, line breaks, add-own-text) — Feature 3.
 - Entry animations for the banner per DESIGN.md motion rules — later polish task.
