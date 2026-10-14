@@ -66,7 +66,7 @@ Scale:
 - **Section vertical gaps:** clamp(4rem, 8vw, 8rem).
 - **Hero layout:** Split-screen (text left, visual right).
 - **Feature sections:** Zig-zag alternating text+image rows. No 3-equal-columns.
-- **Mobile collapse:** All multi-column layouts collapse below 768px. No horizontal overflow.
+- **Mobile collapse:** All multi-column layouts collapse below 900px (MUI `md` breakpoint). No horizontal overflow.
 - **z-index contract:** base (0) / sticky-nav (100) / overlay (200) / modal (300) / toast (500).
 
 ## Elevation & Depth
