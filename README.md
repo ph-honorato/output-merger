@@ -20,7 +20,7 @@ AI Output Comparison Platform - Compare and merge AI-generated outputs with live
 
 ## Tech Stack
 
-- **Frontend**: React 18 + TypeScript + Vite
+- **Frontend**: React 19 + TypeScript + Vite
 - **Styling**: styled-components + MUI
 - **State Management**: React Context + useReducer
 - **AI Agent**: Opencode
