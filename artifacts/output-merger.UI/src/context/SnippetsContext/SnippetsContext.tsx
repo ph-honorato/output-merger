@@ -17,9 +17,16 @@ export function SnippetsProvider({ children }: { children?: ReactNode }) {
     []
   );
 
+  const moveSnippet = useCallback<SnippetsContextValue['moveSnippet']>(
+    (fromIndex, toIndex) => {
+      dispatch({ type: 'MOVE_SNIPPET', fromIndex, toIndex });
+    },
+    []
+  );
+
   const value = useMemo<SnippetsContextValue>(
-    () => ({ snippets, setSourceSnippets }),
-    [snippets, setSourceSnippets]
+    () => ({ snippets, setSourceSnippets, moveSnippet }),
+    [snippets, setSourceSnippets, moveSnippet]
   );
 
   return (

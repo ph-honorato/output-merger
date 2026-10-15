@@ -32,6 +32,22 @@ export const snippetsReducer = (
 
       return [...others, ...reconciled].sort((a, b) => a.order - b.order);
     }
+    case 'MOVE_SNIPPET': {
+      const { fromIndex, toIndex } = action;
+      const inBounds = (index: number) => index >= 0 && index < state.length;
+
+      if (fromIndex === toIndex || !inBounds(fromIndex) || !inBounds(toIndex)) {
+        return state;
+      }
+
+      const next = [...state];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+
+      // Sole sanctioned renumbering writer (ADR 0001): an explicit user
+      // reorder renumbers the whole sequence to a dense 1..n.
+      return next.map((entry, index) => ({ ...entry, order: index + 1 }));
+    }
     default:
       return state;
   }

@@ -19,11 +19,22 @@ export interface SetSourceSnippetsAction {
   snippets: Snippet[];
 }
 
-export type SnippetsAction = SetSourceSnippetsAction;
+export interface MoveSnippetAction {
+  type: 'MOVE_SNIPPET';
+  // 0-based index into the merge-ordered state array the move starts from
+  fromIndex: number;
+  // 0-based index into the merge-ordered state array the move ends at
+  toIndex: number;
+}
+
+export type SnippetsAction = SetSourceSnippetsAction | MoveSnippetAction;
 
 export interface SnippetsContextValue {
   // All snippets across sources, always sorted by merge order
   snippets: SnippetsState;
   // Replaces the snippets recorded for one source (full-array reconciliation)
   setSourceSnippets: (sourceId: string, snippets: Snippet[]) => void;
+  // Moves a snippet within the global merge sequence (0-based indexes),
+  // renumbering the sequence to a dense 1..n
+  moveSnippet: (fromIndex: number, toIndex: number) => void;
 }

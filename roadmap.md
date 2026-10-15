@@ -52,12 +52,12 @@
     - [x] Task 6.4: The copy button should be inside at the top of a vertical bar, this bar should be placed at the right of the preview area, decoupled from the container
 
 - [ ] **Feature 3: Preview Area Tools** - Implement the preview area with:
-  - [ ] **Task 1: Sort Snippets by Dragging** - Sort highlighted text snippets by dragging (using `@dnd-kit/core`)
-    - [ ] Task 1.1: Install and set up `@dnd-kit/core` and `@dnd-kit/sortable`
-    - [ ] Task 1.2: Add snippet reorder support to SnippetsContext (reducer action + `moveSnippet` API)
-    - [ ] Task 1.3: Configure sensors: PointerSensor with hold-to-drag activation constraint (delay + tolerance) and KeyboardSensor for accessibility
-    - [ ] Task 1.4: Make preview segments sortable (DndContext + SortableContext), wiring drag end to `moveSnippet`, keeping space separators and empty state working
-    - [ ] Task 1.5: Tests: reducer reorder unit tests + component drag/keyboard sorting tests
+  - [x] **Task 1: Sort Snippets by Dragging** - Sort highlighted text snippets by dragging (using `@dnd-kit/core`)
+    - [x] Task 1.1: Install and set up `@dnd-kit/core` and `@dnd-kit/sortable`
+    - [x] Task 1.2: Add snippet reorder support to SnippetsContext (reducer action + `moveSnippet` API)
+    - [x] Task 1.3: Configure sensors: PointerSensor with hold-to-drag activation constraint (delay + tolerance) and KeyboardSensor for accessibility
+    - [x] Task 1.4: Make preview segments sortable (DndContext + SortableContext), wiring drag end to `moveSnippet`, keeping space separators and empty state working
+    - [x] Task 1.5: Tests: reducer reorder unit tests + component drag/keyboard sorting tests
   - [ ] **Task 2: Preview Area Modal** - Open the preview area on a modal (bigger view of the same preview)
     - [ ] Task 2.1: Create PreviewModal component in MergeSession components folder (MUI Dialog, full component structure)
     - [ ] Task 2.2: Add open-preview button to the PreviewToolbar with translations (en-US/pt-BR)

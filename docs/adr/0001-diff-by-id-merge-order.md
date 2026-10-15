@@ -12,3 +12,4 @@ The `TextInput` component emits the full snippet array for a single source on ev
 
 - Snippet ids must remain stable and unique within their source for the entry's lifetime; consumers may rely on id-based updates.
 - Deletion leaves gaps in `order` values; consumers must sort and never renumber.
+- Exception (Feature 3 Task 1): an explicit user reorder (`MOVE_SNIPPET`) renumbers the whole sequence to a dense 1..n after the move — the sole sanctioned renumbering writer; every other update keeps gaps.

@@ -24,6 +24,8 @@ function TutorialBanner(props: TutorialBannerProps) {
         <li>{t('pages.mergeSession.tutorial.step2')}</li>
         <li>{t('pages.mergeSession.tutorial.step3')}</li>
         <li>{t('pages.mergeSession.tutorial.step4')}</li>
+        <li>{t('pages.mergeSession.tutorial.step5')}</li>
+        <li>{t('pages.mergeSession.tutorial.step6')}</li>
       </S.TutorialSteps>
     </S.TutorialBannerRoot>
   );

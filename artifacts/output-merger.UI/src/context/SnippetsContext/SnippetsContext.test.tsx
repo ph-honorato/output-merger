@@ -3,7 +3,7 @@ import { type Snippet } from "@components";
 import { SnippetsProvider } from "./SnippetsContext";
 import { useSnippets } from "./SnippetsContext.hook";
 import { snippetsReducer } from "./SnippetsContext.reducer";
-import type { OrderedSnippet } from "./SnippetsContext.types";
+import type { OrderedSnippet, SnippetsState } from "./SnippetsContext.types";
 
 const makeSnippet = (
   id: string,
@@ -18,6 +18,23 @@ const setSource = (sourceId: string, snippets: Snippet[]) => ({
   sourceId,
   snippets,
 });
+
+const move = (fromIndex: number, toIndex: number) => ({
+  type: "MOVE_SNIPPET" as const,
+  fromIndex,
+  toIndex,
+});
+
+const seededInterleaved = (): SnippetsState => {
+  const a1 = makeSnippet("a1", "Hello", 0, 5);
+  const b1 = makeSnippet("b1", "Alpha", 0, 5);
+  const a2 = makeSnippet("a2", "world", 6, 11);
+
+  let state = snippetsReducer([], setSource("text-1", [a1]));
+  state = snippetsReducer(state, setSource("text-2", [b1]));
+  state = snippetsReducer(state, setSource("text-1", [a1, a2]));
+  return state;
+};
 
 describe("snippetsReducer", () => {
   it("registers entries for a new source with sequential orders", () => {
@@ -142,6 +159,110 @@ describe("snippetsReducer", () => {
     expect(state.map((entry) => entry.sourceId)).toEqual(["text-1", "text-2"]);
     expect(state.map((entry) => entry.order)).toEqual([1, 2]);
   });
+
+  it("moves a snippet within the global sequence and renumbers it dense 1..n", () => {
+    const state = seededInterleaved();
+
+    const next = snippetsReducer(state, move(0, 2));
+
+    expect(next.map((entry) => entry.id)).toEqual(["b1", "a2", "a1"]);
+    expect(next.map((entry) => entry.order)).toEqual([1, 2, 3]);
+    expect(next.map((entry) => entry.sourceId)).toEqual([
+      "text-2",
+      "text-1",
+      "text-1",
+    ]);
+  });
+
+  it("moves a snippet across sources without changing its sourceId", () => {
+    const state = seededInterleaved();
+
+    const next = snippetsReducer(state, move(1, 0));
+
+    expect(next.map((entry) => entry.id)).toEqual(["b1", "a1", "a2"]);
+    expect(next.map((entry) => entry.sourceId)).toEqual([
+      "text-2",
+      "text-1",
+      "text-1",
+    ]);
+    expect(next.map((entry) => entry.order)).toEqual([1, 2, 3]);
+  });
+
+  it("renumbers densely from a state left with order gaps", () => {
+    const a1 = makeSnippet("a1", "Hello", 0, 5);
+    const b1 = makeSnippet("b1", "Alpha", 0, 5);
+    const a2 = makeSnippet("a2", "world", 6, 11);
+
+    let state = snippetsReducer([], setSource("text-1", [a1]));
+    state = snippetsReducer(state, setSource("text-2", [b1]));
+    state = snippetsReducer(state, setSource("text-1", [a1, a2]));
+    state = snippetsReducer(state, setSource("text-1", [a2]));
+    expect(state.map((entry) => entry.order)).toEqual([2, 3]);
+
+    const next = snippetsReducer(state, move(1, 0));
+
+    expect(next.map((entry) => entry.id)).toEqual(["a2", "b1"]);
+    expect(next.map((entry) => entry.order)).toEqual([1, 2]);
+  });
+
+  it("keeps a dense sequence when the same move is applied again", () => {
+    let state = seededInterleaved();
+    state = snippetsReducer(state, move(0, 2));
+    state = snippetsReducer(state, move(0, 2));
+
+    expect(state.map((entry) => entry.order)).toEqual([1, 2, 3]);
+    expect(state.map((entry) => entry.id)).toEqual(["a2", "a1", "b1"]);
+  });
+
+  it("leaves the state reference untouched when fromIndex equals toIndex", () => {
+    const state = seededInterleaved();
+
+    expect(snippetsReducer(state, move(1, 1))).toBe(state);
+  });
+
+  it("no-ops when fromIndex is out of bounds", () => {
+    const state = seededInterleaved();
+
+    expect(snippetsReducer(state, move(-1, 1))).toBe(state);
+    expect(snippetsReducer(state, move(3, 1))).toBe(state);
+  });
+
+  it("no-ops when toIndex is out of bounds", () => {
+    const state = seededInterleaved();
+
+    expect(snippetsReducer(state, move(0, 3))).toBe(state);
+    expect(snippetsReducer(state, move(0, -1))).toBe(state);
+  });
+
+  it("no-ops on an empty state", () => {
+    expect(snippetsReducer([], move(0, 0))).toEqual([]);
+  });
+
+  it("reorders colliding ids across sources by resolving array indexes", () => {
+    let state = snippetsReducer([], setSource("text-1", [makeSnippet("x1", "Hello", 0, 5)]));
+    state = snippetsReducer(
+      state,
+      setSource("text-2", [makeSnippet("x1", "Alpha", 0, 5)]),
+    );
+
+    const next = snippetsReducer(state, move(1, 0));
+
+    expect(next.map((entry) => entry.sourceId)).toEqual(["text-2", "text-1"]);
+    expect(next.map((entry) => entry.text)).toEqual(["Alpha", "Hello"]);
+    expect(next.map((entry) => entry.order)).toEqual([1, 2]);
+  });
+
+  it("keeps a moved snippet at its reordered position through a later resize", () => {
+    const a1Resized = makeSnippet("a1", "Hello,", 0, 6);
+
+    let state = seededInterleaved();
+    state = snippetsReducer(state, move(0, 2));
+    state = snippetsReducer(state, setSource("text-1", [a1Resized, makeSnippet("a2", "world", 6, 11)]));
+
+    expect(state.map((entry) => entry.id)).toEqual(["b1", "a2", "a1"]);
+    expect(state.map((entry) => entry.text)).toEqual(["Alpha", "world", "Hello,"]);
+    expect(state.map((entry) => entry.order)).toEqual([1, 2, 3]);
+  });
 });
 
 describe("useSnippets", () => {
@@ -196,6 +317,85 @@ describe("useSnippets", () => {
     rerender();
 
     expect(result.current.setSourceSnippets).toBe(first);
+  });
+
+  it("reorders snippets through moveSnippet in the global merge sequence", () => {
+    const { result } = renderHook(() => useSnippets(), {
+      wrapper: SnippetsProvider,
+    });
+
+    act(() => {
+      result.current.setSourceSnippets("text-1", [
+        makeSnippet("a1", "Hello", 0, 5),
+      ]);
+    });
+    act(() => {
+      result.current.setSourceSnippets("text-2", [
+        makeSnippet("b1", "Alpha", 0, 5),
+      ]);
+    });
+    act(() => {
+      result.current.setSourceSnippets("text-1", [
+        makeSnippet("a1", "Hello", 0, 5),
+        makeSnippet("a2", "world", 6, 11),
+      ]);
+    });
+
+    act(() => {
+      result.current.moveSnippet(0, 1);
+    });
+
+    expect(result.current.snippets.map((entry) => entry.id)).toEqual([
+      "b1",
+      "a1",
+      "a2",
+    ]);
+    expect(result.current.snippets.map((entry) => entry.order)).toEqual([1, 2, 3]);
+  });
+
+  it("moveSnippet no-ops on equal or out-of-bounds indexes", () => {
+    const { result } = renderHook(() => useSnippets(), {
+      wrapper: SnippetsProvider,
+    });
+
+    act(() => {
+      result.current.setSourceSnippets("text-1", [
+        makeSnippet("a1", "Hello", 0, 5),
+        makeSnippet("a2", "world", 6, 11),
+      ]);
+    });
+    const before = result.current.snippets;
+
+    act(() => {
+      result.current.moveSnippet(1, 1);
+    });
+    act(() => {
+      result.current.moveSnippet(0, 5);
+    });
+    act(() => {
+      result.current.moveSnippet(-1, 0);
+    });
+
+    expect(result.current.snippets).toEqual(before);
+  });
+
+  it("exposes a stable moveSnippet reference across re-renders and state changes", () => {
+    const { result, rerender } = renderHook(() => useSnippets(), {
+      wrapper: SnippetsProvider,
+    });
+
+    const first = result.current.moveSnippet;
+    rerender();
+
+    expect(result.current.moveSnippet).toBe(first);
+
+    act(() => {
+      result.current.setSourceSnippets("text-1", [
+        makeSnippet("a1", "Hello", 0, 5),
+      ]);
+    });
+
+    expect(result.current.moveSnippet).toBe(first);
   });
 
   it("discards state when the provider unmounts", () => {

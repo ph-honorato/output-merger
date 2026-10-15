@@ -75,7 +75,7 @@ describe('MergeSessionPage', () => {
     const banner = screen.getByTestId('merge-session-tutorial');
     expect(banner).toBeInTheDocument();
     expect(screen.getByText('How it works')).toBeInTheDocument();
-    expect(banner.querySelectorAll('ol li')).toHaveLength(4);
+    expect(banner.querySelectorAll('ol li')).toHaveLength(6);
     expect(screen.queryByTestId('merge-session-help-button')).toBeNull();
 
     await user.click(screen.getByTestId('tutorial-dismiss-button'));

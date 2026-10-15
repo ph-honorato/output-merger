@@ -36,9 +36,11 @@ export const SegmentFlow = styled.div`
   text-align: left;
 `;
 
-export const Segment = styled.span`
+export const OverlayChip = styled.span`
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   white-space: pre-wrap;
+  cursor: grabbing;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 `;
