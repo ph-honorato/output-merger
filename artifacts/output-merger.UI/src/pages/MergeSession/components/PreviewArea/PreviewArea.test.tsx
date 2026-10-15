@@ -19,8 +19,11 @@ import type {
 import { buildMergedText } from "../CopyMergedTextButton/CopyMergedTextButton.hook";
 import PreviewArea from "./PreviewArea";
 import {
+  buildGapId,
   buildSortableId,
+  computeGapMoveIndex,
   computeNeedleIndex,
+  parseGapId,
   SNIPPET_DRAG_ACTIVATION,
   usePreviewArea,
 } from "./PreviewArea.hook";
@@ -105,12 +108,38 @@ const SEGMENT_RECTS: Record<string, SegmentRect> = {
 
 const ZERO_RECT: SegmentRect = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
 
+// Gap anchors sit at the insertion points of the seeded layout:
+// before Alpha (-4), between Alpha|Beta (110), between Beta|Gamma
+// (230), and after Gamma (344). Keyed by the data-gap-slot attribute.
+const GAP_SLOT_X: Record<string, number> = {
+  "0": -4,
+  "1": 110,
+  "2": 230,
+  "3": 344,
+};
+
 // jsdom does not compute layout: give the segment chips deterministic
 // rects so dnd-kit's rect-based collision detection works in tests.
+// Gap anchors resolve by their slot attribute to the insertion-point
+// x; everything else falls back to the textContent-keyed chip rects.
 const installSegmentRects = () =>
   vi
     .spyOn(Element.prototype, "getBoundingClientRect")
     .mockImplementation(function (this: Element) {
+      const gapSlot = (this as HTMLElement).dataset?.gapSlot;
+      if (gapSlot !== undefined) {
+        const x = GAP_SLOT_X[gapSlot] ?? 0;
+        return {
+          left: x,
+          right: x,
+          top: 0,
+          bottom: 24,
+          width: 0,
+          height: 24,
+          x,
+          y: 0,
+        } as DOMRect;
+      }
       const text = (this as HTMLElement).textContent ?? "";
       return { ...(SEGMENT_RECTS[text] ?? ZERO_RECT) } as DOMRect;
     });
@@ -759,6 +788,39 @@ describe("PreviewArea drop indicator", () => {
     }
   });
 
+  it("round-trips gap ids and rejects non-gap ids", () => {
+    expect(buildGapId(0)).toBe("preview-gap:0");
+    expect(buildGapId(3)).toBe("preview-gap:3");
+    expect(parseGapId("preview-gap:0")).toBe(0);
+    expect(parseGapId("preview-gap:3")).toBe(3);
+    expect(parseGapId("text-1:a1")).toBeNull();
+    expect(parseGapId("preview-gap:x")).toBeNull();
+    expect(parseGapId("")).toBeNull();
+  });
+
+  it("drops the chip at the gap slot the needle marks, for every (from, gap) pair", () => {
+    // The needle renders AT slot g; the drop must land the chip
+    // exactly there. Model the reducer's splice semantics: splice out
+    // at from, re-insert at computeGapMoveIndex.
+    for (let from = 0; from < 3; from += 1) {
+      for (let gap = 0; gap <= 3; gap += 1) {
+        const rendered = ["a", "b", "c"];
+        const final = [...rendered];
+        const [moved] = final.splice(from, 1);
+        final.splice(computeGapMoveIndex(from, gap), 0, moved);
+
+        // "Lands at slot g": the elements preceding the moved chip in
+        // the final order are exactly the rendered prefix before slot
+        // g, dragged chip excluded.
+        const prefix = final.slice(0, final.indexOf(moved));
+        const expectedPrefix = rendered
+          .slice(0, gap)
+          .filter((item) => item !== moved);
+        expect(prefix).toEqual(expectedPrefix);
+      }
+    }
+  });
+
   // ---- resources / empty state -------------------------------------------
 
   it("ships zero new i18n keys: the sorting copy stays exactly the five Task 1 keys", () => {
@@ -1249,6 +1311,144 @@ describe("PreviewArea drop indicator", () => {
       ).toEqual(["Beta", "Gamma", "Alpha"]);
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
     });
+
+    it("marks the gap between two snippets and lands the chip exactly there", async () => {
+      renderWithProviders(seedInterleaved());
+      const [alpha, beta, gamma] = screen.getAllByTestId("preview-snippet");
+
+      pointerDownOn(gamma, 290, 10);
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(screen.getByTestId("preview-drop-indicator")).toBeInTheDocument();
+
+      // Into the space between Alpha and Beta (gap slot 1): the needle
+      // renders exactly there — after Alpha, before Beta.
+      fireEvent.pointerMove(document, {
+        pointerId: 1,
+        clientX: 110,
+        clientY: 10,
+      });
+      const needle = screen.getByTestId("preview-drop-indicator");
+      expect(
+        alpha.compareDocumentPosition(needle) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        needle.compareDocumentPosition(beta) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      fireEvent.pointerUp(document, { pointerId: 1 });
+      await act(async () => {});
+
+      // moveSnippet(2, computeGapMoveIndex(2, 1) = 1): Gamma lands at
+      // the slot the needle marked.
+      expect(
+        screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
+      ).toEqual(["Alpha", "Gamma", "Beta"]);
+      expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
+    });
+
+    it("marks the leading gap before the first snippet", async () => {
+      renderWithProviders(seedInterleaved());
+      const [alpha, beta] = screen.getAllByTestId("preview-snippet");
+
+      pointerDownOn(beta, 170, 10);
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+
+      // Into the leading gap (slot 0, before Alpha).
+      fireEvent.pointerMove(document, {
+        pointerId: 1,
+        clientX: -4,
+        clientY: 10,
+      });
+      const needle = screen.getByTestId("preview-drop-indicator");
+      expect(
+        needle.compareDocumentPosition(alpha) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      fireEvent.pointerUp(document, { pointerId: 1 });
+      await act(async () => {});
+
+      // moveSnippet(1, computeGapMoveIndex(1, 0) = 0): Beta lands at
+      // the leading slot marked.
+      expect(
+        screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
+      ).toEqual(["Beta", "Alpha", "Gamma"]);
+    });
+
+    it("marks the trailing gap after the last snippet and announces the landing", async () => {
+      renderWithProviders(seedInterleaved());
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+
+      pointerDownOn(alpha);
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+
+      // Into the trailing gap (slot 3, after Gamma).
+      fireEvent.pointerMove(document, {
+        pointerId: 1,
+        clientX: 344,
+        clientY: 10,
+      });
+      const needle = screen.getByTestId("preview-drop-indicator");
+      const [, , gamma] = screen.getAllByTestId("preview-snippet");
+      expect(
+        gamma.compareDocumentPosition(needle) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      fireEvent.pointerUp(document, { pointerId: 1 });
+      await act(async () => {});
+
+      // moveSnippet(0, computeGapMoveIndex(0, 3) = 2): Alpha lands at
+      // the trailing slot, and the gap drop announces the landing
+      // position with the existing ended key — no new strings.
+      expect(
+        screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
+      ).toEqual(["Beta", "Gamma", "Alpha"]);
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Snippet dropped at position 3 of 3.",
+      );
+    });
+
+    it("treats the gaps around the dragged chip's own position as a no-op", async () => {
+      renderWithProviders(seedInterleaved());
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+
+      pointerDownOn(alpha);
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+
+      // The gap right after the dragged chip (slot 1 == from + 1):
+      // the chip already sits between the same neighbors.
+      fireEvent.pointerMove(document, {
+        pointerId: 1,
+        clientX: 110,
+        clientY: 10,
+      });
+      const needle = screen.getByTestId("preview-drop-indicator");
+      const [, beta] = screen.getAllByTestId("preview-snippet");
+      expect(
+        needle.compareDocumentPosition(beta) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      fireEvent.pointerUp(document, { pointerId: 1 });
+      await act(async () => {});
+
+      // moveSnippet(0, computeGapMoveIndex(0, 1) = 0): same index —
+      // the reducer's no-op guard keeps the order.
+      expect(
+        screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
+      ).toEqual(["Alpha", "Beta", "Gamma"]);
+    });
   });
 
   // ---- hook-level lifecycle (vanish / no target / stability) --------------
@@ -1330,6 +1530,38 @@ describe("PreviewArea drop indicator", () => {
       } as unknown as DragOverEvent);
     });
     expect(result.current.dropIndicatorIndex).toBeNull();
+
+    // Over an insertion gap: the needle marks that slot directly.
+    act(() => {
+      result.current.handleDragOver({
+        active: { id: "text-1:a1" },
+        over: { id: buildGapId(1) },
+      } as unknown as DragOverEvent);
+    });
+    expect(result.current.dropIndicatorIndex).toBe(1);
+
+    // A stale gap slot (the list shrank mid-drag) hides the needle…
+    act(() => {
+      result.current.handleDragOver({
+        active: { id: "text-1:a1" },
+        over: { id: buildGapId(5) },
+      } as unknown as DragOverEvent);
+    });
+    expect(result.current.dropIndicatorIndex).toBeNull();
+
+    // …and its drop is discarded without crashing.
+    act(() => {
+      result.current.handleDragEnd({
+        active: { id: "text-1:a1" },
+        over: { id: buildGapId(5) },
+      } as unknown as DragEndEvent);
+    });
+    expect(result.current.dropIndicatorIndex).toBeNull();
+    expect(result.current.snippets.map((snippet) => snippet.id)).toEqual([
+      "a1",
+      "b1",
+      "a2",
+    ]);
 
     // Drag end clears the needle together with the overlay state and
     // keeps the Task 1 discard path (order unchanged).

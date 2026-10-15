@@ -1,12 +1,37 @@
 import PreviewIcon from '@mui/icons-material/Preview';
 import { Fragment } from 'react';
-import { DndContext, DragOverlay, closestCenter } from '@dnd-kit/core';
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  useDroppable,
+} from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { SortableSegment } from '../';
-import { usePreviewArea } from './PreviewArea.hook';
+import { buildGapId, usePreviewArea } from './PreviewArea.hook';
 import { withAlpha } from '../../../../utils/color';
 import type { PreviewAreaProps } from './PreviewArea.types';
 import * as S from './PreviewArea.styles';
+
+/**
+ * Invisible zero-footprint droppable for one insertion gap
+ * (before/between/after the snippets). While a pointer drag hovers
+ * the space between two snippets, dnd-kit reports this anchor as
+ * `over`, so the needle renders at that slot and the drop lands
+ * exactly there. Decorative collision anchor only: hidden from
+ * assistive tech, no text, no layout footprint.
+ */
+function DropGap({ slot }: { slot: number }) {
+  const { setNodeRef } = useDroppable({ id: buildGapId(slot) });
+  return (
+    <S.DropGap
+      ref={setNodeRef}
+      data-testid="preview-drop-gap"
+      data-gap-slot={slot}
+      aria-hidden="true"
+    />
+  );
+}
 
 function PreviewArea(props: PreviewAreaProps) {
   const { className } = props;
@@ -60,6 +85,7 @@ function PreviewArea(props: PreviewAreaProps) {
             <S.SegmentFlow data-testid="preview-segment-flow">
               {snippets.map((snippet, index) => (
                 <Fragment key={sortableIds[index]}>
+                  <DropGap slot={index} />
                   {renderDropIndicator(index)}
                   {index > 0 ? ' ' : null}
                   <SortableSegment
@@ -68,6 +94,7 @@ function PreviewArea(props: PreviewAreaProps) {
                   />
                 </Fragment>
               ))}
+              <DropGap slot={snippets.length} />
               {renderDropIndicator(snippets.length)}
             </S.SegmentFlow>
           </SortableContext>

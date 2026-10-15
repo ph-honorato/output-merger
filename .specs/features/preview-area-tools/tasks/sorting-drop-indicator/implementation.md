@@ -115,8 +115,15 @@ All new tests live in `PreviewArea.test.tsx` under `describe("PreviewArea drop i
 | DROP-23 | Verified | Single-snippet keyboard drag: needle at the origin slot only, survives arrow moves (inert drag), cleared on drop |
 | DROP-24 | Verified | Empty preview: no needle, no drag wiring (no live region) |
 | DROP-25 | Verified | Key-set test: `sorting.*` namespace is exactly the five Task 1 keys in BOTH languages; no `/drop\|indicator/i` key in either resource; zero i18n file changes in the diff; the pre-existing verbatim-copy test keeps passing |
+| DROP-26 | Verified (2026-10-15 amendment) | `DropGap` anchors render at slots 0..n (`preview-drop-gap` testid, `data-gap-slot`); zero-width/zero-height/`pointer-events: none` styled spans; mounted inside the per-instance DndContext (always, while snippets exist) |
+| DROP-27 | Verified (2026-10-15 amendment) | Pointer tests: hovering the leading gap (x −4), the middle gap between Alpha\|Beta (x 110), and the trailing gap (x 344) renders the needle at that exact slot (DOM-position assertions between the exact neighbors); the hook-level test pins `handleDragOver` with a gap id → slot directly |
+| DROP-28 | Verified (2026-10-15 amendment) | Exhaustive (from, slot) splice-agreement unit test for `computeGapMoveIndex` (all 12 pairs for n=3: the elements preceding the moved chip in the final order are exactly the rendered prefix before the slot); pointer drops on the leading/middle/trailing gaps land exactly at the marked slot |
+| DROP-29 | Verified (2026-10-15 amendment) | Own-adjacent-gap pointer test: dropping into the gap right after the dragged chip resolves to a same-index `moveSnippet` and the reducer's no-op guard keeps the order |
+| DROP-30 | Verified (2026-10-15 amendment) | Trailing-gap pointer test asserts the live region reads "Snippet dropped at position 3 of 3." — the existing `ended` key with the landing position (`moveIndex + 1`, the same identity chip drops use); zero i18n changes |
+| DROP-31 | Verified (2026-10-15 amendment) | Hook-level test: a stale gap id (`preview-gap:5` against 3 snippets) hides the needle; its drop is discarded with the state reference untouched, no crash |
+| DROP-32 | Verified (2026-10-15 amendment) | Keyboard suites pass unchanged — `sortableKeyboardCoordinates` walks sortable chips only; the gap branch never triggers on the keyboard path (the same onDragOver path serves both sensors) |
 
-**25 total: 25 Verified, 0 Deviated, 0 Deferred.**
+**32 total: 32 Verified, 0 Deviated, 0 Deferred.** (DROP-26..32 were added by the 2026-10-15 user decision recorded in §8; DROP-01..25 outcomes are unchanged from the original implementation.)
 
 ---
 
@@ -143,3 +150,27 @@ jsdom computes no layout and renders nothing — these need a dev-server pass by
 6. **Complement interplay** — while the needle is visible, the overlay chip should keep following the pointer, the origin keep dimming, and the shifts keep opening the hole exactly as Task 1 shipped.
 
 Deferred by spec (not gaps): strategy swap (the sibling shifts stay — user decision), direction-aware announcement copy, cross-instance needles, preview modal re-mount (Task 2), editable surface (Task 3), any animation for the needle.
+
+---
+
+## 8. Post-implementation adjustment (2026-10-15): gap droppables
+
+The user tried the shipped needle and reported: dragging the cursor into the **space between two snippets** showed no needle — the marker vanished exactly where it mattered most. User decision the same day: make the gaps explicit drop targets so the needle renders before/between/after snippets wherever the cursor is.
+
+**What changed** (all inside `PreviewArea/`):
+
+- `PreviewArea.hook.tsx` — three new exported pure helpers: `buildGapId(slot)` (`preview-gap:${slot}`), `parseGapId(id)`, and `computeGapMoveIndex(from, slot) = slot > from ? slot - 1 : slot` (the reduced-array splice mapping that keeps needle and drop identical). `handleDragOver` resolves gap ids to the needle slot directly (bounds-checked 0..snippets.length; stale slots hide the needle). `handleDragEnd` lands gap drops at the marked slot via `computeGapMoveIndex` and keeps the Task 1 discard path for stale slots. The `onDragEnd` announcement reuses the existing `ended` key with the landing position (`computeGapMoveIndex(from, gap) + 1` — the same identity chip drops use); zero new i18n strings.
+- `PreviewArea.styles.ts` — `DropGap`: the zero-width/zero-height/`pointer-events: none` anchor discipline of the needle, applied to the collision anchors.
+- `PreviewArea.tsx` — module-private `DropGap` component (`useDroppable` + the styled anchor, `preview-drop-gap` testid, `data-gap-slot` attribute for the test rect mock) rendered at every slot boundary: before each snippet and after the last one, co-located with the needle render point. Structural call: same file-local latitude as the needle spans (§3) — a hook-bearing element needs to be a component, but it is purely a collision anchor of PreviewArea, not a reusable unit.
+- `PreviewArea.test.tsx` — `installSegmentRects` resolves gap anchors by `data-gap-slot` (insertion-point x positions); +2 helper-unit tests (id round-trip; exhaustive (from, slot) splice agreement); +4 pointer gap tests (middle gap, leading gap, trailing gap + landing announcement, own-adjacent-gap no-op); the hook-level lifecycle test extended with gap-id and stale-slot assertions. 169 → 175 tests, zero existing assertions edited.
+
+**Red-checks** (orchestrator-applied, reverted byte-exact, final full suite re-verified green):
+
+| Mutation | Caught by |
+| --- | --- |
+| Inverted `computeGapMoveIndex` comparison | **5 tests failed** (exhaustive splice-agreement unit + the middle/leading/trailing/own-adjacent gap drop tests) |
+| `handleDragOver` gap branch forced to hide the needle | **5 tests failed** (all four pointer gap tests + the hook-level gap assertion) |
+
+**Verification:** `npx vitest run` (175/175 across 12 files), `npm run lint` (clean), `npx tsc -b` (clean).
+
+**New dev-server items (added to §7's list):** 7. Gap hit areas — the needle should appear continuously as the cursor sweeps the ~4px separator spaces and the leading/trailing regions of the flow; 8. Chip-vs-gap boundary — the marker should slide without flicker as the cursor crosses from a chip onto an adjacent gap (both resolve consistently by rect-center distance).

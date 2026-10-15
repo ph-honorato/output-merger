@@ -27,6 +27,7 @@ An in-flow insertion needle ("drop indicator") rendered in the PreviewArea segme
 - **data-testid**: `preview-drop-indicator`.
 - **i18n/aria**: no new strings, no aria additions. (If implementation uncovers an unavoidable aria need, en-US + pt-BR are both required.)
 - **Edge cases to spec**: own-position hover, wrapped multi-line flows, single-snippet inert drag, empty state, Escape cancel, mid-drag deletion discard, DragOverlay chip keeps following the pointer and the origin keeps dimming.
+- **Gap positions (2026-10-15, after using the shipped needle)**: the user reported that dragging the cursor into the space between two snippets showed no needle. Decision: invisible gap droppable anchors at every insertion slot (before/between/after) make the needle render exactly at the hovered gap, and dropping there lands there — the marker is continuous everywhere inside the flow. Spec requirements DROP-26..32.
 
 ### Agent's Discretion
 
@@ -40,6 +41,7 @@ An in-flow insertion needle ("drop indicator") rendered in the PreviewArea segme
 - **Pure helper**: `computeNeedleIndex(fromIndex, overIndex)` exported from the hook file and unit-tested (codebase precedent: `buildSortableId`).
 - **Text content**: the needle renders no text and is `aria-hidden` — the flow's `textContent === buildMergedText(snippets)` parity holds even mid-drag.
 - **Component structure**: developer's structural call — a styled span in `PreviewArea.styles.ts` rendered inline between sortable items, or a small page sub-component with the standard 6-file split under `src/pages/MergeSession/components/` (AGENTS.md rules are satisfied either way; the spec pins behavior, not file layout).
+- **Gap droppables (2026-10-15 amendment)**: zero-footprint inline droppable anchors at slots `0..n` (id `preview-gap:${slot}`; `data-gap-slot` attribute doubles as the test rect-mock hook); `buildGapId`/`parseGapId`/`computeGapMoveIndex` pure helpers exported from the hook file; a gap drop lands via the reduced-array splice mapping `computeGapMoveIndex(from, slot) = slot > from ? slot - 1 : slot`; the landing is announced with the existing `ended` key at `moveIndex + 1`; stale slots (mid-drag shrink) hide the needle and discard the drop; the keyboard path is untouched (`sortableKeyboardCoordinates` walks sortable chips only).
 
 ### Naming and records
 

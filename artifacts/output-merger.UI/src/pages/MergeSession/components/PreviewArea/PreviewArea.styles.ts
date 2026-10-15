@@ -82,3 +82,22 @@ export const DropIndicatorBar = styled.span`
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.text.secondary};
 `;
+
+/**
+ * Invisible droppable anchor for one insertion gap (before/between/
+ * after the snippets). Same zero-width, zero-height footprint
+ * discipline as the needle anchor: it participates in the flow's
+ * inline wrapping but takes no space and no pointer events, so the
+ * sortable rects and transforms stay unperturbed. dnd-kit's
+ * rect-center collision pins the anchor's center at the exact
+ * insertion point, so a pointer hovering the space between two
+ * snippets resolves to this droppable — the needle then renders at
+ * that slot and the drop lands exactly there.
+ */
+export const DropGap = styled.span`
+  display: inline-block;
+  position: relative;
+  width: 0px;
+  height: 0px;
+  pointer-events: none;
+`;

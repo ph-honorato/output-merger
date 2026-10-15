@@ -47,7 +47,8 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 | data-testid | `preview-drop-indicator` | User default 2026-10-15; follows the `preview-*` convention; no collision exists today (verified by search) | y (user, 2026-10-15) |
 | i18n / aria | Zero new strings; no aria additions — the marker is decorative and the existing `sorting.*` announcements already cover non-visual feedback | User decision; if implementation uncovers an unavoidable aria need, en-US + pt-BR are both required | y (user, 2026-10-15) |
 | Edge cases to spec | Own-position hover, wrapped multi-line flows, single-snippet inert drag, empty state, Escape cancel, mid-drag deletion discard, overlay/origin interplay | User decision 2026-10-15 (list provided by the user) | y (user, 2026-10-15) |
-| Placement rule | Index-based direction semantics, in slots `0..n` of the current render order: `slot = from < to ? to + 1 : to`. Moving forward → needle AFTER the hovered snippet; moving backward → BEFORE it; hovering the dragged snippet itself (including the pickup instant) → at the origin slot (between its preceding neighbor and itself) | dnd-kit reports `over` (a hovered item), never an insertion index — the user's "standard sortable semantics" made concrete. The rule reproduces `moveSnippet`'s splice landing exactly (dropping over index `to` splices the item in at `to`), so the needle can never contradict the drop outcome. Pointer-geometry-based (half-of-item) placement was rejected: it can disagree with the splice semantics | n (agent default) |
+| Placement rule | Index-based direction semantics, in slots `0..n` of the current render order: `slot = from < to ? to + 1 : to`. Moving forward → needle AFTER the hovered snippet; moving backward → BEFORE it; hovering the dragged snippet itself (including the pickup instant) → at the origin slot (between its preceding neighbor and itself) | dnd-kit reports `over` (a hovered item), never an insertion index — the user's "standard sortable semantics" made concrete. The rule reproduces `moveSnippet`'s splice landing exactly (dropping over index `to` splices the item in at `to`), so the needle can never contradict the drop outcome. Pointer-geometry-based (half-of-item) placement was rejected: it can disagree with the splice semantics. (Amended 2026-10-15 by user decision: hovering a gap now resolves through explicit gap droppables — see "Gap positions are explicit drop targets"; the chip rule still governs chip hovers) | n (agent default; gap amendment y — user decision) |
+| Gap positions (2026-10-15 user decision) | Invisible zero-footprint droppable anchors at slots `0..n` (id `preview-gap:${slot}`); a gap hover sets the needle to that slot; a gap drop lands there via `computeGapMoveIndex(from, slot) = slot > from ? slot - 1 : slot`; landing announced with the existing `ended` key; stale slots hide the needle and discard the drop; keyboard path unchanged | The user's report: the needle did not appear when the cursor sat in the space between two snippets. Gap droppables make the marker explicit and continuous everywhere inside the flow, and keep the needle-vs-drop identity by construction | y (user decision) |
 | No target (`over` is null) | The needle is hidden | The user left this open ("keep the needle at the drop-result position or hide it — pick one, document it"). Hide picked: a no-target drop is a cancel today (order unchanged, "cancelled" announcement), and a frozen needle pointing at the origin while the user is away from the flow reads as stale. The state is transient under `closestCenter` | n (agent default — documented pick of the user's open choice) |
 | Neutral color token | `palette.text.secondary` — `#64748b` in the light theme (the active theme; `#94a3b8` in the dark theme), read via the theme object, never a hex literal | Candidates from the user's list: `divider` (rgba(0,0,0,0.12)) is too faint for a 4px bar on white paper; `text.disabled` is MUI-implicit and not explicitly themed in `src/theme/index.ts`; `text.secondary` is the app's canonical neutral (labels, counters, empty states) — clearly visible, explicitly defined in both themes, semantically "UI furniture" rather than content | n (agent default — flagged for a dev-server visibility check) |
 | Shape | Width 4px, height 1.5em, border-radius 2px — the TextInput needle's exact dimensions | Consistency with the one needle visual the app already has; 1.5em ≈ the flow's 1.6 body line-height (DESIGN.md typography), so the bar spans the reading line | n (agent default) |
@@ -172,12 +173,32 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 
 ---
 
+### P1: Gap positions are explicit drop targets ⭐ MVP
+
+**User Story**: As a merger, I want the needle to follow my cursor into the space between two snippets, so that the marker is always exactly where my pointer is — never hidden or misplaced in the gaps.
+
+**Why P1**: User decision 2026-10-15 after using the shipped needle: hovering the space between snippets resolved to nothing (or a wrong-side chip), so the needle disappeared exactly where the user needed it most. Gap precision is the core of the sorting feel.
+
+**Acceptance Criteria**:
+
+1. WHILE a pointer drag is active THEN invisible zero-footprint droppable anchors SHALL exist at every insertion gap — before the first snippet, between each pair of neighbors, and after the last snippet (slots 0..n).
+2. WHEN the pointer hovers a gap THEN the needle SHALL render at that gap's slot exactly — the needle never hides while the pointer is inside the flow.
+3. WHEN the snippet is released over a gap THEN it SHALL land at that gap's slot — the needle and the drop outcome SHALL remain identical, via the index mapping `moveTarget = slot > from ? slot - 1 : slot`.
+4. WHEN a snippet is released over the gap at or immediately after its own position THEN the order SHALL stay unchanged (the reducer's no-op guard).
+5. WHEN a gap drop lands THEN the live region SHALL announce the landing position using the existing `sorting.ended` key — no new i18n strings.
+6. IF a gap slot is stale (the list shrank mid-drag) THEN the needle SHALL hide and the drop SHALL be discarded without crashing — the Task 1 discard semantics.
+7. Keyboard drags SHALL be unchanged: `sortableKeyboardCoordinates` walks sortable chips only, so gaps are a pointer-drag precision layer on the same `onDragOver` path.
+
+**Independent Test**: unit suites for `buildGapId`/`parseGapId` and an exhaustive (from, slot) splice-agreement test for `computeGapMoveIndex`; pointer tests hover the leading gap, a middle gap, and the trailing gap asserting the needle's DOM position between the exact neighbors, drop, and assert the resulting order equals the marked slot; the own-adjacent-gap drop asserts the no-op; the landing announcement asserts "Snippet dropped at position N of M." from the existing key.
+
+---
+
 ## Edge Cases
 
 - IF the drag activates (pickup) THEN the collision resolves to the dragged item itself: the needle appears at the origin slot, between the snippet's preceding neighbor and the dimmed origin chip — an immediate drop is a no-op and the marker is honest about it.
 - IF the user hovers the dragged snippet's own slot again mid-drag THEN the needle returns to the origin slot (`over === active`).
 - IF the pointer moves forward past the last snippet THEN the needle renders after the last snippet — the trailing slot `n`.
-- IF `over` resolves to nothing (pointer outside all droppable rects; transient under `closestCenter`) THEN the needle hides: a no-target drop is a cancel today ("Snippet reorder cancelled."), and a marker left pointing at the origin would be stale.
+- IF `over` resolves to nothing (pointer outside all droppable rects; transient under `closestCenter`) THEN the needle hides: a no-target drop is a cancel today ("Snippet reorder cancelled."), and a marker left pointing at the origin would be stale. (With the 2026-10-15 gap droppables, `over` resolves to a gap anywhere inside the flow — this case is now confined to genuinely being outside the flow or a stale slot.)
 - IF the flow wraps across lines and the insertion slot falls at a wrap boundary THEN the needle renders inline at the end of the earlier line — normal inline behavior, no coordinate computation against the container.
 - IF exactly one snippet is dragged THEN the drag is inert and the needle can only ever sit at its origin slot.
 - IF the preview is empty THEN no DndContext mounts and the needle cannot render.
@@ -220,12 +241,19 @@ Each requirement gets a unique ID for tracking across design, tasks, and validat
 | DROP-23 | Flow integrity and lifecycle safety | Specify | Pending |
 | DROP-24 | Flow integrity and lifecycle safety | Specify | Pending |
 | DROP-25 | Flow integrity and lifecycle safety | Specify | Pending |
+| DROP-26 | Gap positions are explicit drop targets | Specify | Pending |
+| DROP-27 | Gap positions are explicit drop targets | Specify | Pending |
+| DROP-28 | Gap positions are explicit drop targets | Specify | Pending |
+| DROP-29 | Gap positions are explicit drop targets | Specify | Pending |
+| DROP-30 | Gap positions are explicit drop targets | Specify | Pending |
+| DROP-31 | Gap positions are explicit drop targets | Specify | Pending |
+| DROP-32 | Gap positions are explicit drop targets | Specify | Pending |
 
 **ID format:** `DROP-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified; additionally **Deviated** (implemented with a changed contract — see `implementation.md`) and **Deferred** (not implemented — see `implementation.md`).
 
-**Coverage:** 25 total. 0 Verified, 0 Deviated, 0 Deferred. Roadmap mapping: Task 1.6 ("Add user feedback while sorting") → all 25 requirements (DROP-01–05 presence/lifecycle; DROP-06–11 placement rule; DROP-12–14 keyboard parity; DROP-15–18 appearance; DROP-19–25 integrity and edge cases). Parent relation: extends Task 1's drag-visual feedback family (DRAG-19/DRAG-20 in `.specs/features/preview-area-tools/tasks/sort-snippets-by-dragging/spec.md`) with new requirements — no DRAG requirement is reopened or amended. Per-requirement outcomes: `.specs/features/preview-area-tools/tasks/sorting-drop-indicator/implementation.md` (to be created by the developer sub-agent).
+**Coverage:** 32 total. 0 Verified, 0 Deviated, 0 Deferred. Roadmap mapping: Task 1.6 ("Add user feedback while sorting") → all 32 requirements (DROP-01–05 presence/lifecycle; DROP-06–11 placement rule; DROP-12–14 keyboard parity; DROP-15–18 appearance; DROP-19–25 integrity and edge cases; DROP-26–32 gap droppables, added by user decision 2026-10-15). Parent relation: extends Task 1's drag-visual feedback family (DRAG-19/DRAG-20 in `.specs/features/preview-area-tools/tasks/sort-snippets-by-dragging/spec.md`) with new requirements — no DRAG requirement is reopened or amended. Per-requirement outcomes: `.specs/features/preview-area-tools/tasks/sorting-drop-indicator/implementation.md` (to be created by the developer sub-agent).
 
 ---
 
@@ -235,6 +263,7 @@ How we know the feature is successful:
 
 - [ ] Holding a snippet shows the needle at its origin slot; dragging over another snippet moves the needle to the exact landing slot — after the hovered snippet when moving forward, before it when moving backward — and it hops along as the hover changes.
 - [ ] The needle never contradicts a drop: releasing while it is visible produces exactly the order it marked; Escape or release-with-no-target clears it with the order unchanged.
+- [ ] Hovering the space before/between/after snippets shows the needle at that exact gap, and releasing there lands the chip at that gap — the marker is continuous everywhere inside the flow (2026-10-15 user decision).
 - [ ] Keyboard drags show the identical needle behavior through the same `onDragOver` path.
 - [ ] The needle is a thin neutral bar (TextInput-needle shape, theme `text.secondary`) that wraps with the text, renders no text, and leaves the sibling shifts, overlay chip, dimmed origin, and announcements exactly as Task 1 shipped them.
 - [ ] Single-snippet, empty-state, and mid-drag-deletion paths are safe: the needle hides or stays at the origin slot, nothing crashes, no misleading position is ever shown.

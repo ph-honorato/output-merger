@@ -55,6 +55,36 @@ export const computeNeedleIndex = (
   return fromIndex < overIndex ? overIndex + 1 : overIndex;
 };
 
+/**
+ * Droppable id for the insertion gap at `slot` (0..n): the invisible
+ * in-flow anchors rendered before/between/after the snippets. While a
+ * pointer drag hovers a gap, dnd-kit reports it as `over`, so the
+ * needle renders at that slot — the needle then never hides or
+ * misplaces while the cursor sits in the space between two snippets.
+ */
+export const buildGapId = (slot: number): string => `preview-gap:${slot}`;
+
+/**
+ * Inverse of buildGapId: the encoded slot, or null for any other id
+ * (sortable chips, unresolved targets).
+ */
+export const parseGapId = (id: string): number | null => {
+  const match = /^preview-gap:(\d+)$/.exec(id);
+  return match ? Number(match[1]) : null;
+};
+
+/**
+ * moveSnippet target index that drops the dragged snippet at gap
+ * `slot`. The reducer splices out at fromIndex, then re-inserts at the
+ * target index of the REDUCED array, so slots past the removed chip
+ * map one index lower. This mapping is what keeps the needle and the
+ * drop outcome identical: the needle renders at `slot` exactly.
+ */
+export const computeGapMoveIndex = (
+  fromIndex: number,
+  slot: number
+): number => (slot > fromIndex ? slot - 1 : slot);
+
 const SORTING_KEYS = {
   instructions: 'pages.mergeSession.previewArea.sorting.instructions',
   started: 'pages.mergeSession.previewArea.sorting.started',
@@ -109,10 +139,22 @@ export function usePreviewArea() {
     (event: DragOverEvent) => {
       const { active, over } = event;
       const fromIndex = indexOfSortableId(String(active.id));
-      const overIndex = over ? indexOfSortableId(String(over.id)) : null;
+      const overId = over ? String(over.id) : null;
+      const gapSlot = overId === null ? null : parseGapId(overId);
+
+      if (gapSlot !== null) {
+        // Gap anchors exist for slots 0..snippets.length; a stale
+        // slot (the list shrank mid-drag) hides the needle.
+        setDropIndicatorIndex(
+          gapSlot >= 0 && gapSlot <= snippets.length ? gapSlot : null
+        );
+        return;
+      }
+
+      const overIndex = overId === null ? null : indexOfSortableId(overId);
       setDropIndicatorIndex(computeNeedleIndex(fromIndex, overIndex));
     },
-    [indexOfSortableId]
+    [indexOfSortableId, snippets.length]
   );
 
   const handleDragEnd = useCallback(
@@ -128,7 +170,21 @@ export function usePreviewArea() {
       }
 
       const fromIndex = indexOfSortableId(String(active.id));
-      const toIndex = indexOfSortableId(String(over.id));
+      const overId = String(over.id);
+      const gapSlot = parseGapId(overId);
+
+      if (gapSlot !== null) {
+        // Released over an insertion gap: the chip lands exactly at
+        // the slot the needle marked (a stale slot after a mid-drag
+        // shrink discards the reorder).
+        if (fromIndex < 0 || gapSlot < 0 || gapSlot > snippets.length) {
+          return;
+        }
+        moveSnippet(fromIndex, computeGapMoveIndex(fromIndex, gapSlot));
+        return;
+      }
+
+      const toIndex = indexOfSortableId(overId);
 
       if (fromIndex < 0 || toIndex < 0) {
         // The dragged snippet vanished mid-drag: discard the reorder.
@@ -137,7 +193,7 @@ export function usePreviewArea() {
 
       moveSnippet(fromIndex, toIndex);
     },
-    [indexOfSortableId, moveSnippet]
+    [indexOfSortableId, moveSnippet, snippets.length]
   );
 
   const handleDragCancel = useCallback((_event: DragCancelEvent) => {
@@ -161,10 +217,25 @@ export function usePreviewArea() {
         over && over.id !== active.id
           ? describePosition(SORTING_KEYS.over, String(over.id))
           : undefined,
-      onDragEnd: ({ over }) =>
-        over
-          ? describePosition(SORTING_KEYS.ended, String(over.id))
-          : t(SORTING_KEYS.cancelled),
+      onDragEnd: ({ active, over }) => {
+        if (!over) {
+          return t(SORTING_KEYS.cancelled);
+        }
+        const overId = String(over.id);
+        const gapSlot = parseGapId(overId);
+        if (gapSlot !== null) {
+          // Gap drop: announce the landing position — the same
+          // move-index identity chip drops use, no new strings.
+          const fromIndex = indexOfSortableId(String(active.id));
+          return fromIndex >= 0 && gapSlot <= snippets.length
+            ? t(SORTING_KEYS.ended, {
+                index: computeGapMoveIndex(fromIndex, gapSlot) + 1,
+                count: snippets.length,
+              })
+            : undefined;
+        }
+        return describePosition(SORTING_KEYS.ended, overId);
+      },
       onDragCancel: () => t(SORTING_KEYS.cancelled),
     };
   }, [t, indexOfSortableId, snippets]);
