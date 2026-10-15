@@ -16,11 +16,11 @@ AI Output Comparison Platform - Compare and merge AI-generated outputs with live
 
 **V1 ("Merges" CRUD):** The user must log in and navigate to a sessions screen, where they can start a new "merge" session or return to an existing one. Additional tools may also be added to the text preview interface. **Status: to be started**
 
-**V2 (AI Integration):** The user can choose between manual input (the current setup) or model output. Selecting model output will open a screen to integrate with the desired model alongside the entered prompt. If the user wants to use the same setup for the second entry, they can reuse a prompt from a previous input by selecting "copy from…". Once the merge starts, the generated prompt outputs will be made available as in previous versions. **Status: to be started**
+**V2 (AI Integration):** The user can choose between manual or model input. Selecting model input will open a screen to integrate with the desired model alongside the entered prompt. If the user wants to use the same setup for the second entry, they can reuse a prompt from a previous input by selecting "copy from…". Once the merge starts, the generated prompt outputs will be made available as in previous versions. **Status: to be started**
 
 ## Tech Stack
 
 - **Frontend**: React 18 + TypeScript + Vite
-- **Styling**: CSS Modules or Tailwind CSS
+- **Styling**: styled-components + MUI
 - **State Management**: React Context + useReducer
-- **Monorepo**: Simple folder structure (no additional tooling needed)
+- **AI Agent**: Opencode
