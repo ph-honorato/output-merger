@@ -1,4 +1,4 @@
-# output-merger
+# Output Merger
 
 AI Output Comparison Platform - Compare and merge AI-generated outputs with live preview.
 
