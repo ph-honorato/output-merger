@@ -25,7 +25,7 @@ Drag-based reordering of preview snippets for Feature 3 Task 1 (roadmap 1.1–1.
 
 ### Interaction contract (1.3)
 
-- **User decision**: PointerSensor `activationConstraint: { delay: 200, tolerance: 5 }`; no distance constraint (dnd-kit's delay and distance constraints are mutually exclusive — verified). A plain click never starts a drag; the press falls through (caret placement in Task 3).
+- **User decision**: PointerSensor `activationConstraint: { delay: 50, tolerance: 5 }` — delay reduced from 200ms by user decision after trying the interface (2026-10-14: "start the drag as soon as the user holds"); no distance constraint (dnd-kit's delay and distance constraints are mutually exclusive — verified). A plain click never starts a drag; the press falls through (caret placement in Task 3).
 - KeyboardSensor with dnd-kit defaults: Space/Enter pick up and drop, arrow keys move, Escape cancels.
 - The values live in one named constant; tuning them later is a feel change, not a contract change.
 
@@ -42,7 +42,7 @@ Drag-based reordering of preview snippets for Feature 3 Task 1 (roadmap 1.1–1.
 ### Drag visuals & affordance (1.4)
 
 - **User decision**: DragOverlay floating chip (snippet tint at 0.3 alpha, elevated shadow) + dimmed original (~0.4 opacity); no axis restriction (the flow wraps lines, so vertical movement is required); no placeholder (shifting siblings are the placeholder in a text flow).
-- **User decision**: cursor `grab`/`grabbing`; hover = 1px outline in the snippet's own color — deliberate deviation from DESIGN.md's generic scale(1.03) hover (scaling inline chips distorts the reading line); `user-select: none` + `touch-action: none` on segments; theme focus ring for keyboard focus.
+- **User decision**: cursor `grab`/`grabbing`; hover = the background tint deepens slightly (alpha 0.3 → 0.4) in the snippet's own color — the 1px outline was removed by user decision after trying the interface (2026-10-14); still a deliberate deviation from DESIGN.md's generic scale(1.03) hover (scaling inline chips distorts the reading line); `user-select: none` + `touch-action: none` on segments; theme focus ring for keyboard focus.
 
 ### Screen-reader announcements (i18n)
 
@@ -70,7 +70,7 @@ Drag-based reordering of preview snippets for Feature 3 Task 1 (roadmap 1.1–1.
 - `preview-snippet` testid stays on the sortable element; new `preview-snippet-overlay` for the DragOverlay chip; all other testids unchanged.
 - DndContext/sensors/overlay owned per PreviewArea instance (Task 2 modal independence; no cross-instance dragging).
 - `closestCenter` collision detection + `rectSortingStrategy` (dnd-kit sortable defaults for wrapped/mixed layouts).
-- Sensor constant: one named `{ delay: 200, tolerance: 5 }` constant.
+- Sensor constant: one named `{ delay: 50, tolerance: 5 }` constant.
 - Announcement positions are 1-based.
 - New `SortableSegment` page sub-component under `src/pages/MergeSession/components/` with the standard 6-file split, exported via the page components barrel; PreviewArea keeps DndContext/SortableContext/overlay and the drag-end → `moveSnippet` wiring in its own files.
 - Exact dnd-kit item ARIA attribute defaults verified against `@dnd-kit/sortable` 10.0.0 during implementation (the spec requires focusability + instruction linkage, not specific attribute internals).

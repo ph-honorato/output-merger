@@ -1,6 +1,6 @@
 # Preview snippet dragging activates on press-and-hold (@dnd-kit)
 
-The preview surface will later host a contentEditable merged-text editor (Feature 3 Task 3) where a plain click must place the caret, so a sortable that starts dragging immediately on press would swallow clicks. We chose `@dnd-kit` (core + sortable) with a PointerSensor `{ delay, tolerance }` activation constraint — press-and-hold for ~200ms starts the drag, jitter up to the tolerance (5px) is forgiven, and movement beyond the tolerance cancels activation, falling through to click/scroll — plus a KeyboardSensor so the same reorder works without a pointer.
+The preview surface will later host a contentEditable merged-text editor (Feature 3 Task 3) where a plain click must place the caret, so a sortable that starts dragging immediately on press would swallow clicks. We chose `@dnd-kit` (core + sortable) with a PointerSensor `{ delay, tolerance }` activation constraint — press-and-hold for ~50ms starts the drag, jitter up to the tolerance (5px) is forgiven, and movement beyond the tolerance cancels activation, falling through to click/scroll — plus a KeyboardSensor so the same reorder works without a pointer.
 
 ## Considered Options
 
@@ -11,5 +11,5 @@ The preview surface will later host a contentEditable merged-text editor (Featur
 ## Consequences
 
 - Plain clicks never start a drag; the click surface stays free for Task 3's contentEditable caret placement (Task 3 adds a drag on/off toggle without changing this activation model).
-- The hold delay (200ms) and tolerance (5px) are tunable constants — changing them is a feel change, not a contract change.
+- The hold delay (50ms — reduced from 200ms after user feedback on 2026-10-14) and tolerance (5px) are tunable constants — changing them is a feel change, not a contract change.
 - Keyboard reordering (Space/Enter to pick up and drop, arrow keys to move, Escape to cancel) is part of the same contract and must survive the Task 3 document-model migration.

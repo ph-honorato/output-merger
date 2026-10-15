@@ -73,12 +73,12 @@ describe('SortableSegment', () => {
     expect(css).toContain(':focus-visible');
   });
 
-  it('links its hover affordance to the snippet color', () => {
+  it('deepens its hover tint to the snippet color', () => {
     renderSegment({ ...makeOrderedSnippet(), color: '#FF1493' }, 'text-1:a1');
 
     const css = Array.from(document.querySelectorAll('style'))
       .map((style) => style.textContent)
       .join('');
-    expect(css).toContain("outline:1px solid #FF1493");
+    expect(css).toContain('background-color:rgba(255, 20, 147, 0.4)');
   });
 });

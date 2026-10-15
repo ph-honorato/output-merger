@@ -18,7 +18,7 @@
 | `src/context/SnippetsContext/SnippetsContext.tsx` | Modified: `moveSnippet` useCallback (stable reference) included in the memoized context value |
 | `src/context/SnippetsContext/index.ts` | Modified: `MoveSnippetAction` exported from the barrel |
 | `src/pages/MergeSession/components/SortableSegment/` | New page-owned component (standard 6-file split): one sortable snippet chip — `useSortable` wiring (attributes/listeners/ref/transform), tint, dim-while-dragging, affordance styles |
-| `src/pages/MergeSession/components/PreviewArea/PreviewArea.hook.tsx` | Modified: `SNIPPET_DRAG_ACTIVATION` (`{ delay: 200, tolerance: 5 }`), `buildSortableId` (`${sourceId}:${id}`), sensors (PointerSensor hold-to-drag + KeyboardSensor), `activeSnippet` overlay state, drag start/end/cancel handlers (drag-end → `moveSnippet`), positions-only announcements, screen-reader instructions |
+| `src/pages/MergeSession/components/PreviewArea/PreviewArea.hook.tsx` | Modified: `SNIPPET_DRAG_ACTIVATION` (`{ delay: 50, tolerance: 5 }`), `buildSortableId` (`${sourceId}:${id}`), sensors (PointerSensor hold-to-drag + KeyboardSensor), `activeSnippet` overlay state, drag start/end/cancel handlers (drag-end → `moveSnippet`), positions-only announcements, screen-reader instructions |
 | `src/pages/MergeSession/components/PreviewArea/PreviewArea.tsx` | Modified: per-instance `DndContext` (closestCenter, accessibility, handlers) + `SortableContext` (rectSortingStrategy) wrapping the segment flow; space separators stay outside the sortable elements; `DragOverlay` (zIndex 200, `dropAnimation={null}`) renders the overlay chip with `data-testid="preview-snippet-overlay"` |
 | `src/pages/MergeSession/components/PreviewArea/PreviewArea.styles.ts` | Modified: `Segment` moved to SortableSegment; new `OverlayChip` (snippet tint via inline style, `cursor: grabbing`, elevated shadow, `white-space: pre-wrap`) |
 | `src/pages/MergeSession/components/index.ts` | Modified: `SortableSegment` exported (listed first — see §3) |
@@ -27,7 +27,7 @@
 | `src/test/setup.ts` | Modified: no-op `Element.prototype.scrollIntoView` shim (jsdom lacks it; dnd-kit's keyboard pickup calls it inside a scrollable container) |
 | `src/context/SnippetsContext/SnippetsContext.test.tsx` | +13 tests: reducer `MOVE_SNIPPET` units (moves, cross-source, dense renumber from gaps, repeat-move density, all no-op guards, id-collision reorder, resize-after-move) + provider `moveSnippet` tests (reorder, no-ops, stable reference) |
 | `src/pages/MergeSession/components/PreviewArea/PreviewArea.test.tsx` | +21 tests in three new suites (affordances, keyboard sorting, pointer sorting) + mid-drag discard hook test |
-| `src/pages/MergeSession/components/SortableSegment/SortableSegment.test.tsx` | +5 unit tests (render/tint, sortable semantics, affordance styles, focus-ring rule, hover outline color) |
+| `src/pages/MergeSession/components/SortableSegment/SortableSegment.test.tsx` | +5 unit tests (render/tint, sortable semantics, affordance styles, focus-ring rule, hover tint deepening) |
 | `src/pages/MergeSession/components/TutorialBanner/TutorialBanner.test.tsx` | Updated: 6 steps with exact new copy; keys test asserts exact approved copy for steps 4–6 in both languages; language-switch test asserts the restructured steps in pt-BR and en-US |
 | `src/pages/MergeSession/MergeSessionPage.test.tsx` | Updated: tutorial step-count assertion 4 → 6 |
 
@@ -76,9 +76,9 @@ case 'MOVE_SNIPPET': {
 ```
 
 - **Reorder state (1.2)**: `moveSnippet(fromIndex, toIndex)` is a 0-based, global-sequence API on the context; `MOVE_SNIPPET` splices then renumbers dense. Interleaves safely with `SET_SOURCE_SNIPPETS` (id-based reconciliation keeps a moved/resized snippet at its renumbered order — unit-tested).
-- **Activation (1.3)**: PointerSensor `activationConstraint: { delay: 200, tolerance: 5 }` (one named constant, `SNIPPET_DRAG_ACTIVATION`) — release before the delay never drags; a hold wiggling >5px cancels activation; a plain click falls through (Task 3 caret contract). KeyboardSensor with dnd-kit's default bindings (Space/Enter pick up and drop, arrows move, Escape cancels) and `sortableKeyboardCoordinates`.
+- **Activation (1.3)**: PointerSensor `activationConstraint: { delay: 50, tolerance: 5 }` (one named constant, `SNIPPET_DRAG_ACTIVATION`) — release before the delay never drags; a hold wiggling >5px cancels activation; a plain click falls through (Task 3 caret contract). KeyboardSensor with dnd-kit's default bindings (Space/Enter pick up and drop, arrows move, Escape cancels) and `sortableKeyboardCoordinates`.
 - **Sorting surface (1.4)**: sortable wiring renders whenever ≥1 snippet exists (no merge-mode gate); the empty-state branch is untouched and mounts no DndContext; a single snippet keeps the same affordances and drags inertly. Space separators stay outside the sortable wrappers, so the flow's textContent keeps equaling `buildMergedText(snippets)` in any order (asserted for the reordered state too).
-- **Drag visuals**: DragOverlay floating chip in the snippet's own tint (0.3 alpha) with an elevated shadow and `preview-snippet-overlay` testid; the in-place origin dims to 0.4 opacity; siblings shift via the rectSortingStrategy transform. Chip affordances: `cursor: grab` (idle) / `grabbing` (overlay chip), 1px hover outline in the snippet's own color, `user-select: none` + `touch-action: none` (+ `-webkit-touch-callout: none`), theme focus ring (`:focus-visible`, 2px primary, offset 2px per DESIGN.md Inputs).
+- **Drag visuals**: DragOverlay floating chip in the snippet's own tint (0.3 alpha) with an elevated shadow and `preview-snippet-overlay` testid; the in-place origin dims to 0.4 opacity; siblings shift via the rectSortingStrategy transform. Chip affordances: `cursor: grab` (idle) / `grabbing` (overlay chip), hover deepens the chip tint (alpha 0.3 → 0.4) in the snippet's own color, `user-select: none` + `touch-action: none` (+ `-webkit-touch-callout: none`), theme focus ring (`:focus-visible`, 2px primary, offset 2px per DESIGN.md Inputs).
 - **Announcements**: dnd-kit `accessibility.announcements` built from the five i18n keys, positions-only, 1-based (`{{index}} of {{count}}`); `screenReaderInstructions.draggable` from the `instructions` key, linked to every chip via `aria-describedby` (dnd-kit's mechanism). All strings follow the active language.
 - **Tutorial**: six steps (1–3 unchanged; step 4 "Your snippets appear in the preview."; step 5 "Hold and drag a snippet in the preview to change its order."; step 6 "Copy the merged text when you are done."), with the approved pt-BR copy; banner + page step-count assertions updated 4 → 6.
 
@@ -94,7 +94,7 @@ case 'MOVE_SNIPPET': {
 - **Page barrel ordering.** `SortableSegment` is exported first in `components/index.ts` and PreviewArea imports it via the barrel (`from '../'`, per the AGENTS.md barrel rule). This creates a PreviewArea ↔ barrel module cycle that is safe because the binding is only dereferenced at render time; listing SortableSegment first makes the evaluation order trivially safe. Verified under vitest, `tsc -b`, and the production Rollup build.
 - **`buildSortableId`** exported from `PreviewArea.hook.tsx` (codebase precedent: pure helpers exported from hook files) and unit-tested for the cross-source id-collision case.
 - **Verified against `@dnd-kit/sortable` 10.0.0 / `@dnd-kit/core` 6.3.1 source** (as the spec's flagged assumption required): sortable item attributes are `role="button"`, `tabIndex: 0`, `aria-roledescription="sortable"`, `aria-describedby` → the hidden instructions element (`DndDescribedBy-N`), plus `aria-pressed` while dragging; the live region is `<div role="status" aria-live="assertive">`; keyboard bindings are start Space/Enter, move arrows, end Space/Enter/Tab, cancel Escape (Tab-to-drop is a dnd-kit default binding, kept).
-- **jsdom shims for dnd-kit under test** (test-only, no product impact): `Element.prototype.scrollIntoView` no-op (keyboard pickup calls it when a scrollable ancestor exists — jsdom lacks the method), `getBoundingClientRect` mocks per test (jsdom computes no layout; dnd-kit's rect-based collision needs rects), fake timers only for the pointer describe (the 200ms activation delay), and a microtask flush after drag end/cancel events (dnd-kit's end handler settles the DragOverlay unmount through a promise chain).
+- **jsdom shims for dnd-kit under test** (test-only, no product impact): `Element.prototype.scrollIntoView` no-op (keyboard pickup calls it when a scrollable ancestor exists — jsdom lacks the method), `getBoundingClientRect` mocks per test (jsdom computes no layout; dnd-kit's rect-based collision needs rects), fake timers only for the pointer describe (the 50ms activation delay), and a microtask flush after drag end/cancel events (dnd-kit's end handler settles the DragOverlay unmount through a promise chain).
 
 ---
 
@@ -102,10 +102,10 @@ case 'MOVE_SNIPPET': {
 
 - **Reducer units (SnippetsContext.test.tsx, +10)**: move within a source; move across sources (sourceId never changes); dense renumber from a gapped state; repeat-move keeps 1..n dense; same-index and both out-of-bounds no-ops return the same reference; id-collision reorder resolves array indexes; a later resize keeps the moved snippet at its reordered position.
 - **Provider tests (+3)**: `moveSnippet` reorders the global sequence with dense orders; no-ops on equal/out-of-bounds indexes; stable `moveSnippet` reference across re-renders and state changes.
-- **SortableSegment units (+5)**: snippet text + tint on the `preview-snippet` element; dnd-kit's exact sortable semantics (role/tabIndex/aria-roledescription/aria-describedby); affordance styles (grab cursor, user-select, touch-action); `:focus-visible` rule present in generated CSS; hover outline in the snippet's own color.
-- **PreviewArea affordances (+9)**: five sorting keys ship verbatim in BOTH resource files; activation constant equals `{ delay: 200, tolerance: 5 }`; composite sortable ids stay unique across colliding ids; every segment is a focusable sortable item linked to the instructions element; affordance styles on all segments; hover outline colors; no drag wiring mounts while empty (no live region); instructions text follows the active language; the mid-drag discard path (vanished id / no target / own position) leaves the state identical and clears the overlay state.
+- **SortableSegment units (+5)**: snippet text + tint on the `preview-snippet` element; dnd-kit's exact sortable semantics (role/tabIndex/aria-roledescription/aria-describedby); affordance styles (grab cursor, user-select, touch-action); `:focus-visible` rule present in generated CSS; hover tint deepening.
+- **PreviewArea affordances (+9)**: five sorting keys ship verbatim in BOTH resource files; activation constant equals `{ delay: 50, tolerance: 5 }`; composite sortable ids stay unique across colliding ids; every segment is a focusable sortable item linked to the instructions element; affordance styles on all segments; hover tint deepening; no drag wiring mounts while empty (no live region); instructions text follows the active language; the mid-drag discard path (vanished id / no target / own position) leaves the state identical and clears the overlay state.
 - **PreviewArea keyboard sorting (+6)**: Space → ArrowRight → Space reorders [Alpha, Beta, Gamma] → [Beta, Alpha, Gamma] with flow textContent equal to `buildMergedText` of the new order; Escape cancels with the order unchanged and the overlay cleared; a single snippet drags but stays inert; live region announces started/over/ended ("Picked up snippet 1 of 3." → "Snippet is now over position 2 of 3." → "Snippet dropped at position 2 of 3."); cancellation announces "Snippet reorder cancelled."; pt-BR announcement copy ("Trecho 1 de 3 pego." / "Reordenação do trecho cancelada.").
-- **PreviewArea pointer sorting (+6, fake timers + mocked rects)**: hold 150ms → nothing; +50ms → drag activates (overlay chip present with tint and `grabbing` cursor, origin dimmed to 0.4, sibling shifted via transform), move over Beta → release → live region announces the drop and the order flips; release before the delay never drags (even after advancing past 200ms); a >5px wiggle during the hold cancels activation; release on the item's own position leaves the order unchanged; Escape cancels an activated drag; a single snippet drags inertly.
+- **PreviewArea pointer sorting (+6, fake timers + mocked rects)**: hold 25ms → nothing; +25ms → drag activates (overlay chip present with tint and `grabbing` cursor, origin dimmed to 0.4, sibling shifted via transform), move over Beta → release → live region announces the drop and the order flips; release before the delay never drags (even after advancing past 50ms); a >5px wiggle during the hold cancels activation; release on the item's own position leaves the order unchanged; Escape cancels an activated drag; a single snippet drags inertly.
 - **Tutorial**: banner renders 6 `<li>` with the exact restructured copy; keys ship verbatim in both languages; all six steps render in pt-BR after a language switch and back; the page tutorial lifecycle test passes with the updated count (4 → 6).
 - **Spec's jsdom fallback NOT triggered**: the fake-timer PointerSensor simulation proved reliable (all six pointer tests green against `@dnd-kit/core` 6.3.1 with the documented mocks), so the full pointer path is part of the automated contract and no manual-only pointer verification is owed.
 - Verification: `npx vitest run` (154/154 green across 12 files), `npm run lint` (oxlint, clean), `npx tsc -b` (clean), `npm run build` (clean; bundle now includes dnd-kit — the >500 kB chunk-size note is informational).
@@ -118,7 +118,7 @@ case 'MOVE_SNIPPET': {
 | -- | ------ | ---- |
 | DRAG-01 | Verified | Every segment registered in `SortableContext` keyed by `${sourceId}:${id}` — test: all 3 segments focusable/linked; composite-id uniqueness unit test |
 | DRAG-02 | Verified | Pointer tests: release at 150ms never drags; >5px move during the hold cancels activation (no overlay, order unchanged) |
-| DRAG-03 | Verified | Pointer test: at 200ms the overlay chip is visible and the overlay carries `cursor: grabbing` |
+| DRAG-03 | Verified | Pointer test: at 50ms the overlay chip is visible and the overlay carries `cursor: grabbing` |
 | DRAG-04 | Verified | Pointer + keyboard reorder tests end in `moveSnippet(0, 1)` and [Beta, Alpha, Gamma]; reducer/provider suites |
 | DRAG-05 | Verified | Escape (pointer + keyboard), own-position release, and no-target release all leave the order unchanged (tests in both suites) |
 | DRAG-06 | Verified | Reducer tests: splice/reinsert + dense 1..n renumber; result always sorted by order |
@@ -136,7 +136,7 @@ case 'MOVE_SNIPPET': {
 | DRAG-18 | Verified | Announcement strings built from index/count only — no snippet text is interpolated (code + asserted content) |
 | DRAG-19 | Verified | Overlay chip: `preview-snippet-overlay` testid, snippet tint rgba(...,0.3), elevated shadow (styles), renders mid-drag in both pointer and keyboard tests; pointer-following is DragOverlay's contract driven by the same pointer moves the reorder test depends on — visual feel listed for the dev-server pass |
 | DRAG-20 | Verified | Origin dimmed to opacity 0.4 (pointer + keyboard assertions); sibling shift asserted via transform during the drag |
-| DRAG-21 | Verified | `cursor: grab` on chips, `grabbing` on the overlay chip, 1px hover outline in the snippet's own color (style + generated-CSS assertions) |
+| DRAG-21 | Verified | `cursor: grab` on chips, `grabbing` on the overlay chip, hover deepens the tint in the snippet's own color (generated-CSS assertions) |
 | DRAG-22 | Verified | `user-select: none` + `touch-action: none` asserted on every segment (`-webkit-touch-callout: none` also set) |
 | DRAG-23 | Verified | `:focus-visible` 2px theme-primary ring, offset 2px (DESIGN.md Inputs); rule asserted in generated CSS — visual rendering on real focus needs a browser (manual item below) |
 | DRAG-24 | Verified | Separators rendered outside the sortable elements; flow textContent equals `buildMergedText` before and after reordering |
@@ -169,9 +169,22 @@ None. All 33 requirements were implemented to the spec's contract; no requiremen
 
 Manual dev-server verification for the tester sub-agent (things jsdom cannot see or feel):
 
-- Pointer-drag **feel**: 200ms hold cadence, 5px tolerance forgiveness, the overlay chip following the cursor, grab/grabbing cursors, hover outline, siblings shifting to make room, and the drop with no animation.
+- Pointer-drag **feel**: 50ms hold cadence, 5px tolerance forgiveness, the overlay chip following the cursor, grab/grabbing cursors, hover tint deepening, siblings shifting to make room, and the drop with no animation.
 - Touch long-press: native selection/callout/scroll suppression via `user-select`/`touch-action`/`-webkit-touch-callout`.
 - The visible focus ring when a segment receives keyboard focus (rule shipped and CSS-asserted; jsdom cannot match `:focus-visible`).
 - Overlay elevation/z-index appearance within the preview surface (zIndex 200 per DESIGN.md).
 
 Deferred by spec (not gaps): preview modal re-mount of the sortable PreviewArea (Task 2 — only the per-instance wiring constraint was honored), editable surface/contentEditable (Task 3 — ADR 0002 records the activation contract it must honor), document-model migration (Task 3.1), undo/multi-select/cross-instance dragging/persistence (no v0 home).
+
+---
+
+## 8. Post-implementation adjustments (2026-10-14)
+
+The user tried the interface in the dev server and requested two feel changes. Both were implemented the same day, with the spec, context, and ADR 0002 amended accordingly:
+
+1. **Hold delay reduced 200ms → 50ms** ("start the drag as soon as the user holds"). `SNIPPET_DRAG_ACTIVATION` is the one-line change; the constant-pin test and the pointer-suite timings were updated (25ms below-delay checks, 50ms activation). The click-vs-hold contract is unchanged — a plain click still never starts a drag, so Task 3's caret fall-through stays protected.
+2. **Hover affordance replaced**: the 1px own-color outline was removed; hovering now deepens the chip's background tint slightly (alpha 0.3 → 0.4, still in the snippet's own color). The tint moved from an inline style into the `SegmentChip` styled component (a class rule is required for the `:hover` state to win); the `:focus-visible` keyboard outline is unchanged. Hover tests in `SortableSegment.test.tsx` and `PreviewArea.test.tsx` now assert the deepened tint and the absence of a hover outline.
+
+Verification after both changes: `npx vitest run` (154/154), `npm run lint` (clean), `npx tsc -b` (clean).
+
+Roadmap note: the follow-up item "Task 1.6: Add user feedback while sorting" was added to the roadmap by user decision (addressed later); it is out of scope for these two adjustments.

@@ -23,7 +23,7 @@ import type { OrderedSnippet } from '../../../../context/SnippetsContext';
  * tolerance — a plain click never starts a drag. Tuning these values is a
  * feel change, not a contract change.
  */
-export const SNIPPET_DRAG_ACTIVATION = { delay: 200, tolerance: 5 } as const;
+export const SNIPPET_DRAG_ACTIVATION = { delay: 50, tolerance: 5 } as const;
 
 /**
  * Composite sortable id for a merge-ordered snippet: `${sourceId}:${id}`.

@@ -8,9 +8,9 @@ The MergeSession preview (Feature 2 Task 4) renders the merge-ordered snippets a
 
 - [ ] `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities` are installed at the verified-compatible versions and compile against React 19.
 - [ ] SnippetsContext gains a `MOVE_SNIPPET` reducer action and a `moveSnippet(fromIndex, toIndex)` API (0-based, global merge sequence) with no-op guards and dense renumbering.
-- [ ] Sensors: PointerSensor with `activationConstraint: { delay: 200, tolerance: 5 }` (hold-to-drag; plain click never drags) and KeyboardSensor with the default bindings.
+- [ ] Sensors: PointerSensor with `activationConstraint: { delay: 50, tolerance: 5 }` (hold-to-drag; plain click never drags) and KeyboardSensor with the default bindings.
 - [ ] PreviewArea segments are sortable (DndContext + SortableContext + DragOverlay), drag-end wired to `moveSnippet`; space separators, the empty state, and existing data-testids keep working.
-- [ ] Drag affordances: `grab`/`grabbing` cursors, color-matched hover outline, dimmed origin with a floating overlay chip, theme focus ring, `user-select`/`touch-action` guards.
+- [ ] Drag affordances: `grab`/`grabbing` cursors, slightly deepened background tint on hover, dimmed origin with a floating overlay chip, theme focus ring, `user-select`/`touch-action` guards.
 - [ ] Screen-reader announcement and instruction strings exist in en-US and pt-BR under `pages.mergeSession.previewArea.sorting.*`.
 - [ ] The tutorial is restructured to six steps (both languages) so the hold-drag is discoverable; banner/page step-count assertions update 4 → 6.
 - [ ] Tests: reducer MOVE units, provider `moveSnippet`, keyboard sorting, a fake-timer pointer hold-drag, and a click-never-drags contract test; existing suites keep passing.
@@ -42,12 +42,12 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
 | Library & versions | `@dnd-kit/core` 6.3.1 + `@dnd-kit/sortable` 10.0.0 + `@dnd-kit/utilities` 3.2.2 | Settled pre-session: dnd-kit's PointerSensor activation constraints natively express hold-to-drag (@hello-pangea/dnd cannot); peer ranges verified against React 19.2.8 (core: react ≥16.8; sortable: core ^6.3.0) | y (settled; compatibility verified by agent) |
-| Activation contract | PointerSensor `activationConstraint: { delay: 200, tolerance: 5 }`; no distance constraint (dnd-kit's delay and distance constraints are mutually exclusive — verified) | Press-and-hold feel between mouse (150–250ms) and touch (500ms) conventions; tolerance forgives a shaky hold; a plain click must never drag (Task 3 caret) | y (grilled) |
+| Activation contract | PointerSensor `activationConstraint: { delay: 50, tolerance: 5 }` — delay reduced from 200ms by user decision 2026-10-14 ("start the drag as soon as the user holds"); no distance constraint (dnd-kit's delay and distance constraints are mutually exclusive — verified) | A near-immediate hold still never swallows a plain click (Task 3 caret contract preserved); tolerance forgives a shaky hold; the value is a feel-tunable named constant | y (grilled; amended 2026-10-14) |
 | Reorder state model | `MOVE_SNIPPET`: splice fromIndex→toIndex, then renumber the whole sequence dense 1..n; `moveSnippet(fromIndex, toIndex)` on the context, 0-based, global sequence | Arbitrary moves are inexpressible by touching only the moved item's integer order (ADR 0001's gaps); dense renumber is always correct; ADR 0001 amended to sanction it | y (grilled) |
 | Activation window | Sortable wiring renders whenever ≥1 snippet exists; no merge-mode gate; empty-state branch untouched | Snippets only exist in Merge Mode today (needles create them in view mode), so a gate adds coupling without behavior | y (grilled) |
 | Single snippet | Stays draggable-but-inert (same affordance, drag has no effect) | Zero special-case code; uniform affordance | y (grilled) |
 | Drag visuals | DragOverlay floating chip (snippet tint, elevated shadow) + dimmed original (~0.4 opacity); no axis restriction; no placeholder | In-place transforms glitch on wrapped inline text; the flow wraps lines so vertical movement is required; shifting siblings are the placeholder in a text flow | y (grilled) |
-| Chip affordance | Cursor `grab`/`grabbing`; hover = 1px outline in the snippet's own color; `user-select: none` + `touch-action: none`; theme focus ring | Deliberate deviation from DESIGN.md's generic scale(1.03) hover (scaling inline chips distorts the reading line); guards against native selection/scroll during the hold | y (grilled) |
+| Chip affordance | Cursor `grab`/`grabbing`; hover = the background tint deepens slightly (alpha 0.3 → 0.4) in the snippet's own color, no outline (outline removed by user decision 2026-10-14); `user-select: none` + `touch-action: none`; theme focus ring | Deliberate deviation from DESIGN.md's generic scale(1.03) hover (scaling inline chips distorts the reading line); guards against native selection/scroll during the hold | y (grilled; hover amended 2026-10-14) |
 | Screen-reader announcements | Positions-only ("{{index}} of {{count}}"); five flat keys under `pages.mergeSession.previewArea.sorting.*`; draft copy approved during grilling | Snippet text can be long/noisy; the item's accessible name is its text already; matches the existing flat-key convention | y (grilled) |
 | Tutorial | Restructured to six steps (step 4 split; new reorder step; new copy step); banner + page step-count assertions 4 → 6 | Hold-to-drag is undiscoverable by inspection; reorder is a core v0 capability | y (grilled) |
 | Records | ADR 0002 (hold-to-drag contract) + ADR 0001 Consequences amendment (sole sanctioned renumbering writer); no GLOSSARY changes | The contract is hard to reverse (Task 3 depends on it), surprising (future readers may "fix" the delay away), and a real trade-off — ADR triple test passes | y (grilled) |
@@ -60,7 +60,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 | Item semantics | Segments get dnd-kit's default button semantics (role, tabIndex 0, instruction linkage via aria-describedby); the exact attribute set is verified against `@dnd-kit/sortable` 10.0.0 during implementation | The spec requires focusability + instruction linkage, not specific attribute internals | n (agent default — flagged) |
 | Component ownership | New `SortableSegment` page sub-component under `src/pages/MergeSession/components/` with the standard 6-file split, exported via the page components barrel; PreviewArea keeps DndContext/SortableContext/overlay + drag-end wiring in its own files | AGENTS.md component rules + Task 4 precedent (page-owned pieces) | n (agent default) |
 | No-op guards | `MOVE_SNIPPET` no-ops on `fromIndex === toIndex`, out-of-bounds indexes, or a dragged id deleted mid-drag (reorder discarded) | State safety for programmatic and race-y paths | n (agent default) |
-| Sensor constant | One named constant holds `{ delay: 200, tolerance: 5 }` so tuning is a one-line change | Feel values must be findable in one place | n (agent default) |
+| Sensor constant | One named constant holds `{ delay: 50, tolerance: 5 }` so tuning is a one-line change | Feel values must be findable in one place | n (agent default) |
 | Interpolation base | Announcement positions are 1-based | Human counting for screen readers | n (agent default) |
 | Overlay chip styling | Snippet tint at 0.3 alpha (matches segments), shadow lift per DESIGN.md depth, wraps long/multi-line text (`white-space: pre-wrap`) | DESIGN.md elevation language; no layout stretch | n (agent default) |
 | Pointer drag in jsdom | Fake timers + mocked `getBoundingClientRect` drive the PointerSensor hold-drag test; IF the simulation proves unreliable THEN the click-never-drags + reducer + keyboard suites remain the automated contract and the full pointer path is verified manually in the dev server | jsdom does not compute layout; dnd-kit's rect-based collision needs mocked rects | n (agent default — flagged) |
@@ -96,12 +96,12 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 **Acceptance Criteria**:
 
 1. WHILE the preview contains one or more snippets THEN every snippet segment SHALL be registered as a sortable item (DndContext + SortableContext) keyed by its composite id `sourceId:id`.
-2. WHEN a pointer press on a segment ends before 200ms elapse, or moves more than 5px before the delay elapses THEN NO drag SHALL start: no reorder and no drag visuals — the press falls through as a click.
-3. WHEN a pointer press is held for 200ms while moving at most 5px THEN the drag SHALL activate: the `grabbing` cursor applies and the drag overlay becomes visible.
+2. WHEN a pointer press on a segment ends before 50ms elapse, or moves more than 5px before the delay elapses THEN NO drag SHALL start: no reorder and no drag visuals — the press falls through as a click.
+3. WHEN a pointer press is held for 50ms while moving at most 5px THEN the drag SHALL activate: the `grabbing` cursor applies and the drag overlay becomes visible.
 4. WHEN an activated drag is released over a different snippet's position THEN PreviewArea SHALL call `moveSnippet(fromIndex, toIndex)` (0-based indexes into the merge-ordered list) and the merge order SHALL change accordingly.
 5. WHEN an activated drag is cancelled (Escape, release over no sortable target, or release on the item's own position) THEN the merge order SHALL remain unchanged.
 
-**Independent Test**: In jsdom with fake timers and mocked item rects: pointerDown on segment A + advance 150ms + pointerUp ⇒ order unchanged (click never drags); pointerDown + advance 200ms + move over B + pointerUp ⇒ `moveSnippet` dispatched and the rendered order flips; Escape or release with no target ⇒ order unchanged.
+**Independent Test**: In jsdom with fake timers and mocked item rects: pointerDown on segment A + advance 25ms + pointerUp ⇒ order unchanged (click never drags); pointerDown + advance 50ms + move over B + pointerUp ⇒ `moveSnippet` dispatched and the rendered order flips; Escape or release with no target ⇒ order unchanged.
 
 ---
 
@@ -181,7 +181,7 @@ Keys under `pages.mergeSession.previewArea.sorting` (copy approved during grilli
 
 1. WHILE a drag is active THEN a DragOverlay chip SHALL render the dragged snippet in its own tint (color at 0.3 alpha) with an elevated shadow and `data-testid="preview-snippet-overlay"`, following the pointer.
 2. WHILE a drag is active THEN the in-place dragged segment SHALL dim to ~0.4 opacity and the remaining segments SHALL shift to make room.
-3. WHILE idle over a segment THEN the cursor SHALL be `grab` and hover SHALL show a 1px outline in the snippet's own color; WHILE dragging the cursor SHALL be `grabbing`. (Deliberate deviation from DESIGN.md's scale(1.03) hover — recorded in the context file.)
+3. WHILE idle over a segment THEN the cursor SHALL be `grab` and hover SHALL slightly deepen the segment's background tint (alpha 0.3 → 0.4) in its own color, with no outline; WHILE dragging the cursor SHALL be `grabbing`. (Deliberate deviation from DESIGN.md's scale(1.03) hover — recorded in the context file.)
 4. Segments SHALL set `user-select: none` and `touch-action: none` so press-and-hold never starts native text selection or scroll hijack.
 5. WHEN a segment receives keyboard focus THEN a visible theme focus ring SHALL render.
 
@@ -242,7 +242,7 @@ Keys under `pages.mergeSession.tutorial` (steps 1–3 unchanged; step 4 modified
 
 ## Edge Cases
 
-- IF a pointer press is released before 200ms THEN no drag starts; today nothing happens on the read-only segments, and in Task 3 the same click will place the caret — this is the contract this feature protects.
+- IF a pointer press is released before 50ms THEN no drag starts; today nothing happens on the read-only segments, and in Task 3 the same click will place the caret — this is the contract this feature protects.
 - IF the pointer moves more than 5px during the hold THEN activation is cancelled and the gesture falls through to click/scroll.
 - IF the user drag-ends outside any sortable target (empty preview space, outside the flow) THEN the order is unchanged.
 - IF the user presses Escape during an active drag THEN the drag is cancelled, the order is unchanged, and the cancelled announcement fires.
@@ -308,7 +308,7 @@ Each requirement gets a unique ID for tracking across design, tasks, and validat
 
 How we know the feature is successful:
 
-- [ ] Holding a snippet ~200ms shows the `grabbing` cursor and the floating overlay chip; siblings shift; dropping over another snippet reorders the flow, and the copy button outputs the new order.
+- [ ] Holding a snippet ~50ms shows the `grabbing` cursor and the floating overlay chip; siblings shift; dropping over another snippet reorders the flow, and the copy button outputs the new order.
 - [ ] A quick click, and a hold that wiggles more than 5px, never start a drag.
 - [ ] Keyboard: Tab → Space → arrows → Space reorders; Escape cancels; focus rings are visible on every segment.
 - [ ] The screen-reader live region announces start/over/end/cancel in the active language (en-US and pt-BR both ship).

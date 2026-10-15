@@ -340,7 +340,7 @@ describe("PreviewArea sorting affordances", () => {
   });
 
   it("exposes the hold-to-drag activation constant in one place", () => {
-    expect(SNIPPET_DRAG_ACTIVATION).toEqual({ delay: 200, tolerance: 5 });
+    expect(SNIPPET_DRAG_ACTIVATION).toEqual({ delay: 50, tolerance: 5 });
   });
 
   it("builds composite sortable ids that stay unique across colliding source ids", () => {
@@ -387,7 +387,7 @@ describe("PreviewArea sorting affordances", () => {
     });
   });
 
-  it("hovers with a 1px outline in the snippet's own color", () => {
+  it("deepens the segment tint slightly on hover and ships no hover outline", () => {
     renderWithProviders([
       ["text-1", [makeSnippet("a1", "Hello", "#0080FF")]],
       ["text-2", [makeSnippet("b1", "Alpha", "#FF1493")]],
@@ -396,8 +396,9 @@ describe("PreviewArea sorting affordances", () => {
     const css = Array.from(document.querySelectorAll("style"))
       .map((style) => style.textContent)
       .join("");
-    expect(css).toContain("outline:1px solid #0080FF");
-    expect(css).toContain("outline:1px solid #FF1493");
+    expect(css).toContain("background-color:rgba(0, 128, 255, 0.4)");
+    expect(css).toContain("background-color:rgba(255, 20, 147, 0.4)");
+    expect(css).not.toContain("outline:1px solid");
   });
 
   it("mounts no drag wiring while the preview is empty", () => {
@@ -567,18 +568,18 @@ describe("PreviewArea pointer sorting", () => {
       clientY: y,
     });
 
-  it("starts the drag only after a 200ms hold and reorders on release", async () => {
+  it("starts the drag only after a 50ms hold and reorders on release", async () => {
     renderWithProviders(seedInterleaved());
     const [alpha] = screen.getAllByTestId("preview-snippet");
 
     pointerDownOn(alpha);
     act(() => {
-      vi.advanceTimersByTime(150);
+      vi.advanceTimersByTime(25);
     });
     expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
 
     act(() => {
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(25);
     });
     const overlay = screen.getByTestId("preview-snippet-overlay");
     expect(overlay).toHaveTextContent("Alpha");
@@ -613,11 +614,11 @@ describe("PreviewArea pointer sorting", () => {
 
     pointerDownOn(alpha);
     act(() => {
-      vi.advanceTimersByTime(150);
+      vi.advanceTimersByTime(25);
     });
     fireEvent.pointerUp(document, { pointerId: 1 });
     act(() => {
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(75);
     });
 
     expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
@@ -633,7 +634,7 @@ describe("PreviewArea pointer sorting", () => {
     pointerDownOn(alpha, 40, 10);
     fireEvent.pointerMove(document, { pointerId: 1, clientX: 70, clientY: 10 });
     act(() => {
-      vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(50);
     });
     fireEvent.pointerUp(document, { pointerId: 1 });
 
@@ -649,7 +650,7 @@ describe("PreviewArea pointer sorting", () => {
 
     pointerDownOn(alpha);
     act(() => {
-      vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(50);
     });
     fireEvent.pointerUp(document, { pointerId: 1 });
     await act(async () => {});
@@ -666,7 +667,7 @@ describe("PreviewArea pointer sorting", () => {
 
     pointerDownOn(alpha);
     act(() => {
-      vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(50);
     });
     expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
 
@@ -685,7 +686,7 @@ describe("PreviewArea pointer sorting", () => {
 
     pointerDownOn(only);
     act(() => {
-      vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(50);
     });
     expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
 
