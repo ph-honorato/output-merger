@@ -18,10 +18,26 @@ function PreviewArea(props: PreviewAreaProps) {
     announcements,
     screenReaderInstructions,
     activeSnippet,
+    dropIndicatorIndex,
     handleDragStart,
     handleDragEnd,
+    handleDragOver,
     handleDragCancel,
   } = usePreviewArea();
+
+  // The needle renders exactly once, at the dragged snippet's landing
+  // slot: right after the snippet that precedes the slot (so it stays
+  // on the earlier line at a wrap boundary), before the separator of
+  // the snippet currently occupying the slot, or after the last
+  // snippet for the trailing slot. Decorative: no text, hidden from
+  // assistive tech (the sorting.* announcements cover non-visual
+  // feedback).
+  const renderDropIndicator = (slot: number) =>
+    dropIndicatorIndex === slot ? (
+      <S.DropIndicator data-testid="preview-drop-indicator" aria-hidden="true">
+        <S.DropIndicatorBar />
+      </S.DropIndicator>
+    ) : null;
 
   return (
     <S.PreviewAreaRoot data-testid="preview-area" className={className}>
@@ -37,12 +53,14 @@ function PreviewArea(props: PreviewAreaProps) {
           accessibility={{ announcements, screenReaderInstructions }}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          onDragOver={handleDragOver}
           onDragCancel={handleDragCancel}
         >
           <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
             <S.SegmentFlow data-testid="preview-segment-flow">
               {snippets.map((snippet, index) => (
                 <Fragment key={sortableIds[index]}>
+                  {renderDropIndicator(index)}
                   {index > 0 ? ' ' : null}
                   <SortableSegment
                     snippet={snippet}
@@ -50,6 +68,7 @@ function PreviewArea(props: PreviewAreaProps) {
                   />
                 </Fragment>
               ))}
+              {renderDropIndicator(snippets.length)}
             </S.SegmentFlow>
           </SortableContext>
           <DragOverlay zIndex={200} dropAnimation={null}>

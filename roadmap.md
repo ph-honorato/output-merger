@@ -58,7 +58,7 @@
     - [x] Task 1.3: Configure sensors: PointerSensor with hold-to-drag activation constraint (delay + tolerance) and KeyboardSensor for accessibility
     - [x] Task 1.4: Make preview segments sortable (DndContext + SortableContext), wiring drag end to `moveSnippet`, keeping space separators and empty state working
     - [x] Task 1.5: Tests: reducer reorder unit tests + component drag/keyboard sorting tests
-    - [ ] Task 1.6: Add user feedback while sorting
+    - [x] Task 1.6: Add user feedback while sorting
   - [ ] **Task 2: Preview Area Modal** - Open the preview area on a modal (bigger view of the same preview)
     - [ ] Task 2.1: Create PreviewModal component in MergeSession components folder (MUI Dialog, full component structure)
     - [ ] Task 2.2: Add open-preview button to the PreviewToolbar with translations (en-US/pt-BR)

@@ -10,6 +10,7 @@ import type {
   Announcements,
   DragCancelEvent,
   DragEndEvent,
+  DragOverEvent,
   DragStartEvent,
   ScreenReaderInstructions,
 } from '@dnd-kit/core';
@@ -32,6 +33,27 @@ export const SNIPPET_DRAG_ACTIVATION = { delay: 50, tolerance: 5 } as const;
  */
 export const buildSortableId = (snippet: OrderedSnippet): string =>
   `${snippet.sourceId}:${snippet.id}`;
+
+/**
+ * Landing slot of the dragged snippet, as a gap in the CURRENT render
+ * order (0..n — the dragged chip still renders at its origin slot), or
+ * null while the drop-indicator needle is hidden. Moving forward lands
+ * the needle AFTER the hovered snippet, moving backward BEFORE it, and
+ * hovering the dragged snippet itself (including the pickup instant)
+ * lands at the origin slot — the gap moveSnippet(fromIndex, overIndex)
+ * drops the chip into (splice out at from, re-insert at over), so the
+ * needle can never contradict the drop outcome. A null target or an
+ * unresolved index (-1: the snippet vanished mid-drag) hides the needle.
+ */
+export const computeNeedleIndex = (
+  fromIndex: number,
+  overIndex: number | null
+): number | null => {
+  if (overIndex === null || fromIndex < 0 || overIndex < 0) {
+    return null;
+  }
+  return fromIndex < overIndex ? overIndex + 1 : overIndex;
+};
 
 const SORTING_KEYS = {
   instructions: 'pages.mergeSession.previewArea.sorting.instructions',
@@ -60,6 +82,11 @@ export function usePreviewArea() {
   );
 
   const [activeSnippet, setActiveSnippet] = useState<OrderedSnippet | null>(null);
+  // Insertion slot of the drop-indicator needle; null keeps it hidden
+  // (no active drag, or no target resolves).
+  const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(
+    null
+  );
 
   const indexOfSortableId = useCallback(
     (id: string) =>
@@ -71,13 +98,27 @@ export function usePreviewArea() {
     (event: DragStartEvent) => {
       const index = indexOfSortableId(String(event.active.id));
       setActiveSnippet(index >= 0 ? snippets[index] : null);
+      // Pickup resolves to the dragged item itself: the needle starts
+      // at the origin slot.
+      setDropIndicatorIndex(index >= 0 ? index : null);
     },
     [indexOfSortableId, snippets]
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      const fromIndex = indexOfSortableId(String(active.id));
+      const overIndex = over ? indexOfSortableId(String(over.id)) : null;
+      setDropIndicatorIndex(computeNeedleIndex(fromIndex, overIndex));
+    },
+    [indexOfSortableId]
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveSnippet(null);
+      setDropIndicatorIndex(null);
       const { active, over } = event;
 
       if (!over || active.id === over.id) {
@@ -101,6 +142,7 @@ export function usePreviewArea() {
 
   const handleDragCancel = useCallback((_event: DragCancelEvent) => {
     setActiveSnippet(null);
+    setDropIndicatorIndex(null);
   }, []);
 
   const announcements = useMemo<Announcements>(() => {
@@ -140,8 +182,10 @@ export function usePreviewArea() {
     announcements,
     screenReaderInstructions,
     activeSnippet,
+    dropIndicatorIndex,
     handleDragStart,
     handleDragEnd,
+    handleDragOver,
     handleDragCancel,
   };
 }
