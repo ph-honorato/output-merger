@@ -1,0 +1,633 @@
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
+import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
+import { ThemeProvider as StyledThemeProvider } from 'styled-components';
+import { I18nextProvider } from 'react-i18next';
+import { i18n, enUS, ptBR } from '@translation';
+import { theme } from '../../../../theme';
+import {
+  SnippetsProvider,
+  useSnippets,
+} from '../../../../context/SnippetsContext';
+import type { Snippet } from '@components';
+import type {
+  DragCancelEvent,
+  DragEndEvent,
+  DragStartEvent,
+} from '@dnd-kit/core';
+import { PreviewArea, PreviewToolbar, CopyMergedTextButton } from '../';
+import { buildMergedText } from '../CopyMergedTextButton/CopyMergedTextButton.hook';
+import { usePreviewArea } from '../PreviewArea/PreviewArea.hook';
+import PreviewModal from './PreviewModal';
+
+const makeSnippet = (id: string, text: string, color = '#0080FF'): Snippet => ({
+  id,
+  text,
+  startIndex: 0,
+  endIndex: text.length,
+  color,
+});
+
+// Mirrors the page composition: the inline preview plus the toolbar
+// (copy button + the modal's own trigger) — so the suite exercises the
+// real duplicate-testid situation (ADR 0003) and its within(dialog)
+// scoping, exactly like the page integration does.
+const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
+  const { setSourceSnippets } = useSnippets();
+  useEffect(() => {
+    updates.forEach(([sourceId, snippets]) =>
+      setSourceSnippets(sourceId, snippets),
+    );
+  }, [updates, setSourceSnippets]);
+  return (
+    <>
+      <PreviewArea />
+      <PreviewToolbar>
+        <CopyMergedTextButton />
+        <PreviewModal />
+      </PreviewToolbar>
+    </>
+  );
+};
+
+const renderWithProviders = (updates: Array<[string, Snippet[]]>) =>
+  render(
+    <I18nextProvider i18n={i18n}>
+      <MuiThemeProvider theme={theme}>
+        <StyledThemeProvider theme={theme}>
+          <SnippetsProvider>
+            <Harness updates={updates} />
+          </SnippetsProvider>
+        </StyledThemeProvider>
+      </MuiThemeProvider>
+    </I18nextProvider>,
+  );
+
+const seedInterleaved = (): Array<[string, Snippet[]]> => [
+  ['text-1', [makeSnippet('a1', 'Alpha')]],
+  ['text-2', [makeSnippet('b1', 'Beta')]],
+  ['text-1', [makeSnippet('a1', 'Alpha'), makeSnippet('a2', 'Gamma')]],
+];
+
+const seedTwoSources = (): Array<[string, Snippet[]]> => [
+  ['text-1', [makeSnippet('a1', 'Hello')]],
+  ['text-2', [makeSnippet('b1', 'Alpha')]],
+];
+
+const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+
+// vi.restoreAllMocks() (afterEach) also blanks the setup file's bare
+// vi.fn mocks — they have no original implementation to restore — so
+// the default matchMedia behavior (matches: false for every query =
+// viewport md+) is re-established for every test. The clipboard mock
+// gets its resolved value re-established the same way.
+const installDefaultMatchMedia = () => {
+  vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+};
+
+beforeEach(() => {
+  clipboardWriteText.mockReset().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: clipboardWriteText },
+    configurable: true,
+  });
+});
+
+afterEach(async () => {
+  await i18n.changeLanguage('en-US');
+  vi.restoreAllMocks();
+  installDefaultMatchMedia();
+});
+
+// The exact media string useMediaQuery(theme.breakpoints.down('md'))
+// subscribes to (MUI strips the '@media ' prefix before matchMedia).
+const BELOW_MD_MEDIA = theme.breakpoints.down('md').replace(/^@media\s*/, '');
+
+/**
+ * Replaces window.matchMedia with a mutable mock: belowMd sets the
+ * initial matches, setBelowMd flips it and notifies the subscribed
+ * change listeners (the viewport resize edge). The `matches` value
+ * is exposed through a live getter so useSyncExternalStore's
+ * getSnapshot observes the flip.
+ */
+const installViewport = (belowMd: boolean) => {
+  const listeners = new Set<(event: { matches: boolean }) => void>();
+  let matches = belowMd;
+  const spy = vi
+    .spyOn(window, 'matchMedia')
+    .mockImplementation((query: string) => {
+      const isBelowMdQuery = query === BELOW_MD_MEDIA;
+      return {
+        get matches() {
+          return isBelowMdQuery ? matches : false;
+        },
+        media: query,
+        onchange: null,
+        addListener: (listener: unknown) =>
+          listeners.add(listener as (event: { matches: boolean }) => void),
+        removeListener: (listener: unknown) =>
+          listeners.delete(listener as (event: { matches: boolean }) => void),
+        addEventListener: (_: string, listener: unknown) =>
+          listeners.add(listener as (event: { matches: boolean }) => void),
+        removeEventListener: (_: string, listener: unknown) =>
+          listeners.delete(listener as (event: { matches: boolean }) => void),
+        dispatchEvent: () => false,
+      } as MediaQueryList;
+    });
+  return {
+    setBelowMd(next: boolean) {
+      matches = next;
+      listeners.forEach((listener) => listener({ matches: next }));
+    },
+    restore: () => spy.mockRestore(),
+  };
+};
+
+interface SegmentRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
+
+const SEGMENT_RECTS: Record<string, SegmentRect> = {
+  Alpha: { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
+  Beta: { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
+  Gamma: { left: 240, top: 0, right: 340, bottom: 24, width: 100, height: 24, x: 240, y: 0 },
+};
+
+const ZERO_RECT: SegmentRect = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+
+// Gap anchors sit at the insertion points of the seeded layout (same
+// convention as the PreviewArea suite).
+const GAP_SLOT_X: Record<string, number> = {
+  '0': -4,
+  '1': 110,
+  '2': 230,
+  '3': 344,
+};
+
+// jsdom computes no layout: give the segment chips deterministic
+// rects so dnd-kit's rect-based collision detection works in tests.
+const installSegmentRects = () =>
+  vi
+    .spyOn(Element.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: Element) {
+      const gapSlot = (this as HTMLElement).dataset?.gapSlot;
+      if (gapSlot !== undefined) {
+        const x = GAP_SLOT_X[gapSlot] ?? 0;
+        return {
+          left: x,
+          right: x,
+          top: 0,
+          bottom: 24,
+          width: 0,
+          height: 24,
+          x,
+          y: 0,
+        } as DOMRect;
+      }
+      const text = (this as HTMLElement).textContent ?? '';
+      return { ...(SEGMENT_RECTS[text] ?? ZERO_RECT) } as DOMRect;
+    });
+
+const KEY_FOR_CODE: Record<string, string> = {
+  Space: ' ',
+  Escape: 'Escape',
+  ArrowRight: 'ArrowRight',
+};
+
+// Dispatches a keydown and lets the sensor's zero-delay listener
+// attachment (setTimeout 0) flush before the next key.
+const pressKey = async (target: Element | Document, code: string) => {
+  await act(async () => {
+    fireEvent.keyDown(target, { code, key: KEY_FOR_CODE[code] ?? code });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+};
+
+const openDialog = async () => {
+  const user = userEvent.setup();
+  await user.click(screen.getByTestId('preview-modal-open-button'));
+  return screen.getByRole('dialog', { name: 'Preview' });
+};
+
+const stylesText = () =>
+  Array.from(document.querySelectorAll('style'))
+    .map((style) => style.textContent)
+    .join('');
+
+describe('PreviewModal', () => {
+  it('renders the trigger inside the toolbar, below the copy button, translated and enabled', () => {
+    renderWithProviders(seedInterleaved());
+
+    const trigger = screen.getByTestId('preview-modal-open-button');
+    const toolbar = screen.getByTestId('preview-toolbar');
+    expect(toolbar).toContainElement(trigger);
+    expect(trigger).toBeEnabled();
+    expect(trigger).toHaveAttribute(
+      'aria-label',
+      'Open preview in a bigger view',
+    );
+    const copyButton = screen.getByTestId('preview-copy-button');
+    expect(
+      copyButton.compareDocumentPosition(trigger) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('keeps the trigger disabled while the preview is empty', () => {
+    renderWithProviders([]);
+    expect(screen.getByTestId('preview-modal-open-button')).toBeDisabled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('renders nothing below md while closed (mobile deviation)', () => {
+    const viewport = installViewport(true);
+    renderWithProviders(seedInterleaved());
+
+    expect(screen.queryByTestId('preview-modal-open-button')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    viewport.restore();
+  });
+
+  it('ships the three modal keys verbatim in both en-US and pt-BR resources', () => {
+    expect(enUS).toHaveProperty(
+      'pages.mergeSession.previewArea.modal.name',
+      'Preview',
+    );
+    expect(enUS).toHaveProperty(
+      'pages.mergeSession.previewArea.modal.open',
+      'Open preview in a bigger view',
+    );
+    expect(enUS).toHaveProperty(
+      'pages.mergeSession.previewArea.modal.close',
+      'Close preview',
+    );
+    expect(ptBR).toHaveProperty(
+      'pages.mergeSession.previewArea.modal.name',
+      'Prévia',
+    );
+    expect(ptBR).toHaveProperty(
+      'pages.mergeSession.previewArea.modal.open',
+      'Abrir prévia em visualização ampliada',
+    );
+    expect(ptBR).toHaveProperty(
+      'pages.mergeSession.previewArea.modal.close',
+      'Fechar prévia',
+    );
+  });
+
+  it('follows the active language for the trigger label, dialog name, and close label', async () => {
+    renderWithProviders(seedInterleaved());
+    await act(async () => {
+      await i18n.changeLanguage('pt');
+    });
+
+    const trigger = screen.getByTestId('preview-modal-open-button');
+    expect(trigger).toHaveAttribute(
+      'aria-label',
+      'Abrir prévia em visualização ampliada',
+    );
+
+    const user = userEvent.setup();
+    await user.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Prévia' });
+    expect(
+      within(dialog).getByTestId('preview-modal-close-button'),
+    ).toHaveAttribute('aria-label', 'Fechar prévia');
+  });
+});
+
+describe('PreviewModal dialog', () => {
+  it('opens a dialog named Preview with a visually hidden title and md sizing', async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+
+    // Accessible name auto-wired by the hidden DialogTitle (a plain
+    // aria-label on the Dialog would NOT name it).
+    expect(dialog).toBeInTheDocument();
+    const hiddenTitle = within(dialog).getByText('Preview');
+    expect(hiddenTitle).toHaveStyle({ position: 'absolute' });
+    expect(hiddenTitle).toHaveStyle({ width: '1px' });
+    expect(hiddenTitle).toHaveStyle({ height: '1px' });
+    expect(hiddenTitle).toHaveStyle({ overflow: 'hidden' });
+
+    // md sizing: maxWidth md + fullWidth + the fixed ~90dvh layout.
+    expect(dialog.className).toContain('MuiDialog-paperWidthMd');
+    expect(dialog.className).toContain('MuiDialog-paperFullWidth');
+    expect(stylesText()).toContain('height:90dvh');
+  });
+
+  it('renders the same preview content in context order, scoped to the dialog, with the inline instance mounted and the background aria-hidden', async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+
+    const seeded = [
+      { ...makeSnippet('a1', 'Alpha'), sourceId: 'text-1', order: 1 },
+      { ...makeSnippet('b1', 'Beta'), sourceId: 'text-2', order: 2 },
+      { ...makeSnippet('a2', 'Gamma'), sourceId: 'text-1', order: 3 },
+    ];
+    expect(
+      within(dialog).getAllByTestId('preview-snippet').map((s) => s.textContent),
+    ).toEqual(['Alpha', 'Beta', 'Gamma']);
+    expect(within(dialog).getByTestId('preview-segment-flow')).toHaveTextContent(
+      buildMergedText(seeded),
+    );
+
+    // Duplicate data-testids exist by design while open (ADR 0003):
+    // the inline preview stays mounted alongside the modal's copy.
+    const areas = screen.getAllByTestId('preview-area');
+    expect(areas).toHaveLength(2);
+    // MUI keeps the app behind the dialog aria-hidden, so assistive
+    // tech encounters exactly one preview.
+    expect(areas[0].closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(areas[1].closest('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it('lays the paper out as a row: centered preview zone plus a bare rail with copy on top and close under it', async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+
+    const closeButton = within(dialog).getByTestId('preview-modal-close-button');
+    const copyButton = within(dialog).getByTestId('preview-copy-button');
+    const rail = closeButton.parentElement;
+    expect(rail).not.toBeNull();
+    expect(rail).toContainElement(copyButton);
+    expect(rail).toContainElement(closeButton);
+    // Copy on top, close under it: the copy button precedes the close
+    // button in the rail.
+    expect(
+      copyButton.compareDocumentPosition(closeButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(copyButton.parentElement).toBe(rail);
+    expect(closeButton.parentElement).toBe(rail);
+
+    // The rail is a new bare strip, NOT the PreviewToolbar component.
+    expect(within(dialog).queryByTestId('preview-toolbar')).toBeNull();
+
+    // Row layout with a centered, flex:1 preview zone and the top-
+    // aligned, right-inset rail.
+    const css = stylesText();
+    expect(css).toContain('flex-direction:row');
+    expect(css).toContain('flex:1 1 auto');
+    expect(css).toContain('align-items:center');
+    expect(css).toContain('flex-direction:column');
+    expect(css).toContain('margin:16px 16px 0 0');
+  });
+
+  it('copies the byte-identical merged text from inside the dialog and shows the toast within it', async () => {
+    // fireEvent only: userEvent.setup() would replace the clipboard
+    // with its own stub (before any click), hiding the writeText
+    // calls from the mock.
+    renderWithProviders(seedTwoSources());
+    fireEvent.click(screen.getByTestId('preview-modal-open-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Preview' });
+
+    fireEvent.click(within(dialog).getByTestId('preview-copy-button'));
+    await act(() => clipboardWriteText.mock.results[0]?.value ?? Promise.resolve());
+    expect(clipboardWriteText).toHaveBeenCalledWith('Hello Alpha');
+
+    const toast = await within(dialog).findByTestId('preview-copy-toast');
+    expect(toast).toHaveTextContent('Text copied to clipboard');
+  });
+
+  it('closes via the rail close button, unmounting the content and restoring focus to the trigger', async () => {
+    renderWithProviders(seedInterleaved());
+    const trigger = screen.getByTestId('preview-modal-open-button');
+    const user = userEvent.setup();
+    await user.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Preview' });
+
+    await user.click(
+      within(dialog).getByTestId('preview-modal-close-button'),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+
+    // No keepMounted: the modal's content unmounts and only the
+    // inline preview instance remains.
+    expect(screen.getAllByTestId('preview-area')).toHaveLength(1);
+    // MUI's default focus restore returns focus to the trigger.
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes on backdrop click', async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+
+    const container = dialog.parentElement as HTMLElement;
+    fireEvent.mouseDown(container);
+    fireEvent.click(container);
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('closes on Escape when no drag is active', async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('cancels only the drag on Escape mid-keyboard-drag, then closes on the next Escape', async () => {
+    installSegmentRects();
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+
+    const [alpha] = within(dialog).getAllByTestId('preview-snippet');
+    alpha.focus();
+    await pressKey(alpha, 'Space');
+    expect(
+      within(dialog).getByTestId('preview-snippet-overlay'),
+    ).toBeInTheDocument();
+
+    // Escape during the active drag: the drag cancels and the
+    // dialog stays open.
+    await pressKey(alpha, 'Escape');
+    expect(
+      within(dialog).queryByTestId('preview-snippet-overlay'),
+    ).toBeNull();
+    expect(
+      within(dialog).getAllByTestId('preview-snippet').map((s) => s.textContent),
+    ).toEqual(['Alpha', 'Beta', 'Gamma']);
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Snippet reorder cancelled.',
+    );
+    expect(screen.getByRole('dialog', { name: 'Preview' })).toBeInTheDocument();
+
+    // The guard resets with the drag: plain Escape closes now.
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('survives a viewport shrink below md while open by switching to fullScreen, and returns to md sizing on grow', async () => {
+    const viewport = installViewport(false);
+    try {
+      renderWithProviders(seedInterleaved());
+      const dialog = await openDialog();
+      expect(dialog.className).toContain('MuiDialog-paperWidthMd');
+      expect(screen.getByTestId('preview-modal-open-button')).toBeInTheDocument();
+
+      act(() => viewport.setBelowMd(true));
+
+      // The open dialog stays mounted and switches to fullScreen; the
+      // trigger hides below md; the rail stays reachable.
+      const fullScreenDialog = screen.getByRole('dialog', {
+        name: 'Preview',
+      });
+      expect(fullScreenDialog.className).toContain('MuiDialog-paperFullScreen');
+      expect(
+        within(fullScreenDialog).getByTestId('preview-modal-close-button'),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId('preview-modal-open-button')).toBeNull();
+
+      act(() => viewport.setBelowMd(false));
+
+      const mdDialog = screen.getByRole('dialog', { name: 'Preview' });
+      expect(mdDialog.className).toContain('MuiDialog-paperWidthMd');
+      expect(mdDialog.className).not.toContain('MuiDialog-paperFullScreen');
+      expect(screen.getByTestId('preview-modal-open-button')).toBeInTheDocument();
+    } finally {
+      viewport.restore();
+    }
+  });
+
+  it('reopens cleanly after a close: the content remounts from the shared context', async () => {
+    renderWithProviders(seedInterleaved());
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('preview-modal-open-button'));
+    expect(screen.getByRole('dialog', { name: 'Preview' })).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Preview' }), {
+      key: 'Escape',
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId('preview-modal-open-button'));
+    const reopened = screen.getByRole('dialog', { name: 'Preview' });
+    expect(
+      within(reopened).getByTestId('preview-segment-flow'),
+    ).toHaveTextContent('Alpha Beta Gamma');
+  });
+});
+
+describe('PreviewModal escape guard wiring (additive onActiveDragChange)', () => {
+  const SeedUpdates = ({
+    updates,
+  }: {
+    updates: Array<[string, Snippet[]]>;
+  }) => {
+    const { setSourceSnippets } = useSnippets();
+    useEffect(() => {
+      updates.forEach(([sourceId, snippets]) =>
+        setSourceSnippets(sourceId, snippets),
+      );
+    }, [updates, setSourceSnippets]);
+    return null;
+  };
+
+  const wrapper =
+    (updates: Array<[string, Snippet[]]>) =>
+    ({ children }: { children?: React.ReactNode }) => (
+      <I18nextProvider i18n={i18n}>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            <SnippetsProvider>
+              <SeedUpdates updates={updates} />
+              {children}
+            </SnippetsProvider>
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </I18nextProvider>
+    );
+
+  it('fires true on drag start and false on drag end and drag cancel, on every path', () => {
+    const onActiveDragChange = vi.fn();
+    const { result } = renderHook(() => usePreviewArea(onActiveDragChange), {
+      wrapper: wrapper(seedInterleaved()),
+    });
+
+    act(() => {
+      result.current.handleDragStart({
+        active: { id: 'text-1:a1' },
+      } as unknown as DragStartEvent);
+    });
+    expect(onActiveDragChange).toHaveBeenLastCalledWith(true);
+
+    // Drag end: false fires even on the discard paths (no target).
+    act(() => {
+      result.current.handleDragEnd({
+        active: { id: 'text-1:a1' },
+        over: null,
+      } as unknown as DragEndEvent);
+    });
+    expect(onActiveDragChange).toHaveBeenLastCalledWith(false);
+
+    act(() => {
+      result.current.handleDragStart({
+        active: { id: 'text-1:ghost' },
+      } as unknown as DragStartEvent);
+    });
+    expect(onActiveDragChange).toHaveBeenLastCalledWith(true);
+
+    // Drag cancel resets the guard too.
+    act(() => {
+      result.current.handleDragCancel({
+        active: { id: 'text-1:ghost' },
+      } as unknown as DragCancelEvent);
+    });
+    expect(onActiveDragChange).toHaveBeenLastCalledWith(false);
+    expect(onActiveDragChange).toHaveBeenCalledTimes(4);
+  });
+
+  it('stays purely additive: the hook without a callback behaves exactly as before', () => {
+    const { result } = renderHook(() => usePreviewArea(), {
+      wrapper: wrapper(seedInterleaved()),
+    });
+
+    expect(result.current.snippets).toHaveLength(3);
+    act(() => {
+      result.current.handleDragStart({
+        active: { id: 'text-1:a1' },
+      } as unknown as DragStartEvent);
+      result.current.handleDragEnd({
+        active: { id: 'text-1:a1' },
+        over: { id: 'text-2:b1' },
+      } as unknown as DragEndEvent);
+    });
+    expect(result.current.snippets.map((snippet) => snippet.id)).toEqual([
+      'b1',
+      'a1',
+      'a2',
+    ]);
+    expect(result.current.activeSnippet).toBeNull();
+  });
+});

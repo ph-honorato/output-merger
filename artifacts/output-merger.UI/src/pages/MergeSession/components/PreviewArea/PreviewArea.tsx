@@ -34,7 +34,7 @@ function DropGap({ slot }: { slot: number }) {
 }
 
 function PreviewArea(props: PreviewAreaProps) {
-  const { className } = props;
+  const { className, onActiveDragChange } = props;
   const {
     t,
     snippets,
@@ -48,7 +48,7 @@ function PreviewArea(props: PreviewAreaProps) {
     handleDragEnd,
     handleDragOver,
     handleDragCancel,
-  } = usePreviewArea();
+  } = usePreviewArea(onActiveDragChange);
 
   // The needle renders exactly once, at the dragged snippet's landing
   // slot: right after the snippet that precedes the slot (so it stays

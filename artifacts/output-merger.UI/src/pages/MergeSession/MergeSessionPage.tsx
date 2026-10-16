@@ -9,6 +9,7 @@ import {
   PreviewArea,
   PreviewToolbar,
   CopyMergedTextButton,
+  PreviewModal,
   TutorialBanner,
   readTutorialDismissed,
   writeTutorialDismissed,
@@ -66,6 +67,7 @@ function MergeSessionWorkspace() {
             <PreviewArea />
             <PreviewToolbar>
               <CopyMergedTextButton />
+              <PreviewModal />
             </PreviewToolbar>
           </S.PreviewColumn>
         </Grid>

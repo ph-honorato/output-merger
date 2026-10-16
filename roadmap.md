@@ -59,12 +59,12 @@
     - [x] Task 1.4: Make preview segments sortable (DndContext + SortableContext), wiring drag end to `moveSnippet`, keeping space separators and empty state working
     - [x] Task 1.5: Tests: reducer reorder unit tests + component drag/keyboard sorting tests
     - [x] Task 1.6: Add user feedback while sorting
-  - [ ] **Task 2: Preview Area Modal** - Open the preview area on a modal (bigger view of the same preview)
-    - [ ] Task 2.1: Create PreviewModal component in MergeSession components folder (MUI Dialog, full component structure)
-    - [ ] Task 2.2: Add open-preview button to the PreviewToolbar with translations (en-US/pt-BR)
-    - [ ] Task 2.3: Manage open/close state and render the same PreviewArea inside the modal (shared state via context, no duplication)
-    - [ ] Task 2.4: Responsive + accessibility pass (ESC/backdrop close, focus trap, full-screen on mobile)
-    - [ ] Task 2.5: Tests: modal open/close, preview content rendering, copy button integration
+  - [x] **Task 2: Preview Area Modal** - Open the preview area on a modal (bigger view of the same preview)
+    - [x] Task 2.1: Create PreviewModal component in MergeSession components folder (MUI Dialog, full component structure)
+    - [x] Task 2.2: Add open-preview button to the PreviewToolbar with translations (en-US/pt-BR)
+    - [x] Task 2.3: Manage open/close state and render the same PreviewArea inside the modal (shared state via context, no duplication)
+    - [x] Task 2.4: Responsive + accessibility pass (ESC/backdrop close, focus trap; trigger hidden on mobile — user decision 2026-10-15 supersedes "full-screen on mobile", fullScreen only on the resize edge; see ADR 0003 and `.specs/features/preview-area-tools/tasks/preview-area-modal`)
+    - [x] Task 2.5: Tests: modal open/close, preview content rendering, copy button integration
   - [ ] **Task 3: Editable Preview Text** - Make the text on the preview area editable (inline and in the modal)
     - [ ] Task 3.1: Extend SnippetsContext into a preview document model (snippet tokens + own-text tokens + line breaks), migrating Task 1 reorder onto it
     - [ ] Task 3.2: Build the editable preview surface (contentEditable rendering colored snippet tokens, textarea-like caret/selection)

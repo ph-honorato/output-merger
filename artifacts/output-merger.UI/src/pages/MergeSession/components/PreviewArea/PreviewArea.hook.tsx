@@ -96,9 +96,14 @@ const SORTING_KEYS = {
 /**
  * Composes i18n, the global merge-ordered snippets list, and this
  * PreviewArea instance's drag-sorting wiring (sensors, announcements,
- * and drag lifecycle handlers).
+ * and drag lifecycle handlers). The optional `onActiveDragChange`
+ * callback is additive-only (default no-op): it mirrors this
+ * instance's drag lifecycle for consumers such as the preview modal's
+ * Escape guard.
  */
-export function usePreviewArea() {
+export function usePreviewArea(
+  onActiveDragChange?: (active: boolean) => void
+) {
   const { t } = useTranslation();
   const { snippets, moveSnippet } = useSnippets();
 
@@ -124,15 +129,27 @@ export function usePreviewArea() {
     [snippets]
   );
 
+  // Additive drag-lifecycle notification: fires true when a drag
+  // activates in this instance and false when it ends or cancels —
+  // on every path, before any early return, so a consumer's guard
+  // can never stay stuck on.
+  const notifyActiveDragChange = useCallback(
+    (active: boolean) => {
+      onActiveDragChange?.(active);
+    },
+    [onActiveDragChange]
+  );
+
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
+      notifyActiveDragChange(true);
       const index = indexOfSortableId(String(event.active.id));
       setActiveSnippet(index >= 0 ? snippets[index] : null);
       // Pickup resolves to the dragged item itself: the needle starts
       // at the origin slot.
       setDropIndicatorIndex(index >= 0 ? index : null);
     },
-    [indexOfSortableId, snippets]
+    [indexOfSortableId, notifyActiveDragChange, snippets]
   );
 
   const handleDragOver = useCallback(
@@ -159,6 +176,7 @@ export function usePreviewArea() {
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      notifyActiveDragChange(false);
       setActiveSnippet(null);
       setDropIndicatorIndex(null);
       const { active, over } = event;
@@ -193,13 +211,17 @@ export function usePreviewArea() {
 
       moveSnippet(fromIndex, toIndex);
     },
-    [indexOfSortableId, moveSnippet, snippets.length]
+    [indexOfSortableId, moveSnippet, notifyActiveDragChange, snippets.length]
   );
 
-  const handleDragCancel = useCallback((_event: DragCancelEvent) => {
-    setActiveSnippet(null);
-    setDropIndicatorIndex(null);
-  }, []);
+  const handleDragCancel = useCallback(
+    (_event: DragCancelEvent) => {
+      notifyActiveDragChange(false);
+      setActiveSnippet(null);
+      setDropIndicatorIndex(null);
+    },
+    [notifyActiveDragChange]
+  );
 
   const announcements = useMemo<Announcements>(() => {
     // Positions-only announcements: 1-based, no snippet text.

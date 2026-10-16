@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
@@ -6,7 +6,25 @@ import { ThemeProvider as StyledThemeProvider } from 'styled-components';
 import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@translation';
 import { theme } from '../../theme';
+import {
+  caretIndexFromPoint,
+  rectForRange,
+} from '../../components/TextInput/TextInput.geometry';
+import type { CharRange } from '../../components/TextInput/TextInput.types';
 import MergeSessionPage from './MergeSessionPage';
+
+// jsdom has no caret-range API and computes no layout: the TextInput
+// geometry is mocked with a virtual monospace layout (10px per char,
+// line box from 0 to 19) so needle drags can create real snippets
+// through the actual page UI in the modal-integration test below.
+vi.mock('../../components/TextInput/TextInput.geometry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../components/TextInput/TextInput.geometry')>();
+  return {
+    ...actual,
+    caretIndexFromPoint: vi.fn(),
+    rectForRange: vi.fn(),
+  };
+});
 
 const renderPage = () =>
   render(
@@ -127,5 +145,133 @@ describe('MergeSessionPage', () => {
     expect(screen.getByTestId('merge-session-tutorial')).toBeInTheDocument();
 
     localStorageSpy.mockRestore();
+  });
+
+  it('renders the preview modal trigger inside the toolbar, below the copy button', () => {
+    renderPage();
+
+    const toolbar = screen.getByTestId('preview-toolbar');
+    const trigger = screen.getByTestId('preview-modal-open-button');
+    expect(toolbar).toContainElement(trigger);
+    // No snippets yet: the trigger is present but disabled.
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveAttribute(
+      'aria-label',
+      'Open preview in a bigger view',
+    );
+    const copyButton = screen.getByTestId('preview-copy-button');
+    expect(
+      copyButton.compareDocumentPosition(trigger) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('keeps the inline preview mounted while the modal is open and syncs an inside-modal reorder to the inline flow', async () => {
+    // Virtual monospace layout: 10px per char (mirrors browsers: the
+    // caret resolves to the boundary closest to the pointer).
+    const text = 'alpha beta gamma delta';
+    vi.mocked(caretIndexFromPoint).mockImplementation((x: number) => {
+      const charIndex = Math.max(0, Math.min(text.length - 1, Math.floor(x / 10)));
+      const localX = x - charIndex * 10;
+      return localX < 5 ? charIndex : charIndex + 1;
+    });
+    vi.mocked(rectForRange).mockImplementation(
+      (_root: HTMLElement, range: CharRange) => ({
+        left: range.start * 10,
+        top: 0,
+        right: range.end * 10,
+        bottom: 19,
+        width: (range.end - range.start) * 10,
+        height: 19,
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderPage();
+
+    // Two sources with the same text: 'beta gamma' (text-1) then
+    // 'beta' (text-2) — merge order 'beta gamma beta'.
+    await user.type(screen.getAllByTestId('text-input-textarea')[0], text);
+    await user.type(screen.getAllByTestId('text-input-textarea')[1], text);
+    await user.click(screen.getByTestId('merge-session-start-button'));
+
+    const views = screen.getAllByTestId('text-input-view');
+    expect(views).toHaveLength(2);
+    const dragFromTo = (view: HTMLElement, from: number, to: number) => {
+      fireEvent.pointerMove(view, { clientX: from, clientY: 5 });
+      fireEvent.pointerDown(view, { clientX: from, clientY: 5 });
+      fireEvent.pointerMove(view, { clientX: to, clientY: 5 });
+      fireEvent.pointerUp(window);
+    };
+    dragFromTo(views[0], 41, 151); // 'beta gamma' (text-1)
+    dragFromTo(views[1], 41, 95); // 'beta' (text-2)
+
+    const trigger = screen.getByTestId('preview-modal-open-button');
+    expect(trigger).toBeEnabled();
+    expect(screen.getByTestId('preview-segment-flow')).toHaveTextContent(
+      'beta gamma beta',
+    );
+
+    await user.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Preview' });
+
+    // Duplicate data-testids by design while open (ADR 0003): the
+    // inline preview stays mounted alongside the modal's instance.
+    expect(screen.getAllByTestId('preview-area')).toHaveLength(2);
+
+    // jsdom computes no layout: give the two segment chips
+    // deterministic rects so the keyboard drag reorders.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: Element) {
+        const gapSlot = (this as HTMLElement).dataset?.gapSlot;
+        if (gapSlot !== undefined) {
+          const gapX: Record<string, number> = { '0': -4, '1': 110, '2': 230 };
+          const x = gapX[gapSlot] ?? 0;
+          return { left: x, right: x, top: 0, bottom: 24, width: 0, height: 24, x, y: 0 } as DOMRect;
+        }
+        const rects: Record<string, object> = {
+          'beta gamma': { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
+          'beta': { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
+        };
+        return { ...(rects[(this as HTMLElement).textContent ?? ''] ?? { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }) } as DOMRect;
+      },
+    );
+
+    const pressKey = async (target: Element | Document, code: string) => {
+      await act(async () => {
+        fireEvent.keyDown(target, { code, key: code === 'Space' ? ' ' : code });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+
+    // Keyboard-sort the first snippet inside the modal.
+    const [first] = within(dialog).getAllByTestId('preview-snippet');
+    expect(first).toHaveTextContent('beta gamma');
+    first.focus();
+    await pressKey(first, 'Space');
+    await pressKey(document, 'ArrowRight');
+    await pressKey(document, 'Space');
+
+    // The shared-context proof: both surfaces render the new order.
+    const flows = screen.getAllByTestId('preview-segment-flow');
+    const inlineFlow = flows.find((flow) => !dialog.contains(flow));
+    expect(inlineFlow).toBeDefined();
+    expect(within(dialog).getByTestId('preview-segment-flow')).toHaveTextContent(
+      'beta beta gamma',
+    );
+    expect(inlineFlow).toHaveTextContent('beta beta gamma');
+
+    await user.click(
+      within(dialog).getByTestId('preview-modal-close-button'),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+
+    // Only the inline instance remains, showing the reordered text.
+    expect(screen.getAllByTestId('preview-area')).toHaveLength(1);
+    expect(screen.getByTestId('preview-segment-flow')).toHaveTextContent(
+      'beta beta gamma',
+    );
   });
 });
