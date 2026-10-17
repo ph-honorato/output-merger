@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
 import type { DefaultTheme } from 'styled-components';
 import type { Theme } from '@mui/material/styles';
 
@@ -29,11 +29,33 @@ export const EmptyState = styled.div`
   color: ${({ theme }) => (theme as StyledTheme).palette.text.secondary};
 `;
 
-export const SegmentFlow = styled.div`
+export const SegmentFlow = styled.div<{ $editing?: boolean }>`
   display: block;
   overflow-wrap: break-word;
   white-space: pre-wrap;
   text-align: left;
+
+  ${({ $editing }) =>
+    $editing
+      ? css`
+          cursor: text;
+          min-height: 1.75em;
+
+          /* Empty-document editing (F3): the placeholder hint is a
+           * pseudo-element — no DOM, no parse/serialization
+           * footprint, so the WYSIWYG invariant never sees it. Known
+           * caveat: a stray zero-length text node left by the browser
+           * while focused may keep the hint hidden until blur (the
+           * absolutely-positioned overlay is the documented
+           * fallback). */
+          &:empty::before {
+            content: attr(data-placeholder);
+            color: ${({ theme }) =>
+              (theme as StyledTheme).palette.text.secondary};
+            pointer-events: none;
+          }
+        `
+      : ''}
 `;
 
 export const OverlayChip = styled.span`

@@ -1,5 +1,6 @@
 import PreviewIcon from '@mui/icons-material/Preview';
-import { Fragment } from 'react';
+import { Fragment, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -9,13 +10,14 @@ import {
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { SortableSegment } from '../';
 import { buildGapId, usePreviewArea } from './PreviewArea.hook';
+import { isSnippetToken } from '../../../../utils/previewDocument';
 import { withAlpha } from '../../../../utils/color';
 import type { PreviewAreaProps } from './PreviewArea.types';
 import * as S from './PreviewArea.styles';
 
 /**
  * Invisible zero-footprint droppable for one insertion gap
- * (before/between/after the snippets). While a pointer drag hovers
+ * (before/between/after the snippet chips). While a pointer drag hovers
  * the space between two snippets, dnd-kit reports this anchor as
  * `over`, so the needle renders at that slot and the drop lands
  * exactly there. Decorative collision anchor only: hidden from
@@ -37,36 +39,91 @@ function PreviewArea(props: PreviewAreaProps) {
   const { className, onActiveDragChange } = props;
   const {
     t,
-    snippets,
-    sortableIds,
+    editEnabled,
+    editingLabel,
+    editingPlaceholder,
+    renderedTokens,
+    renderEpoch,
+    isDocumentEmpty,
+    flowRef,
     sensors,
     announcements,
     screenReaderInstructions,
     activeSnippet,
     dropIndicatorIndex,
+    handleFlowFocus,
+    handleFlowBlur,
+    handleFlowInput,
+    handleFlowKeyDown,
+    handleFlowPaste,
     handleDragStart,
     handleDragEnd,
     handleDragOver,
     handleDragCancel,
   } = usePreviewArea(onActiveDragChange);
 
-  // The needle renders exactly once, at the dragged snippet's landing
-  // slot: right after the snippet that precedes the slot (so it stays
-  // on the earlier line at a wrap boundary), before the separator of
-  // the snippet currently occupying the slot, or after the last
-  // snippet for the trailing slot. Decorative: no text, hidden from
-  // assistive tech (the sorting.* announcements cover non-visual
-  // feedback).
-  const renderDropIndicator = (slot: number) =>
-    dropIndicatorIndex === slot ? (
-      <S.DropIndicator data-testid="preview-drop-indicator" aria-hidden="true">
-        <S.DropIndicatorBar />
-      </S.DropIndicator>
-    ) : null;
+  // The token children as stable element references, plus the flow's
+  // assembled children (tokens with the gap anchors and the needle
+  // rendered right before the chip occupying each snippet slot).
+  // While the surface is focused and edit is ON these memos do not
+  // recompute (the frozen snapshot is unchanged): React then sees
+  // identical element references and never reconciles the token
+  // children — the focused DOM owns itself (ADR 0004). The gap
+  // anchors and the needle are zero-text transparent elements for
+  // the parser; the trailing gap exists only while there is at least
+  // one chip to drag, so a tokenless flow stays truly :empty and
+  // the placeholder hint can render.
+  const { flowChildren, renderedSnippetIds } = useMemo(() => {
+    const tokenElements = renderedTokens.map((token) => {
+      if (isSnippetToken(token)) {
+        return <SortableSegment key={token.tokenId} token={token} />;
+      }
+      if (token.kind === 'text') {
+        return <Fragment key={token.tokenId}>{token.text}</Fragment>;
+      }
+      return <Fragment key={token.tokenId}>{'\n'}</Fragment>;
+    });
+
+    const needle = (slot: number) =>
+      dropIndicatorIndex === slot ? (
+        <S.DropIndicator
+          key={`needle-${slot}`}
+          data-testid="preview-drop-indicator"
+          aria-hidden="true"
+        >
+          <S.DropIndicatorBar />
+        </S.DropIndicator>
+      ) : null;
+
+    const children: ReactNode[] = [];
+    const snippetIds: string[] = [];
+    let snippetSlot = 0;
+    renderedTokens.forEach((token, tokenIndex) => {
+      if (isSnippetToken(token)) {
+        const slot = snippetSlot;
+        snippetSlot += 1;
+        snippetIds.push(token.tokenId);
+        children.push(<DropGap key={`gap-${token.tokenId}`} slot={slot} />);
+        children.push(needle(slot));
+      }
+      children.push(tokenElements[tokenIndex]);
+    });
+    if (snippetSlot > 0) {
+      children.push(<DropGap key="gap-trailing" slot={snippetSlot} />);
+      children.push(needle(snippetSlot));
+    }
+
+    return { flowChildren: children, renderedSnippetIds: snippetIds };
+  }, [renderedTokens, dropIndicatorIndex]);
+
+  // Gating matrix (edit OFF/ON × empty/non-empty): edit OFF + empty
+  // keeps today's empty state; edit ON renders the editable root even
+  // while empty (F3).
+  const showEmptyState = !editEnabled && isDocumentEmpty;
 
   return (
     <S.PreviewAreaRoot data-testid="preview-area" className={className}>
-      {snippets.length === 0 ? (
+      {showEmptyState ? (
         <S.EmptyState data-testid="preview-empty">
           <PreviewIcon aria-hidden="true" />
           <span>{t('pages.mergeSession.previewArea.empty')}</span>
@@ -81,21 +138,27 @@ function PreviewArea(props: PreviewAreaProps) {
           onDragOver={handleDragOver}
           onDragCancel={handleDragCancel}
         >
-          <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-            <S.SegmentFlow data-testid="preview-segment-flow">
-              {snippets.map((snippet, index) => (
-                <Fragment key={sortableIds[index]}>
-                  <DropGap slot={index} />
-                  {renderDropIndicator(index)}
-                  {index > 0 ? ' ' : null}
-                  <SortableSegment
-                    snippet={snippet}
-                    sortableId={sortableIds[index]}
-                  />
-                </Fragment>
-              ))}
-              <DropGap slot={snippets.length} />
-              {renderDropIndicator(snippets.length)}
+          <SortableContext
+            items={renderedSnippetIds}
+            strategy={rectSortingStrategy}
+          >
+            <S.SegmentFlow
+              key={`preview-flow-${renderEpoch}`}
+              ref={flowRef}
+              data-testid="preview-segment-flow"
+              $editing={editEnabled}
+              contentEditable={editEnabled || undefined}
+              suppressContentEditableWarning
+              aria-multiline={editEnabled || undefined}
+              aria-label={editEnabled ? editingLabel : undefined}
+              data-placeholder={editEnabled ? editingPlaceholder : undefined}
+              onFocus={handleFlowFocus}
+              onBlur={handleFlowBlur}
+              onInput={editEnabled ? handleFlowInput : undefined}
+              onKeyDown={editEnabled ? handleFlowKeyDown : undefined}
+              onPaste={editEnabled ? handleFlowPaste : undefined}
+            >
+              {flowChildren}
             </S.SegmentFlow>
           </SortableContext>
           <DragOverlay zIndex={200} dropAnimation={null}>

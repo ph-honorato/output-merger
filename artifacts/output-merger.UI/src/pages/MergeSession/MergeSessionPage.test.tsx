@@ -166,6 +166,74 @@ describe('MergeSessionPage', () => {
     ).toBeTruthy();
   });
 
+  it('renders the edit-text toggle in the toolbar under the modal-open trigger, off by default', () => {
+    renderPage();
+
+    const toolbar = screen.getByTestId('preview-toolbar');
+    const toggle = screen.getByTestId('preview-edit-toggle');
+    expect(toolbar).toContainElement(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle).toHaveAttribute('aria-label', 'Enable text editing');
+    const trigger = screen.getByTestId('preview-modal-open-button');
+    expect(
+      trigger.compareDocumentPosition(toggle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('runs the editing flow end to end: toggle on, type own text, copy serializes the document', async () => {
+    // fireEvent only: userEvent.setup() would replace the clipboard
+    // with its own stub for the whole environment, hiding the
+    // writeText calls from the mock (CopyMergedTextButton pattern).
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    renderPage();
+
+    fireEvent.change(screen.getAllByTestId('text-input-textarea')[0], {
+      target: { value: 'alpha beta' },
+    });
+    fireEvent.click(screen.getByTestId('merge-session-start-button'));
+
+    // Edit OFF + empty: today's gating (copy disabled, empty state).
+    expect(screen.getByTestId('preview-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('preview-copy-button')).toBeDisabled();
+
+    // Toggle editing on: the empty preview becomes the editable
+    // editor with the placeholder hint (F3) and the gates open.
+    fireEvent.click(screen.getByTestId('preview-edit-toggle'));
+    const flow = screen.getByTestId('preview-segment-flow');
+    expect(flow).toHaveAttribute('contenteditable', 'true');
+    expect(flow).toHaveAttribute(
+      'data-placeholder',
+      'Type here to add your own text',
+    );
+    expect(screen.queryByTestId('preview-empty')).toBeNull();
+    expect(screen.getByTestId('preview-copy-button')).toBeEnabled();
+
+    // Type own text (jsdom simulation: DOM mutation + input event).
+    act(() => {
+      flow.focus();
+    });
+    flow.appendChild(document.createTextNode('my own words'));
+    fireEvent.input(flow);
+
+    expect(flow.textContent).toBe('my own words');
+    // Copy serializes the document — own text included.
+    fireEvent.click(screen.getByTestId('preview-copy-button'));
+    const pendingCopy =
+      writeText.mock.results[0]?.value ?? Promise.resolve();
+    await act(async () => {
+      await pendingCopy;
+    });
+    expect(writeText).toHaveBeenCalledWith('my own words');
+    const toast = await screen.findByTestId('preview-copy-toast');
+    expect(toast).toBeInTheDocument();
+  });
+
   it('keeps the inline preview mounted while the modal is open and syncs an inside-modal reorder to the inline flow', async () => {
     // Virtual monospace layout: 10px per char (mirrors browsers: the
     // caret resolves to the boundary closest to the pointer).

@@ -1,0 +1,290 @@
+# Editable Preview Text Implementation
+
+**Implemented:** 2026-10-16
+**Spec:** `.specs/features/preview-area-tools/tasks/editable-preview-text/spec.md`
+**Context:** `.specs/features/preview-area-tools/tasks/editable-preview-text/context.md`
+**Code:** `artifacts/output-merger.UI/src/`
+**Status:** Implemented — Feature 3, Task 3 (roadmap 3.1–3.6) complete; verified by 97 new automated tests (291 total across 16 files), oxlint, `tsc -b`, `vite build`. Both roadmap deviations (a: the edit-text toggle replaces the drag on/off toggle; b: typing inside a snippet integrates instead of splitting — user decisions 2026-10-16) are implemented exactly as specified and the roadmap lines 3.3/3.4 are updated. Zero requirements deviated from the spec's contract; the judgment calls (MOVE separator hygiene, the jsdom caret-typing fallback, a test-infrastructure timer drain in the two pre-existing fake-timer pointer suites) are recorded in §3/§6. **Post-review correction (tester cycle 1, 2026-10-16):** two blocker fixes in `MOVE_TOKEN` (a dropped carried separator in edited documents; minted duplicate `:moved-separator` ids — both eliminated by re-inserting the ACTUAL carried token object), the self-edit classification drained by document comparison instead of a one-shot flag, and the tester's oracle/fuzz harnesses ported as permanent regression tests (§4/§6).
+
+---
+
+## 1. Deliverables
+
+| File | Role |
+| ---- | ---- |
+| `src/utils/previewDocument.ts` | New: the pure document helpers — `serialize` (pure concatenation, `buildMergedText`'s successor), `parsePreviewDom` (the pure DOM→tokens parser: chips by `data-token-id`, text nodes split at `\n`, transparent unknown elements, duplicate-id/empty-chip degradation), `buildSnippetTokenId`, `isSnippetToken`, `isSeparatorToken`, `makeSeparatorToken`, `tokensEqual` (the reducer's no-op guard), `tokensEqualIgnoringEdited` (the focused surface's self-sync recognition — added in the tester cycle-1 fix), `snippetSlotToTokenIndex` (the token-index migration of the gap landing math) |
+| `src/utils/previewDocument.test.ts` | New: +21 unit tests (serialize byte-parity/`\n`/no-trimming; parser rules; round-trips `serialize∘parse` and `parse∘serialize` over the representative documents; helper units incl. `tokensEqualIgnoringEdited`) |
+| `src/context/SnippetsContext/SnippetsContext.types.ts` | Rewritten: `SnippetToken`/`OwnTextToken`/`LineBreakToken`/`PreviewToken`/`PreviewDocument`/`SnippetsState` (`tokens` + `tombstones` + `editEnabled`); the four actions (`SET_SOURCE_SNIPPETS`, `MOVE_TOKEN`, `SYNC_DOCUMENT`, `SET_EDIT_ENABLED`); the context value exposes `document`, `editEnabled`, `setSourceSnippets`, `moveToken`, `syncDocument`, `setEditEnabled` (`OrderedSnippet`, `moveSnippet`, `MOVE_SNIPPET` and the `order` integer retire) |
+| `src/context/SnippetsContext/SnippetsContext.reducer.ts` | Rewritten: diff-by-id reconciliation over snippet tokens inside the document (join-parity separators, resize rewrites unedited tokens, edited tokens text-frozen, source deletion removes tokens + one adjacent separator and clears the tombstone, tombstoned ids never re-append, new ids append with separators), `MOVE_TOKEN` (token-index move, no renumbering, separator hygiene, inert-move/bounds no-op guards), `SYNC_DOCUMENT` (whole-document replace, `edited` computation, tombstone writes), `SET_EDIT_ENABLED`; reference-preserving no-op returns via `tokensEqual` |
+| `src/context/SnippetsContext/SnippetsContext.tsx` | Modified: `useReducer` over the new state; all four action creators as stable callbacks |
+| `src/context/SnippetsContext/index.ts` | Modified: exports the new model (and `initialSnippetsState`) |
+| `src/context/SnippetsContext/SnippetsContext.test.tsx` | Migrated + extended: 27 → 45 tests (reducer: token shapes, join parity across interleaved sources and whole-source clears, resize freeze, deletion + separator (both sides), tombstone set/clear/no-resurrect/new-id-recreation, MOVE parity (forward/backward/gaps/leading/trailing) and every no-op guard, SYNC edited/tombstone/idempotency, SET_EDIT_ENABLED; provider: all five APIs, stable references, unmount discard) |
+| `src/context/SnippetsContext/SnippetsContext.reducer.test.ts` | New (tester cycle 1): +12 permanent regression tests ported from the review harnesses — the exhaustive MOVE oracle (every `(from, to)` pair on unedited documents of 1–5 chips: old-join parity, chip order, id uniqueness, inert-reference semantics; bounds/non-chip guards; every two-move sequence on 2–4 chips), the seeded randomized edited-document sweep (400 documents × all `(from, to)` pairs × every-7th two-move: character-multiset preservation, id uniqueness, non-inert position change), and the two minimized repro seams (trailing-gap multiset preservation; two-move id uniqueness) |
+| `src/pages/MergeSession/components/PreviewArea/PreviewArea.tsx` | Rewritten render: the gating-matrix branch (edit OFF + empty keeps `preview-empty`; otherwise the DndContext + `SortableContext` + `SegmentFlow`), the contentEditable host with its ARIA/placeholder attributes, and the memoized token children assembly (chips via `SortableSegment`, own text and `\n` as keyed-Fragment text nodes, gap anchors + needle per snippet slot, no anchors on a tokenless flow so the `:empty` placeholder can render) |
+| `src/pages/MergeSession/components/PreviewArea/PreviewArea.hook.tsx` | Rewritten: consumes the document/editEnabled/`moveToken`/`syncDocument` from the context; drag math on token indexes (`snippetSlotToTokenIndex` landings, forward-after/backward-before chip drops, snippet-space announcements counting snippet tokens); the editable-surface contract — `flowRef`, the mode-aware freeze/thaw (`frozenTokens` + `renderEpoch`), `commitFlow`, `handleFlowInput` (parse → one `SYNC_DOCUMENT` per input event), `handleFlowKeyDown` (Enter prevented + `insertTextAtSelection('\n')` + commit, target-guarded so a focused chip keeps dnd-kit's pickup), `handleFlowPaste` (plain-text only, no-data no-op), focus/blur handlers with target guards; `SNIPPET_DRAG_ACTIVATION`/`computeNeedleIndex`/`buildGapId`/`parseGapId`/`computeGapMoveIndex` kept (the latter now the announcement-side landing helper) |
+| `src/pages/MergeSession/components/PreviewArea/PreviewArea.styles.ts` | Modified: `SegmentFlow` gains the `$editing` transient block — `cursor: text`, `min-height: 1.75em` (the empty editor is clickable), and the `:empty::before` placeholder rule (`content: attr(data-placeholder)`, secondary color, no pointer events) |
+| `src/pages/MergeSession/components/PreviewArea/PreviewArea.test.tsx` | Migrated + extended: 53 → 79 tests. Existing suites pass at behavior level (reorder textContents, announcements, needle placements, parity assertions now against the serialized document); new suites: editable surface (attributes, ARIA, language, warning suppression, placeholder CSS), the four gating quadrants (table-driven), editing workflows (own-text typing with the browser-created text node's reference identity preserved through the sync, in-snippet integration, Enter, blur commit/thaw, toggle-off commit, the no-op-sync-then-source-change drain regression, deletion, paste, twin sync both directions, drag-while-focused), click-vs-drag on the editable surface (fake-timer hold/no-hold, Space-on-chip vs Space-on-root split) |
+| `src/pages/MergeSession/components/SortableSegment/SortableSegment.tsx` | Modified: takes a `SnippetToken`, renders `data-token-id={token.tokenId}` (the parser's key), sortable id = the token id |
+| `src/pages/MergeSession/components/SortableSegment/SortableSegment.types.ts` | Modified: `token: SnippetToken` prop (the `snippet`/`sortableId` props retire) |
+| `src/pages/MergeSession/components/SortableSegment/SortableSegment.hook.tsx` | Modified (comment-level): documents the token id as the sortable id |
+| `src/pages/MergeSession/components/SortableSegment/SortableSegment.test.tsx` | Migrated: 5 → 5 tests (token-seeded; asserts `data-token-id`) |
+| `src/pages/MergeSession/components/TextEditingToggle/` | New page-owned component (standard 6-file split + barrel): the self-contained "T" toggle — MUI `Title` icon, `aria-pressed`, `data-testid="preview-edit-toggle"`, labels `editing.toggleOn`/`toggleOff`, one shared `editEnabled` read/written through SnippetsContext; `ToggleIconButton` styles the pressed state (primary color + selected background keyed on `aria-pressed`) |
+| `src/pages/MergeSession/components/TextEditingToggle/TextEditingToggle.test.tsx` | New: +9 unit tests (default OFF, flip, idempotency, shared state across instances, context flag, i18n keys verbatim in both languages, language follow, pressed styling) |
+| `src/pages/MergeSession/components/CopyMergedTextButton/CopyMergedTextButton.hook.tsx` | Modified: copies `serialize(document)`; `canCopy = editEnabled \|\| mergedText.length > 0`; component/strings untouched |
+| `src/pages/MergeSession/components/CopyMergedTextButton/CopyMergedTextButton.test.tsx` | Migrated + extended: 7 → 10 tests (gating matrix incl. edit-ON-empty, own-text-only copy, byte-identity, integrated-text payload, empty-string copy + toast) |
+| `src/pages/MergeSession/components/PreviewModal/PreviewModal.tsx` | Modified: the tools rail order becomes copy → `TextEditingToggle` → close |
+| `src/pages/MergeSession/components/PreviewModal/PreviewModal.hook.tsx` | Modified: `canOpen = editEnabled \|\| serialize(document).length > 0`; the context `document` is aliased on destructure so the Escape guard's `window.document.dispatchEvent` stays the DOM global; the guard itself untouched |
+| `src/pages/MergeSession/components/PreviewModal/PreviewModal.test.tsx` | Migrated + extended: 17 → 23 tests (existing dialog/close/guard suites at behavior level; rail order updated; new suite: empty-document gating, the shared toolbar↔rail toggle pair, modal→inline typing sync, inline→modal sync, Escape-mid-typing loses nothing) |
+| `src/pages/MergeSession/components/index.ts` | Modified: `export * from './TextEditingToggle'` (inserted before PreviewModal) |
+| `src/pages/MergeSession/MergeSessionPage.tsx` | Modified: toolbar order copy → `PreviewModal` → `TextEditingToggle` |
+| `src/pages/MergeSession/MergeSessionPage.test.tsx` | Migrated + extended: 8 → 10 tests (toolbar order with the toggle under the modal trigger; the end-to-end editing flow: empty gating → toggle on → placeholder editor → type own text → copy serializes it) |
+| `src/i18n/resources/en-US.json`, `pt-BR.json` | Modified: exactly the four `pages.mergeSession.previewArea.editing.*` keys (spec copy, verbatim, both languages); tutorial untouched |
+
+Records delivered alongside (project root): `docs/adr/0004-preview-document-model.md` (new — the spec's drafted copy, considered options completed), `docs/adr/0001-diff-by-id-merge-order.md` (the one-sentence amendment appended to Consequences), `GLOSSARY.md` (Merged Text updated; Own Text and Line Break added in the existing format), `roadmap.md` (Task 3.1–3.6 checked; lines 3.3/3.4 amended with the deviation notes pointing to the user decisions, ADR 0004, and this spec folder — mirroring how line 2.4 recorded the modal's mobile deviation). No routes changed; no backend files touched; the tutorial stays 6 steps.
+
+---
+
+## 2. Behavior (as implemented)
+
+```tsx
+// PreviewArea.tsx — the editable host (edit ON) and the gating branch
+<S.SegmentFlow
+  key={`preview-flow-${renderEpoch}`}          // thaw remounts: clean re-render from the model
+  ref={flowRef}
+  data-testid="preview-segment-flow"
+  $editing={editEnabled}
+  contentEditable={editEnabled || undefined}   // edit OFF renders exactly today's flow
+  suppressContentEditableWarning
+  aria-multiline={editEnabled || undefined}    // implicit textbox role comes from contentEditable
+  aria-label={editEnabled ? editingLabel : undefined}
+  data-placeholder={editEnabled ? editingPlaceholder : undefined}
+  onFocus={handleFlowFocus}
+  onBlur={handleFlowBlur}
+  onInput={editEnabled ? handleFlowInput : undefined}
+  onKeyDown={editEnabled ? handleFlowKeyDown : undefined}
+  onPaste={editEnabled ? handleFlowPaste : undefined}
+>
+  {flowChildren}
+</S.SegmentFlow>
+```
+
+```ts
+// PreviewArea.hook.tsx — the mode-aware focused-surface-owns-DOM contract (ADR 0004)
+// Own parsed edits: parse → ONE whole-document sync; the parse is kept
+// for classification (a NO-OP sync re-renders nothing, so a one-shot
+// flag would stick and wrongly absorb the next external change).
+const dispatchParsedSync = useCallback((parsed: PreviewToken[]) => {
+  lastParseRef.current = parsed;
+  syncDocument(parsed);
+}, [syncDocument]);
+
+// The document-change effect classifies every incoming change against
+// the last dispatched parse — content-equal ignoring `edited` (the
+// reducer's only transform) means it is this surface's own parsed
+// edit: absorb (the frozen children stay). Every other change (a
+// completed drag, source reconciliation) re-freezes the focused
+// surface from the model + remounts (clean reconciliation, accepted
+// caret reset).
+useEffect(() => {
+  const ownParse = lastParseRef.current;
+  lastParseRef.current = null;   // classified: a stale parse must never absorb a later change
+  if (ownParse !== null && tokensEqualIgnoringEdited(previewDocument, ownParse)) {
+    modelRef.current = previewDocument;
+    return;
+  }
+  if (previewDocument !== modelRef.current) {
+    modelRef.current = previewDocument;
+    if (editEnabled && flowFocused) { setFrozenTokens(previewDocument); setRenderEpoch((e) => e + 1); }
+  }
+}, [previewDocument, editEnabled, flowFocused]);
+
+// Blur (and toggling edit OFF mid-typing) commits first — no keystroke lost.
+const handleFlowBlur = useCallback((event) => {
+  if (event.target !== flowRef.current) return;   // chip blur must not thaw
+  commitFlow();
+  setFlowFocused(false); setFrozenTokens(null); setRenderEpoch((e) => e + 1);
+}, [commitFlow]);
+```
+
+```ts
+// SnippetsContext.reducer.ts — MOVE_TOKEN carries one adjacent separator
+// and re-inserts THAT SAME TOKEN OBJECT (id and identity preserved —
+// ids are never minted here, so they stay unique across any sequence
+// of moves; the carried token is never dropped, so the document's
+// character multiset survives every move):
+const carriedSeparator: PreviewToken | null = carriedPreceding
+  ? (before ?? null)
+  : carriedFollowing
+    ? (after ?? null)
+    : null;
+// …
+const insert: PreviewToken[] = [token];
+if (carriedSeparator !== null) {
+  const landsAfterSeparator =
+    landingIndex > 0 && isSeparatorToken(reduced[landingIndex - 1]);
+  // Left side covered (or the chip lands at the document start):
+  // replant on the right; otherwise plant before the chip. Either
+  // way the carried token is re-inserted — a move never deletes
+  // content, even when the landing's other side already has a
+  // separator of its own.
+  if (landsAfterSeparator || landingIndex === 0) {
+    insert.push(carriedSeparator);
+  } else {
+    insert.unshift(carriedSeparator);
+  }
+}
+reduced.splice(landingIndex, 0, ...insert);
+// Inert move (the chip's snippet position unchanged) → reference-identical state.
+```
+
+```tsx
+// TextEditingToggle.tsx — deviation (a): ONE shared session state, both instances
+<S.ToggleIconButton
+  data-testid="preview-edit-toggle"
+  aria-label={ariaLabel}          // toggleOn while OFF (the enabling action), toggleOff while ON
+  aria-pressed={editEnabled}
+  onClick={handleToggle}
+>
+  <Title />
+</S.ToggleIconButton>
+```
+
+- **Document model (3.1)**: SnippetsContext state is `{ tokens, tombstones, editEnabled }`; `tokens` is a single ordered `PreviewToken[]` where position IS the merge order. Snippet tokens carry `tokenId` (`${sourceId}:${sourceSnippetId}` — globally unique, the sortable id), `sourceSnippetId`, `sourceId`, `color`, `text`, `edited`; own-text tokens never contain `\n`; line-break tokens serialize `\n`. `useSnippets` exposes `document`, `editEnabled`, `setSourceSnippets`, `moveToken(from, to)`, `syncDocument(tokens)`, `setEditEnabled` — all stable references.
+- **Reconciliation**: an emission into an empty document yields `[A, " ", B]`; later appends each insert one `" "` separator first (join parity — an unedited session serializes byte-identically to the old `join(' ')`); resizes rewrite unedited tokens in place (position/color/identity unchanged); edited tokens are text-frozen but still removed when the source deletes them (with one adjacent `" "` separator — preceding when present, else the following one — so an unedited flow keeps join parity through deletions too); tombstoned ids never re-append while the source still reports them, clear once it stops, and never block new ids (TextInput `generateId`).
+- **Editable surface (3.2)**: edit OFF renders exactly today's read-only flow (no `contenteditable` attribute, React reconciles freely); edit ON makes the `preview-segment-flow` root the editing host (implicit textbox role, `aria-multiline`, translated `editing.label`, `data-placeholder` hint, text cursor, one-line min-height). Own text renders as plain text nodes, line breaks as `\n` text nodes (the flow's `white-space: pre-wrap` carries them), chips keep their tint/testids/dnd-kit wiring and gain `data-token-id`.
+- **Focused-surface contract**: while focused, the surface's own input events parse the DOM and dispatch one `SYNC_DOCUMENT` — the children memo (`renderedTokens`) does not recompute (React bails on identical element references; the browser-created text node stays the same node — asserted by node identity). Blur commits, thaws and remounts from the model; non-text changes (completed drag, source reconciliation) re-freeze + remount the focused surface; toggling edit OFF mid-typing commits the DOM first.
+- **Enter**: preventDefault'd (no native block insertion) with a `"\n"` text node inserted at the caret via the Selection/Range API, then an explicit commit (manual DOM edits fire no input event); guarded by `event.target === flowRef.current` so Space/Enter on a focused chip stays dnd-kit's pickup (verified: the activator preventDefaults and only activates on its own node).
+- **Parsing/sync (3.4)**: `parsePreviewDom` is pure — chips → snippet tokens (typed-inside text integrates into the token, deviation b; emptied chips pruned; duplicate ids degrade to text), text nodes split at every `\n`, unknown elements (gap anchors, needle, stray wrappers) are transparent containers that flatten to their text content. Paste is intercepted: `text/plain` only, multi-line preserved, no text data → no-op.
+- **Serialization (3.5)**: `serialize(document)` is pure concatenation; `CopyMergedTextButton` and the modal trigger gate on `editEnabled || serialize(document).length > 0`; copy on an empty document (edit ON) writes `""` and shows the existing toast; own-text-only documents copy.
+- **Empty-document editing**: edit ON + empty renders the editable root with the `:empty::before` placeholder hint (no `preview-empty` block, no gap anchors — a tokenless flow stays truly `:empty`); the four gating quadrants hold identically inline and in the modal.
+- **Inline ↔ modal**: both surfaces render the one document; typing in either updates the other on its next render (both directions covered); the modal closes mid-typing with nothing lost (per-input sync); the Escape veto + re-dispatch guard and the mid-drag Escape behavior are untouched and their suites pass.
+
+---
+
+## 3. Key implementation decisions (agent defaults, within spec latitude)
+
+- **MOVE separator hygiene.** A literal single-element splice cannot preserve the pinned parity (`EDIT-05`: "WYSIWYG parity with the pre-migration snippets array", and the Q16 policy keeping the existing reorder-behavior assertions green): splicing `[a, " ", b, " ", c]` naively yields a leading/dangling separator and `" b ac"`-style serializations. The reducer therefore moves the chip together with ONE adjacent `" "` separator (the same adjacency rule source deletion uses) and re-inserts **the actual carried token object** — id and identity preserved — on whichever side of the landing point lacks one: left-side separator covers → plant after the chip; no left separator with content before → plant before it; document start with content following → after it. The carried token is **never minted and never dropped**: ids stay unique across any sequence of moves (no `:moved-separator` minting), the document's character multiset survives every move in edited documents too, and React keys stay stable across moves. Every canonical case was hand-verified against the old `join(' ')` (forward/backward chip drops, leading/middle/trailing gaps, own-gap no-ops) and is now machine-verified by the exhaustive oracle and the randomized fuzz (§4). No renumbering, no-op guards, and inert moves returning the reference-identical state are unchanged.
+- **Any `" "` text token is a movable separator (documented agent default, tester finding 6).** The model deliberately does not distinguish user-typed single spaces from reconciliation-planted separators: `isSeparatorToken` is content-based (`kind === 'text' && text === ' '`). Consequence: a chip drag can RELOCATE a user-typed single space (e.g. dragging a chip whose adjacent user space travels with it) — content is always preserved, never created or destroyed. Spaces with any other shape (multi-space runs, `"hi "`) are ordinary own text and never travel.
+- **The freeze mechanism is a children memo over a frozen snapshot.** `renderedTokens = frozenTokens ?? document`: on focus the snapshot freezes at the current model; the surface's own syncs never touch it (memo stable → React bails on identical element references → the DOM is never reconciled mid-typing); non-text model changes re-freeze to the new model; blur/toggle-off commit then null it (thaw). `renderEpoch` keys the flow root so every thaw is a clean remount — React's reconciliation never runs against browser-managed DOM, and the remount is also what resets the native undo stack (the documented limitation). **Self-edit classification drains by document comparison** (tester cycle-1 fix): a NO-OP sync (the reducer returns reference-identical state) produces no re-render, so a one-shot flag would stick and wrongly absorb the NEXT external change; the effect instead classifies every incoming document against the last dispatched parse via `tokensEqualIgnoringEdited` (the reducer's only transform on a parse is the `edited` flag), and a consumed or stale parse never classifies a later change.
+- **`document` is aliased on destructure in every hook** (`const { document: previewDocument } = useSnippets()`): the context value's key stays `document` (pinned by the spec), but the DOM global must stay reachable — the modal's Escape guard re-dispatches through `window.document.dispatchEvent`, and shadowing it was a real crash found during implementation.
+- **The parser is fully DOM-pure; the reducer owns model semantics.** `parsePreviewDom` takes only the root and the previous tokens (metadata inheritance for color/source ids); the `edited` flag and tombstone writes are computed in `SYNC_DOCUMENT` (text changed vs the previous model token with the same id; never resets; source-side updates never set it). Id spaces are disjoint by prefix (`own-text:`, `line-break:`, `:separator`), so React keys stay unique.
+- **The trailing gap anchor renders only while at least one chip exists** — otherwise the flow would never match `:empty` and the placeholder could never show. The spec's flagged caveat (stray zero-length text nodes while focused) remains; the absolutely-positioned overlay is the documented fallback.
+- **Test infrastructure — fake-timer drain.** dnd-kit's sensor removes its document-level click-suppression listener (capture-phase `stopPropagation`, attached once the activation constraint is met) via `setTimeout(…, 50)` on drag end. Under `vi.useFakeTimers()`, `vi.useRealTimers()` in `afterEach` discarded that pending removal, and **every subsequent `fireEvent.click` in the file was silently swallowed** (diagnosed with a minimal probe: even a plain `useState` button's onClick stopped firing). The two pre-existing fake-timer pointer suites (and the new one) now drain 60ms of fake clock before restoring real timers. Zero assertions changed; without it, any later click-driven test in these files would pass or fail vacuously.
+- **Two scoped lint suppressions** (`react/set-state-in-effect` in PreviewArea.hook) for the effects that synchronize with the external shared-document/edit-toggle changes — the rule's own sanctioned use case; verified that oxlint honors `eslint-disable-next-line`.
+- **Gating helper**: `isDocumentEmpty` is computed once in the hook (`serialize(document).length > 0`) and shared by the copy gate and the empty-state branch; the modal-open trigger re-derives the same expression in `PreviewModal.hook` (one gate semantics, two call sites — both `editEnabled || serialize(document).length > 0`).
+- **The i18n keys are consumed through the hook** (`editingLabel`/`editingPlaceholder`) rather than re-read in JSX, keeping the component slim and the language-switch test at the hook boundary.
+
+---
+
+## 4. Testing strategy
+
+- **Document-model reducer/provider (`SnippetsContext.test.tsx`, 45; was 27)**: token kinds and initial state; join parity across interleaved sources, whole-source clears, and appends into own-text documents; resize rewrite in place; edited-token freeze; deletion with the preceding vs following separator; tombstone set / no-resurrect / clear-on-source-delete / new-id-recreation; MOVE parity (forward, backward, leading/middle/trailing gaps, document-start carry) and every no-op guard (equal, out-of-bounds, non-snippet fromIndex, inert own-gap, single chip); SYNC (edited computation, never-resets, tombstone writes, idempotent re-dispatch, pruning); SET_EDIT_ENABLED; provider stable references for all five APIs.
+- **MOVE oracle + fuzz (`SnippetsContext.reducer.test.ts`, 12; new, tester cycle 1)**: the tester's review harnesses, ported as permanent regressions — the exhaustive oracle runs every `(from, to)` pair on unedited documents of 1–5 chips (old-join parity, chip order, id uniqueness, inert⇒same-reference / non-inert⇒new-reference, bounds and non-chip guards) plus every two-move sequence on 2–4 chips; the seeded randomized sweep runs 400 edited documents (chips with edited flags, single/multi spaces, line breaks) × all `(from, to)` pairs, asserting the character multiset, id uniqueness, and non-inert position changes after every move, plus every-7th-document two-move sweeps. The two minimized repro seams are named tests: the trailing-gap multiset case (`"\nBee A "` → `"\nA Bee "`) and the two-move id-uniqueness case (`[A, " ", B, " ", C]` through both moves back to `"A B C"` with unique ids).
+- **Parser/serializer (`previewDocument.test.ts`, 21; new)**: serialize units (empty, byte-identity vs the old join, `\n` mapping, no trimming, consecutive breaks, own-text-only, embedded newlines in chips); parser units (chips keyed by `data-token-id`, metadata inheritance + id-split fallback, empty-chip pruning, newline splitting, transparent unknown/nested elements, duplicate-id degradation, zero-footprint anchors, per-parse id uniqueness); round-trips `serialize∘parse` (including re-parse of the parse) and `parse∘serialize` over the representative documents (empty, own-only, breaks at the edges, consecutive breaks, adjacent chips without separator); `snippetSlotToTokenIndex`/`isSeparatorToken`/`tokensEqual`/`tokensEqualIgnoringEdited` units.
+- **PreviewArea (79; was 53)**: the pre-existing suites pass at behavior level — the listed migration updates are: `buildMergedText` → the serialized document (a `document-probe` renders `serialize(document)` beside the surface so the WYSIWYG invariant is asserted against the live model), `OrderedSnippet`/`order`/`buildSortableId` assertions → token-id/position assertions, and the fake-timer drain (§3). New suites: editable surface (OFF has no editing attributes; ON is a labelled multiline host; chips keep button semantics; no contentEditable warning; `$editing` styles + `:empty::before` rule; language follow), the four gating quadrants (table-driven) + the empty-quadrant specifics (no anchors → truly `:empty`; toggle OFF restores the empty state), editing workflows (own-text typing with the browser-created text node's **reference identity** preserved through the sync; in-snippet integration with no chip split; Enter preventDefault + `\n` model sync; Enter-on-chip stays dnd-kit pickup; blur commit/thaw; toggle-off commit; chip deletion; multi-line plain paste; no-data paste no-op; twin sync in BOTH directions; a completed drag re-rendering the focused surface; the no-op-sync-then-source-change drain regression), click-vs-drag on the editable surface (quick release never drags; a 50ms hold drags and reorders in edit mode; Space-on-chip picks up AND is defaultPrevented while Space-on-root does not).
+- **TextEditingToggle (9; new)**: default OFF, flip + labels, idempotency, one shared state across two instances, direct context flag, the four keys verbatim in BOTH resources, pt-BR labels, pressed styling.
+- **CopyMergedTextButton (10; was 7)**: gating quadrants (incl. edit-ON-empty enabled and own-text-only), byte-identity payload, integrated-text + line-break payload, empty-string copy + toast, clipboard-rejection path; the `buildMergedText` unit migrated to the `serialize` suite.
+- **PreviewModal (23; was 17)**: existing dialog/close/resize/guard suites at behavior level (migration: `buildMergedText` → literal + parity comment; hook tests read `document` and token ids); rail order updated to copy → toggle → close; NEW: empty-document gating through the trigger, the editable empty editor inside the dialog (placeholder, no `preview-empty`, copy enabled — identical inline), the shared toolbar↔rail toggle pair, modal→inline typing sync, inline→modal sync (input-dispatch path — see §7), Escape-mid-typing closes with nothing lost.
+- **MergeSessionPage (10; was 8)**: the full shared-state modal proof passes unchanged (its reorder now runs on the token model); NEW: toolbar order (copy → modal-open → toggle), the end-to-end editing flow (empty gating → toggle on → placeholder editor → type own text → copy serializes `my own words` + toast) using the fireEvent-only clipboard pattern.
+- **Untouched suites** (77 tests across ActionsBar, Example, Header, TextInput, PreviewToolbar, TutorialBanner, color) pass unchanged; no suite was deleted.
+- **Harness verification (tester cycle 1)**: the tester's scratch harnesses were re-pointed at the fixed reducer (`node repro.mjs` GREEN — all token ids unique through the two-move sequence; `node repro2.mjs` GREEN — the character multiset survives the trailing-gap move; `node oracle.mjs` — 2,100 checks, 0 failures; `node fuzz.mjs` — 40,403 checks, 0 failures across the 235 previously-found char-loss cases and the dup-id cases) before porting the oracle and fuzz into the permanent vitest suite above.
+- Totals: **291/291 across 16 files** (was 194 across 13 at the cycle's start; +97 new tests: 45−27 + 12 + 79−53 + 23−17 + 10−7 + 10−8 + 9 + 21, with SortableSegment's 5 migrated in place). Verification: `npx tsc -b` clean, `npm run lint` (oxlint) clean, `npm run build` clean (the >500 kB chunk note is informational, unchanged from Task 1).
+
+---
+
+## 5. Per-requirement outcomes
+
+| ID | Outcome | Note |
+| -- | ------ | ---- |
+| EDIT-01 | Verified | Reducer/provider units: kinds, fields, position-is-order; initial state test |
+| EDIT-02 | Verified | MOVE_TOKEN: token-index move, no `order` field at all, every no-op guard incl. the inert own-gap; the separator hygiene re-inserts the ACTUAL carried token (never minted, never dropped) — machine-verified by the exhaustive oracle (every `(from, to)` pair, 1–5 chips) and the 400-document fuzz (§3/§4) |
+| EDIT-03 | Verified | Composite tokenIds globally unique (collision test); id uniqueness holds through every tested one- and two-move sequence (oracle + fuzz); only snippet tokens are `SortableContext` items/chips |
+| EDIT-04 | Verified | All six APIs exposed with stable references (provider test) |
+| EDIT-05 | Verified | Edit-OFF suites unchanged at behavior level; parity tests: `Hello brave  world today`, reorder serializations, empty state + copy path |
+| EDIT-06 | Verified | ADR 0004 written (draft copy, options completed); ADR 0001 amendment appended verbatim |
+| EDIT-07 | Verified | `[A, " ", B]` initial build; appends each preceded by one separator; byte-identity asserted |
+| EDIT-08 | Verified | Resize rewrites text in place (id/color/position asserted unchanged); edited token frozen |
+| EDIT-09 | Verified | Deletion removes token + one adjacent separator (preceding-else-following, both tested); tombstone clears |
+| EDIT-10 | Verified | SYNC tombstones fully-deleted ids; later emissions never re-append; in-memory only |
+| EDIT-11 | Verified | New ids append with separators in emission order; the tombstone is the only append exception |
+| EDIT-12 | Verified | `edited` set only by SYNC on text change; never resets; source updates never set it |
+| EDIT-13 | Verified | OFF renders no `contenteditable`/`aria-multiline`/`aria-label`; Task 1/1.6 suites pass unchanged |
+| EDIT-14 | Verified | Editable host with implicit textbox role, `aria-multiline`, translated label, suppressed warning, token children (React chips, text nodes, `\n` nodes) |
+| EDIT-15 | Verified | Typing test asserts the browser-created text node is still the SAME node by reference (`expect(flow.lastChild).toBe(typedNode)`) through the sync — React did not reconcile the focused surface's children; mode-awareness per EDIT-13 |
+| EDIT-16 | Verified | Drag-while-focused re-renders from the model (chips + textContent re-queried after the epoch remount); caret reset flagged manual (§7) |
+| EDIT-17 | Verified | Blur and toggle-off commit first, then thaw (both tested) |
+| EDIT-18 | Verified | Enter preventDefault asserted; `\n` text node + model sync; jsdom Selection path works — caret feel is manual (§7) |
+| EDIT-19 | Verified | Deletion test (chip + separator removed → model syncs, source untouched); the native textarea feel is manual (§7) |
+| EDIT-20 | Verified | `Title` icon, `aria-pressed`, `preview-edit-toggle`, labels per state |
+| EDIT-21 | Verified | One context flag; toolbar↔rail pair stays in sync in both directions |
+| EDIT-22 | Verified | Toolbar copy → modal-open → toggle (page test); rail copy → toggle → close (modal test) |
+| EDIT-23 | Verified | OFF = today (gating quadrants); ON = editing on both surfaces with the placeholder story |
+| EDIT-24 | Verified | Toggle-off-mid-typing commits the focused DOM first (probe keeps the typed text) |
+| EDIT-25 | Verified | Language switch flips toggle labels + editor label/placeholder; keys verbatim in both resources |
+| EDIT-26 | Verified | Roadmap 3.3 amended with the deviation note (user decision 2026-10-16, ADR 0004, spec folder) |
+| EDIT-27 | Verified | Fake-timer quick release never drags in edit mode; caret placement itself is the manual pass (§7) |
+| EDIT-28 | Verified | 50ms hold starts the drag in edit mode and reorders (dragging always live) |
+| EDIT-29 | Verified | Space-on-chip picks up AND `defaultPrevented`; Space-on-root neither picks up nor prevents; the browser runtime leak check + chip-level fallback stay prescribed (§7) |
+| EDIT-30 | Verified | Needle/gap/overlay/announcements all work on snippet-token slots in edit mode (drag suites); landing parity via reducer units |
+| EDIT-31 | Verified | All existing edit-OFF contracts pass unchanged (behavior level) |
+| EDIT-32 | Verified | Mid-drag vanish/stale-slot discards preserved (hook lifecycle tests migrated) |
+| EDIT-33 | Verified | One pure parse + one `SYNC_DOCUMENT` per input event |
+| EDIT-34 | Verified | Typed-inside text integrates (one chip, text grows, same tokenId — deviation b) |
+| EDIT-35 | Verified | Own text at boundaries creates/extends text tokens; every character in exactly one token (parser units) |
+| EDIT-36 | Verified | Fully-deleted snippet → tombstone (reducer); emptied chips pruned; empty artifacts pruned |
+| EDIT-37 | Verified | Plain-text paste, multi-line → line-break tokens, no-data no-op |
+| EDIT-38 | Verified | Blurred twin re-renders live on every sync (both directions); modal close mid-typing loses nothing |
+| EDIT-39 | Verified | Pure parser/serializer with the full round-trip matrix; unknown DOM flattens (nested recursion + text-content degradation) |
+| EDIT-40 | Verified | Native undo untouched by design; the stack resets on thaw — documented limitation, manual pass (§7) |
+| EDIT-41 | Verified | Pure concatenation; unedited byte-identity (reducer + copy tests) |
+| EDIT-42 | Verified | `flow.textContent === serialize(document)` asserted across typing, reorder, and static renders (document-probe pattern) |
+| EDIT-43 | Verified | `canCopy = editEnabled \|\| serialize(document).length > 0` — all quadrants tested |
+| EDIT-44 | Verified | Edit-ON empty copy writes `""` and shows the existing toast (agent default, logged) |
+| EDIT-45 | Verified | Modal-open uses the same gate (empty+OFF disabled; empty+ON enabled) |
+| EDIT-46 | Verified | Own-text-only document copies its text |
+| EDIT-47 | Verified | OFF + empty keeps `preview-empty` with disabled copy/modal-open |
+| EDIT-48 | Verified | ON + empty renders the editable root, no `preview-empty`, gates enabled — identical inline and in the modal |
+| EDIT-49 | Verified | `data-placeholder` + `:empty::before` pseudo-element: no DOM, no parse footprint, disappears with content |
+| EDIT-50 | Verified | First keystroke creates an own-text token; copy works at every moment (end-to-end page test) |
+| EDIT-51 | Verified | Emptying returns to the hint (parser prunes back to zero tokens); toggling OFF while empty restores the empty state + disabled gating |
+| EDIT-52 | Verified | One document, focused owns DOM, blurred twin live — both directions (PreviewArea twin test; modal→inline and inline→modal in the modal suite) |
+| EDIT-53 | Verified | Shared toggle pair, per-instance DndContext untouched, duplicate testids by design with `within(dialog)` scoping |
+| EDIT-54 | Verified | Twins show identical content per sync; modal close mid-typing loses nothing; Escape closes while editing; the mid-drag Escape guard suite passes unchanged |
+| EDIT-55 | Verified | Page-level: toolbar order, end-to-end edit→copy flow; modal-level: rail toggle → type in modal → inline updates live, duplicate toggle pair one state, type inline → dialog updates, Escape paths |
+
+**55 total: 55 Verified, 0 Deviated, 0 Deferred.**
+
+---
+
+## 6. Deviations from spec.md
+
+No requirement's contract deviated. The two roadmap deviations (a) and (b) are user decisions (2026-10-16) that the spec itself bakes in verbatim (EDIT-20/26 and EDIT-34 record them); both roadmap lines are updated at completion exactly as the spec prescribes. The judgment calls inside the spec's latitude:
+
+- **Post-review correction (tester cycle 1, 2026-10-16) — two MOVE blockers fixed.** (1) The replant's `landsAfterSeparator && !contentFollows` branch dropped the carried `" "` token, silently deleting user content in edited documents (minimized: `"\nBee A "` → `"\nA Bee"`; unreachable in unedited documents — the branch requires a document that ends in a separator). (2) The replant minted `` `${tokenId}:moved-separator` `` ids without checking for an un-consumed earlier mint, so two-move sequences could produce duplicate token ids (duplicate React keys, EDIT-03 violation). Both are eliminated by the prescribed mechanism: the move captures the ACTUAL adjacent separator token object and re-inserts that same object on whichever side of the landing lacks one — ids are never minted (uniqueness is structural) and the carried token is never dropped (the character multiset survives every move). Verified against the tester's harnesses before porting them (repro/repro2 GREEN; oracle 2,100 checks, fuzz 40,403 checks — 0 failures) and permanently as `SnippetsContext.reducer.test.ts` (§4).
+- **Self-edit classification drains by document comparison (tester minor finding 3).** A NO-OP sync returns reference-identical state, so no re-render drains a one-shot `selfEditRef` — the flag could stick and wrongly absorb the next external change (a source resize would leave a stale focused surface). The effect now classifies every incoming document against the last dispatched parse via `tokensEqualIgnoringEdited`; a consumed or stale parse never classifies a later change. Regression: the no-op-sync-then-source-change test in the PreviewArea suite.
+- **MOVE separator hygiene (§3)** — the spec pins "token-index splice" AND byte-identical unedited parity through reorders; a bare splice cannot deliver the second, so the reducer's move carries/replants one separator. Every specified MOVE behavior (no renumbering, no-op guards, lands-where-marked) holds; the parity the Q16 policy demands is restored. Judgment call, forced by pinned requirements.
+- **Any `" "` text token is a movable separator (§3, tester finding 6)** — documented semantic choice: the model does not distinguish user-typed single spaces from reconciliation-planted separators; a drag may relocate one, never create or destroy content.
+- **The spec's flagged jsdom caret-typing fallback was applied**: `userEvent` caret-typing into a contentEditable proved unreliable, so the automated contract is the parser/serializer/reducer suites plus manually-dispatched input events (direct DOM mutation + `fireEvent.input` / raw `dispatchEvent` wrapped in `act`), exactly the flagged path. Caret feel is a manual dev-server item.
+- **MUI's Dialog focus trap confines real focus to the dialog while it is open**, so "type inline while the modal is open" cannot hand focus to the inline surface in jsdom (or in a real browser, practically — the background is inert). The reverse-direction sync is proven through the input-dispatch path (the per-input sync is what matters) plus the trap-free twin test in the PreviewArea suite; the trap's feel is a manual pass item.
+- **Test-infrastructure fix (no assertion changes)**: the two pre-existing fake-timer pointer suites gained a 60ms fake-clock drain in `afterEach` (§3) — without it, dnd-kit's swallowed document-level click listener made every later click in the file a no-op, which would have rendered the new click-driven suites vacuous.
+- **`buildSortableId` retired** rather than kept as a shim: token ids ARE the composite ids (`text-1:a1`), so all existing drag-event fixtures (`active: { id: 'text-1:a1' }`) still work; the one helper test migrated to a rendering assertion.
+- **Two scoped `react/set-state-in-effect` suppressions** for the effects that sync with the external shared-document/edit-toggle state (the rule's sanctioned external-system case).
+
+---
+
+## 7. Known gaps / deferred
+
+Manual dev-server verification for the tester sub-agent (things jsdom cannot see or feel):
+
+- **Caret feel**: click placement on the editable surface, typing/caret movement, Enter line-break rendering (pre-wrap), Backspace/Delete across token boundaries, and selection behavior while dragging stays active (the user-accepted text-selection sacrifice).
+- **The Space/Enter character-leak runtime check** on a focused chip: the installed dnd-kit 6.3.1 activator was verified in source and jsdom (preventDefault + target guard + pickup), but a real-browser confirmation is prescribed, with the chip-level `preventDefault` fallback IF the browser leaks the character (not wired by default).
+- **Placeholder behavior while focused**: the documented stray zero-length text-node caveat (the hint may lag until blur after a select-all-delete); the absolutely-positioned React overlay is the documented fallback if it proves unreliable.
+- **Focus/caret after a drag-while-focused**: keyed reconciliation usually preserves selection; a caret reset is the accepted trade-off — needs an eyeball check.
+- **Native undo/redo**: best-effort while the surface stays focused; the stack resets on blur/thaw (documented limitation, no custom undo in v0).
+- **Screen-reader pass**: the implicit textbox role with `aria-multiline`, the editor label, and the reading of dnd-kit's role=button chips inside a textbox (flagged in the spec's agent defaults).
+- **MUI focus trap vs inline editing**: real focus cannot leave the open dialog, so the inline→modal live-typing path is only reachable in jsdom's simulation; the modal→inline direction and the component-level twin sync cover the contract.
+- **Visual**: the editable root's cursor/min-height, the toggle's pressed-state tint, the empty-editor placeholder contrast, and the needle/gap anchor positions relative to explicit separator tokens (gap anchors now render immediately before each chip rather than before its preceding separator — a sub-space visual shift with identical slot semantics). The manual caret pass should also confirm the zero-footprint gap/needle anchors never disturb caret movement or selection while editing (they are transparent to the parser but are real DOM elements in the flow).
+- **Suite-helper duplication (tester nits 8/10, left as-is by the self-contained-suite convention)**: `typeIntoFlow`/`typeInto` (jsdom typing simulation, ~4 lines) are duplicated across the PreviewArea, PreviewModal, and MergeSessionPage suites — each suite renders its own provider harness, so the helpers stay local rather than shared through a test utility.
+- The >500 kB chunk-size note in `npm run build` remains informational (unchanged since Task 1).
+
+Deferred by spec (not gaps): drag on/off toggle (replaced — deviation a), snippet splitting (replaced — deviation b), custom undo, rich-text paste, formatting toolbar, document cap, persistence (V1), cross-instance dragging, tutorial changes (user decision), a "Preview Document" glossary term (user decision Q14).

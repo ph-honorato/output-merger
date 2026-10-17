@@ -9,24 +9,26 @@ import {
   SnippetsProvider,
   useSnippets,
 } from "../../../../context/SnippetsContext";
-import type { OrderedSnippet } from "../../../../context/SnippetsContext";
 import type { Snippet } from "@components";
 import type {
   DragEndEvent,
   DragOverEvent,
   DragStartEvent,
 } from "@dnd-kit/core";
-import { buildMergedText } from "../CopyMergedTextButton/CopyMergedTextButton.hook";
-import PreviewArea from "./PreviewArea";
+import { TextEditingToggle } from "../";
+import {
+  isSnippetToken,
+  serialize,
+} from "../../../../utils/previewDocument";
 import {
   buildGapId,
-  buildSortableId,
   computeGapMoveIndex,
   computeNeedleIndex,
   parseGapId,
   SNIPPET_DRAG_ACTIVATION,
   usePreviewArea,
 } from "./PreviewArea.hook";
+import PreviewArea from "./PreviewArea";
 import { withAlpha } from "../../../../utils/color";
 
 const makeSnippet = (id: string, text: string, color = "#0080FF"): Snippet => ({
@@ -37,6 +39,22 @@ const makeSnippet = (id: string, text: string, color = "#0080FF"): Snippet => ({
   color,
 });
 
+// Renders the live serialized document (the model truth) next to the
+// surface: asserts the WYSIWYG invariant and the per-input sync
+// without reaching into internals.
+const DocumentProbe = () => {
+  const { document } = useSnippets();
+  return (
+    <span
+      data-testid="document-probe"
+      style={{ display: "none" }}
+      aria-hidden="true"
+    >
+      {serialize(document)}
+    </span>
+  );
+};
+
 const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
   const { setSourceSnippets } = useSnippets();
   useEffect(() => {
@@ -44,7 +62,13 @@ const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
       setSourceSnippets(sourceId, snippets),
     );
   }, [updates, setSourceSnippets]);
-  return <PreviewArea />;
+  return (
+    <>
+      <DocumentProbe />
+      <TextEditingToggle />
+      <PreviewArea />
+    </>
+  );
 };
 
 const renderWithProviders = (updates: Array<[string, Snippet[]]>) =>
@@ -254,9 +278,10 @@ describe("PreviewArea", () => {
     });
   });
 
-  it("renders the flow text exactly as buildMergedText produces it", () => {
+  it("renders the flow text exactly as the serialized document (WYSIWYG invariant)", () => {
     // 'b1' ends with a space: the resulting double space in the join is
-    // by-design (clipboard parity — join semantics untouched).
+    // by-design (clipboard parity — join semantics preserved by the
+    // explicit separator tokens).
     renderWithProviders([
       ["text-1", [makeSnippet("a1", "Hello")]],
       ["text-2", [makeSnippet("b1", "brave ")]],
@@ -264,12 +289,12 @@ describe("PreviewArea", () => {
       ["text-2", [makeSnippet("b1", "brave "), makeSnippet("b2", "today")]],
     ]);
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      buildMergedText([
-        { ...makeSnippet("a1", "Hello"), sourceId: "text-1", order: 1 },
-        { ...makeSnippet("b1", "brave "), sourceId: "text-2", order: 2 },
-        { ...makeSnippet("a2", "world"), sourceId: "text-1", order: 3 },
-        { ...makeSnippet("b2", "today"), sourceId: "text-2", order: 4 },
-      ]),
+      screen.getByTestId("document-probe").textContent,
+    );
+    // Byte-identity with the old buildMergedText join for an unedited
+    // session (model-migration parity assertion).
+    expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+      "Hello brave  world today",
     );
   });
 
@@ -325,7 +350,7 @@ describe("PreviewArea sorting affordances", () => {
         </I18nextProvider>
       ),
     });
-    expect(result.current.snippets).toHaveLength(3);
+    expect(result.current.document.filter(isSnippetToken)).toHaveLength(3);
 
     // Dragged id no longer exists: the reorder is discarded.
     act(() => {
@@ -349,14 +374,9 @@ describe("PreviewArea sorting affordances", () => {
       } as unknown as DragEndEvent);
     });
 
-    expect(result.current.snippets.map((snippet) => snippet.id)).toEqual([
-      "a1",
-      "b1",
-      "a2",
-    ]);
-    expect(result.current.snippets.map((snippet) => snippet.order)).toEqual([
-      1, 2, 3,
-    ]);
+    expect(
+      result.current.document.filter(isSnippetToken).map((token) => token.tokenId),
+    ).toEqual(["text-1:a1", "text-2:b1", "text-1:a2"]);
     expect(result.current.activeSnippet).toBeNull();
   });
 
@@ -377,21 +397,21 @@ describe("PreviewArea sorting affordances", () => {
     expect(SNIPPET_DRAG_ACTIVATION).toEqual({ delay: 50, tolerance: 5 });
   });
 
-  it("builds composite sortable ids that stay unique across colliding source ids", () => {
-    const first: OrderedSnippet = {
-      ...makeSnippet("x1", "Hello"),
-      sourceId: "text-1",
-      order: 1,
-    };
-    const second: OrderedSnippet = {
-      ...makeSnippet("x1", "Alpha"),
-      sourceId: "text-2",
-      order: 2,
-    };
+  it("keys snippet tokens by composite token ids that stay unique across colliding snippet ids", () => {
+    renderWithProviders([
+      ["text-1", [makeSnippet("x1", "Hello")]],
+      ["text-2", [makeSnippet("x1", "Alpha")]],
+    ]);
 
-    expect(buildSortableId(first)).toBe("text-1:x1");
-    expect(buildSortableId(second)).toBe("text-2:x1");
-    expect(buildSortableId(first)).not.toBe(buildSortableId(second));
+    const segments = screen.getAllByTestId("preview-snippet");
+    expect(segments.map((segment) => segment.dataset.tokenId)).toEqual([
+      "text-1:x1",
+      "text-2:x1",
+    ]);
+    expect(segments.map((segment) => segment.textContent)).toEqual([
+      "Hello",
+      "Alpha",
+    ]);
   });
 
   it("registers every segment as a focusable sortable item with instruction linkage", () => {
@@ -491,11 +511,10 @@ describe("PreviewArea keyboard sorting", () => {
       "Gamma",
     ]);
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      buildMergedText([
-        { ...makeSnippet("b1", "Beta"), sourceId: "text-2", order: 1 },
-        { ...makeSnippet("a1", "Alpha"), sourceId: "text-1", order: 2 },
-        { ...makeSnippet("a2", "Gamma"), sourceId: "text-1", order: 3 },
-      ]),
+      "Beta Alpha Gamma",
+    );
+    expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+      screen.getByTestId("document-probe").textContent,
     );
     expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
   });
@@ -589,6 +608,15 @@ describe("PreviewArea pointer sorting", () => {
   });
 
   afterEach(() => {
+    // dnd-kit removes its document-level click-suppression listener
+    // (capture-phase stopPropagation, attached once the activation
+    // constraint is met) via a 50ms setTimeout on drag end: drain the
+    // fake clock first, or vi.useRealTimers() discards the pending
+    // removal and every later fireEvent.click in the file is
+    // silently swallowed.
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -1029,11 +1057,9 @@ describe("PreviewArea drop indicator", () => {
       ).toBeTruthy();
       // No text: the merged-text parity holds while the needle renders.
       expect(needle.textContent).toBe("");
+      expect(flow.textContent).toBe(`${long} ${second}`);
       expect(flow.textContent).toBe(
-        buildMergedText([
-          { ...makeSnippet("a1", long), sourceId: "text-1", order: 1 },
-          { ...makeSnippet("a2", second), sourceId: "text-1", order: 2 },
-        ]),
+        screen.getByTestId("document-probe").textContent,
       );
 
       await pressKey(document, "Escape");
@@ -1143,6 +1169,12 @@ describe("PreviewArea drop indicator", () => {
     });
 
     afterEach(() => {
+      // Same drain as the pointer-sorting suite: dnd-kit's delayed
+      // document-listener removal must fire before the fake clock is
+      // discarded, or later clicks in the file stop propagating.
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
       vi.useRealTimers();
       vi.restoreAllMocks();
     });
@@ -1478,7 +1510,7 @@ describe("PreviewArea drop indicator", () => {
         </I18nextProvider>
       ),
     });
-    expect(result.current.snippets).toHaveLength(3);
+    expect(result.current.document.filter(isSnippetToken)).toHaveLength(3);
 
     // A vanished active id hides the needle from the start.
     act(() => {
@@ -1495,7 +1527,7 @@ describe("PreviewArea drop indicator", () => {
       } as unknown as DragStartEvent);
     });
     expect(result.current.dropIndicatorIndex).toBe(0);
-    expect(result.current.activeSnippet?.id).toBe("a1");
+    expect(result.current.activeSnippet?.tokenId).toBe("text-1:a1");
 
     // Over Beta moving forward: after it — stable across repeated events.
     act(() => {
@@ -1557,11 +1589,9 @@ describe("PreviewArea drop indicator", () => {
       } as unknown as DragEndEvent);
     });
     expect(result.current.dropIndicatorIndex).toBeNull();
-    expect(result.current.snippets.map((snippet) => snippet.id)).toEqual([
-      "a1",
-      "b1",
-      "a2",
-    ]);
+    expect(
+      result.current.document.filter(isSnippetToken).map((token) => token.tokenId),
+    ).toEqual(["text-1:a1", "text-2:b1", "text-1:a2"]);
 
     // Drag end clears the needle together with the overlay state and
     // keeps the Task 1 discard path (order unchanged).
@@ -1573,10 +1603,684 @@ describe("PreviewArea drop indicator", () => {
     });
     expect(result.current.dropIndicatorIndex).toBeNull();
     expect(result.current.activeSnippet).toBeNull();
-    expect(result.current.snippets.map((snippet) => snippet.id)).toEqual([
-      "a1",
-      "b1",
-      "a2",
+    expect(
+      result.current.document.filter(isSnippetToken).map((token) => token.tokenId),
+    ).toEqual(["text-1:a1", "text-2:b1", "text-1:a2"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Editable preview text (Feature 3 Task 3): the editable surface, the
+// gating matrix, editing workflows, and the click-vs-drag contract on
+// the editable surface. Typing is simulated the way jsdom allows
+// (direct DOM mutation + a dispatched input event) — the parser,
+// reducer, and serializer suites carry the per-keystroke contract;
+// caret feel stays a manual dev-server item (spec's flagged fallback).
+// ---------------------------------------------------------------------------
+
+const enableEditing = () =>
+  fireEvent.click(screen.getByTestId("preview-edit-toggle"));
+
+// Simulates the browser's caret typing: a new text node lands inside
+// the editing host, then the input event fires. Returns the created
+// node so tests can assert React never reconciled it away.
+const typeIntoFlow = (flow: HTMLElement, text: string) => {
+  const typedNode = document.createTextNode(text);
+  flow.appendChild(typedNode);
+  fireEvent.input(flow);
+  return typedNode;
+};
+
+const collapseSelectionAtEnd = (root: HTMLElement): boolean => {
+  const view = root.ownerDocument.defaultView;
+  if (!view || typeof view.getSelection !== "function") {
+    return false;
+  }
+  const selection = view.getSelection();
+  if (!selection || typeof selection.addRange !== "function") {
+    return false;
+  }
+  const range = root.ownerDocument.createRange();
+  range.selectNodeContents(root);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
+};
+
+describe("PreviewArea editable surface", () => {
+  afterEach(async () => {
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("renders no editing attributes while edit mode is OFF (today's flow)", () => {
+    renderWithProviders(seedInterleaved());
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(flow).not.toHaveAttribute("contenteditable");
+    expect(flow).not.toHaveAttribute("aria-multiline");
+    expect(flow).not.toHaveAttribute("aria-label");
+    expect(flow).not.toHaveAttribute("data-placeholder");
+  });
+
+  it("turns the flow into a labelled multiline editable host when edit is ON", () => {
+    renderWithProviders(seedInterleaved());
+    enableEditing();
+
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(flow).toHaveAttribute("contenteditable", "true");
+    expect(flow).toHaveAttribute("aria-multiline", "true");
+    expect(flow).toHaveAttribute("aria-label", "Merged text editor");
+    expect(flow).toHaveAttribute(
+      "data-placeholder",
+      "Type here to add your own text",
+    );
+    // The implicit textbox role comes from contentEditable itself.
+    expect(flow.getAttribute("role")).toBeNull();
+    // Chips keep dnd-kit's sortable semantics inside the textbox.
+    const chip = screen.getAllByTestId("preview-snippet")[0];
+    expect(chip).toHaveAttribute("role", "button");
+    expect(chip).toHaveAttribute("tabindex", "0");
+  });
+
+  it("does not warn about contentEditable children (warning suppressed)", () => {
+    const consoleSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    renderWithProviders(seedInterleaved());
+    enableEditing();
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("contentEditable"),
+    );
+    consoleSpy.mockRestore();
+  });
+
+  it("ships the editable cursor/min-height styles and the placeholder rule only in edit mode", () => {
+    renderWithProviders(seedInterleaved());
+    const css = () =>
+      Array.from(document.querySelectorAll("style"))
+        .map((style) => style.textContent)
+        .join("");
+
+    expect(screen.getByTestId("preview-segment-flow")).not.toHaveStyle({
+      cursor: "text",
+    });
+
+    enableEditing();
+
+    expect(screen.getByTestId("preview-segment-flow")).toHaveStyle({
+      cursor: "text",
+    });
+    expect(screen.getByTestId("preview-segment-flow")).toHaveStyle({
+      minHeight: "28px",
+    });
+    expect(css()).toContain(":empty::before");
+    expect(css()).toContain("content:attr(data-placeholder)");
+  });
+
+  it("follows the active language for the editor label and placeholder", async () => {
+    renderWithProviders(seedInterleaved());
+    enableEditing();
+    await act(async () => {
+      await i18n.changeLanguage("pt");
+    });
+
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(flow).toHaveAttribute("aria-label", "Editor de texto mesclado");
+    expect(flow).toHaveAttribute(
+      "data-placeholder",
+      "Digite aqui para adicionar seu próprio texto",
+    );
+  });
+});
+
+interface GatingQuadrant {
+  name: string;
+  edit: boolean;
+  updates: Array<[string, Snippet[]]>;
+  emptyState: boolean;
+  editable: boolean;
+}
+
+describe("PreviewArea gating matrix (edit OFF/ON × empty/non-empty)", () => {
+  const quadrants: GatingQuadrant[] = [
+    {
+      name: "edit OFF + empty renders today's empty state",
+      edit: false,
+      updates: [],
+      emptyState: true,
+      editable: false,
+    },
+    {
+      name: "edit OFF + non-empty renders today's read-only flow",
+      edit: false,
+      updates: [["text-1", [makeSnippet("a1", "Hello")]]],
+      emptyState: false,
+      editable: false,
+    },
+    {
+      name: "edit ON + empty renders the editable root (F3)",
+      edit: true,
+      updates: [],
+      emptyState: false,
+      editable: true,
+    },
+    {
+      name: "edit ON + non-empty renders the editable flow",
+      edit: true,
+      updates: [["text-1", [makeSnippet("a1", "Hello")]]],
+      emptyState: false,
+      editable: true,
+    },
+  ];
+
+  it.each(quadrants)("$name", ({ edit, updates, emptyState, editable }) => {
+    renderWithProviders(updates);
+    if (edit) {
+      enableEditing();
+    }
+
+    expect(Boolean(screen.queryByTestId("preview-empty"))).toBe(emptyState);
+    const flow = screen.queryByTestId("preview-segment-flow");
+    expect(Boolean(flow)).toBe(!emptyState);
+    if (flow) {
+      if (editable) {
+        expect(flow).toHaveAttribute("contenteditable", "true");
+      } else {
+        expect(flow).not.toHaveAttribute("contenteditable");
+      }
+    }
+  });
+
+  it("edit ON + empty renders the editable root with the placeholder hint and no empty-state block", () => {
+    renderWithProviders([]);
+    enableEditing();
+
+    expect(screen.queryByTestId("preview-empty")).toBeNull();
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(flow).toHaveAttribute("contenteditable", "true");
+    expect(flow).toHaveAttribute(
+      "data-placeholder",
+      "Type here to add your own text",
+    );
+    // No gap anchors either: a tokenless flow stays truly :empty.
+    expect(flow.childNodes).toHaveLength(0);
+  });
+
+  it("toggling edit OFF while empty restores today's empty state", () => {
+    renderWithProviders([]);
+    enableEditing();
+    enableEditing();
+
+    expect(screen.getByTestId("preview-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("preview-segment-flow")).toBeNull();
+  });
+});
+
+describe("PreviewArea editing workflows", () => {
+  it("types own text into an empty document: first keystroke creates an own-text token, the model syncs live, and the focused DOM is not reconciled", () => {
+    renderWithProviders([]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    expect(flow).toHaveFocus();
+
+    const typedNode = typeIntoFlow(flow, "my words");
+
+    // The model holds the typed text after every input event…
+    expect(screen.getByTestId("document-probe").textContent).toBe("my words");
+    // …while the browser-created text node is still the SAME node
+    // (reference identity): React did not reconcile the focused
+    // surface's children.
+    expect(flow.lastChild).toBe(typedNode);
+    expect((flow.lastChild as Text).data).toBe("my words");
+    // WYSIWYG invariant.
+    expect(flow.textContent).toBe(
+      screen.getByTestId("document-probe").textContent,
+    );
+  });
+
+  it("types inside a snippet without splitting it: the text integrates into the token (deviation b)", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    // The focused surface must own its DOM: the typed "!" survives as
+    // browser content, unreconciled by React (freeze contract).
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    const typedNode = document.createTextNode("!");
+    chip.appendChild(typedNode);
+    fireEvent.input(flow);
+
+    // One chip, its text grew, no new chip appeared — and the typed
+    // node is still the same node (no reconciliation inside the chip).
+    expect(screen.getAllByTestId("preview-snippet")).toHaveLength(1);
+    expect(screen.getByTestId("preview-snippet").textContent).toBe("Alpha!");
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha!");
+    expect(chip.lastChild).toBe(typedNode);
+    expect(
+      screen.getAllByTestId("preview-snippet")[0].dataset.tokenId,
+    ).toBe("text-1:a1");
+  });
+
+  it("creates a line break on Enter (preventDefault, \\\\n text node)", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    expect(collapseSelectionAtEnd(flow)).toBe(true);
+
+    const keydown = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      flow.dispatchEvent(keydown);
+    });
+    expect(keydown.defaultPrevented).toBe(true);
+
+    // A "\n" text node landed at the caret and synced into the model.
+    expect(flow.textContent).toContain("\n");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha\n",
+    );
+  });
+
+  it("keeps Enter on a focused chip as dnd-kit's pickup instead of a line break", async () => {
+    renderWithProviders(seedInterleaved());
+    enableEditing();
+    const [alpha] = screen.getAllByTestId("preview-snippet");
+    alpha.focus();
+
+    await pressKey(alpha, "Enter");
+
+    expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha Beta Gamma",
+    );
+    await pressKey(document, "Escape");
+  });
+
+  it("commits and thaws on blur: the flow re-renders from the model with nothing lost", () => {
+    renderWithProviders([]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    typeIntoFlow(flow, "typed before blur");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "typed before blur",
+    );
+
+    act(() => {
+      flow.blur();
+    });
+
+    // The thaw remounts the flow root: re-query the live node.
+    const liveFlow = screen.getByTestId("preview-segment-flow");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "typed before blur",
+    );
+    expect(liveFlow.textContent).toBe("typed before blur");
+    expect(liveFlow).toHaveAttribute("contenteditable", "true");
+  });
+
+  it("commits the focused DOM before freezing when edit is toggled OFF mid-typing", () => {
+    renderWithProviders([]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    typeIntoFlow(flow, "kept text");
+
+    // Toggle OFF while the surface still holds unsynced DOM? Every
+    // input event already synced; the toggle must lose nothing.
+    enableEditing();
+
+    // The read-only flow remounts from the committed model: re-query.
+    const liveFlow = screen.getByTestId("preview-segment-flow");
+    expect(screen.getByTestId("document-probe").textContent).toBe("kept text");
+    expect(liveFlow).not.toHaveAttribute("contenteditable");
+    expect(liveFlow.textContent).toBe("kept text");
+  });
+
+  it("still re-renders the focused surface from the model when a source change follows a NO-OP sync", () => {
+    // Regression (tester finding 3): a one-shot self-edit flag would
+    // stick on a no-op sync (the reducer returns reference-identical
+    // state, so no re-render drains it) and wrongly absorb the NEXT
+    // external change. The classification must drain by comparing the
+    // incoming document against the last dispatched parse instead.
+    const { rerender } = renderWithProviders([
+      ["text-1", [makeSnippet("a1", "Alpha")]],
     ]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    // A no-op sync: an input event over an unchanged DOM parses to
+    // the current model, so the reducer returns the same state (no
+    // re-render happens at all).
+    fireEvent.input(flow);
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha");
+
+    // An external change arrives while the surface is focused: it
+    // must NOT be absorbed — the focused surface re-renders from the
+    // model (the resize must be visible in the live flow).
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            <SnippetsProvider>
+              <Harness
+                updates={[["text-1", [makeSnippet("a1", "Alpha resized")]]]}
+              />
+            </SnippetsProvider>
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </I18nextProvider>,
+    );
+
+    const liveFlow = screen.getByTestId("preview-segment-flow");
+    expect(liveFlow).toHaveTextContent("Alpha resized");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha resized",
+    );
+  });
+
+  it("deletes a snippet token entirely: the chip vanishes and the id is tombstoned (source untouched)", () => {
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "Alpha")]],
+      ["text-2", [makeSnippet("b1", "Beta")]],
+    ]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    // Backspace eats the chip and the separator (native textarea-like
+    // deletion simulated as DOM mutation + input).
+    const chip = screen.getAllByTestId("preview-snippet")[1];
+    chip.remove();
+    flow.childNodes.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE && node.textContent === " ") {
+        node.remove();
+      }
+    });
+    fireEvent.input(flow);
+
+    expect(screen.getAllByTestId("preview-snippet")).toHaveLength(1);
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha");
+  });
+
+  it("strips paste to plain text and preserves multi-line content as line breaks", () => {
+    renderWithProviders([]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    expect(collapseSelectionAtEnd(flow)).toBe(true);
+
+    fireEvent.paste(flow, {
+      clipboardData: {
+        getData: (type: string) =>
+          type === "text/plain" ? "line one\n<b>bold</b>\nline three" : "",
+      },
+    });
+
+    // Plain text only: the clipboard's text/plain payload is inserted
+    // verbatim (the browser never renders the HTML), each newline a
+    // line-break token.
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "line one\n<b>bold</b>\nline three",
+    );
+    expect(flow.textContent).toContain("\n");
+  });
+
+  it("no-ops a paste with no text data", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    fireEvent.paste(flow, {
+      clipboardData: { getData: () => "" },
+    });
+
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha");
+  });
+
+  it("keeps the blurred twin surface live: typing in one instance updates the other on its next render", () => {
+    const TwoFlows = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
+      const { setSourceSnippets } = useSnippets();
+      useEffect(() => {
+        updates.forEach(([sourceId, snippets]) =>
+          setSourceSnippets(sourceId, snippets),
+        );
+      }, [updates, setSourceSnippets]);
+      return (
+        <>
+          <DocumentProbe />
+          <TextEditingToggle />
+          <PreviewArea />
+          <PreviewArea />
+        </>
+      );
+    };
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            <SnippetsProvider>
+              <TwoFlows updates={[["text-1", [makeSnippet("a1", "Alpha")]]]} />
+            </SnippetsProvider>
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </I18nextProvider>,
+    );
+    enableEditing();
+    const flowAt = (index: number) =>
+      screen.getAllByTestId("preview-segment-flow")[index];
+
+    // Direction 1: typing in the focused first instance updates the
+    // blurred second one live.
+    act(() => {
+      flowAt(0).focus();
+    });
+    typeIntoFlow(flowAt(0), " own");
+    expect(flowAt(1).textContent).toBe("Alpha own");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha own",
+    );
+
+    // Direction 2: focus moves to the second instance (the first
+    // thaws and re-renders from the model), and typing there updates
+    // the now-blurred first one.
+    act(() => {
+      flowAt(1).focus();
+    });
+    typeIntoFlow(flowAt(1), " words");
+    expect(flowAt(0).textContent).toBe("Alpha own words");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha own words",
+    );
+  });
+
+  it("keeps a completed drag working on the focused editable surface (a non-text change re-renders it)", async () => {
+    // jsdom computes no layout: the arrow-key move needs deterministic
+    // chip rects to resolve the drop target.
+    const restoreRects = installSegmentRects();
+    try {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      await pressKey(alpha, "Space");
+      await pressKey(document, "ArrowRight");
+      await pressKey(document, "Space");
+
+      expect(
+        screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
+      ).toEqual(["Beta", "Alpha", "Gamma"]);
+      // The epoch remount replaces the flow root (a clean re-render
+      // from the model): re-query the live node.
+      expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+        screen.getByTestId("document-probe").textContent,
+      );
+      expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+        "Beta Alpha Gamma",
+      );
+    } finally {
+      restoreRects.mockRestore();
+    }
+  });
+});
+
+describe("PreviewArea click-vs-drag on the editable surface", () => {
+  describe("pointer holds", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      installSegmentRects();
+    });
+
+    afterEach(() => {
+      // Same drain as the pointer-sorting suite: dnd-kit's delayed
+      // document-listener removal must fire before the fake clock is
+      // discarded, or later clicks in the file stop propagating.
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    const pointerDownOn = (element: Element, x = 40, y = 10) =>
+      fireEvent.pointerDown(element, {
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        clientX: x,
+        clientY: y,
+      });
+
+    it("still never starts a drag when the pointer is released before the delay (click = caret)", () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+
+      pointerDownOn(alpha);
+      act(() => {
+        vi.advanceTimersByTime(25);
+      });
+      fireEvent.pointerUp(document, { pointerId: 1 });
+      act(() => {
+        vi.advanceTimersByTime(75);
+      });
+
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta Gamma",
+      );
+    });
+
+    it("starts the drag on a held press in edit mode (dragging is always live — F1)", async () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+
+      pointerDownOn(alpha);
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+
+      fireEvent.pointerMove(document, {
+        pointerId: 1,
+        clientX: 160,
+        clientY: 10,
+      });
+      fireEvent.pointerUp(document, { pointerId: 1 });
+      await act(async () => {});
+
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+      expect(
+        screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
+      ).toEqual(["Beta", "Alpha", "Gamma"]);
+    });
+  });
+
+  describe("keyboard pickup split", () => {
+    beforeEach(() => {
+      installSegmentRects();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("keeps keyboard pickup on a focused chip while editing: Space picks the chip up, not the root", async () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+
+      // Space with a FOCUSED chip: dnd-kit's activator owns the key
+      // and preventDefaults it (verified in the installed 6.3.1).
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      act(() => {
+        alpha.focus();
+      });
+      const spaceOnChip = new KeyboardEvent("keydown", {
+        key: " ",
+        code: "Space",
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        alpha.dispatchEvent(spaceOnChip);
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(spaceOnChip.defaultPrevented).toBe(true);
+      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+      await pressKey(document, "Escape");
+
+      // Space with the caret in the root (target = the host): the
+      // activator declines (its keydown target is not the activator
+      // node), no drag starts, typing proceeds.
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+      const spaceOnRoot = new KeyboardEvent("keydown", {
+        key: " ",
+        code: "Space",
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(spaceOnRoot);
+      });
+      expect(spaceOnRoot.defaultPrevented).toBe(false);
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+    });
   });
 });

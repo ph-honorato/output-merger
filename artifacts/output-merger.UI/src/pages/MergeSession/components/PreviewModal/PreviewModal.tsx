@@ -2,7 +2,7 @@ import OpenInFull from "@mui/icons-material/OpenInFull";
 import CloseFullscreen from "@mui/icons-material/CloseFullscreen";
 import Dialog from "@mui/material/Dialog";
 import IconButton from "@mui/material/IconButton";
-import { CopyMergedTextButton, PreviewArea } from "../";
+import { CopyMergedTextButton, PreviewArea, TextEditingToggle } from "../";
 import { usePreviewModal } from "./PreviewModal.hook";
 import type { PreviewModalProps } from "./PreviewModal.types";
 import * as S from "./PreviewModal.styles";
@@ -62,6 +62,7 @@ function PreviewModal(props: PreviewModalProps) {
           </S.PreviewZone>
           <S.ToolsRail>
             <CopyMergedTextButton />
+            <TextEditingToggle />
             <IconButton
               data-testid="preview-modal-close-button"
               aria-label={t("pages.mergeSession.previewArea.modal.close")}

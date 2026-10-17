@@ -65,13 +65,13 @@
     - [x] Task 2.3: Manage open/close state and render the same PreviewArea inside the modal (shared state via context, no duplication)
     - [x] Task 2.4: Responsive + accessibility pass (ESC/backdrop close, focus trap; trigger hidden on mobile — user decision 2026-10-15 supersedes "full-screen on mobile", fullScreen only on the resize edge; see ADR 0003 and `.specs/features/preview-area-tools/tasks/preview-area-modal`)
     - [x] Task 2.5: Tests: modal open/close, preview content rendering, copy button integration
-  - [ ] **Task 3: Editable Preview Text** - Make the text on the preview area editable (inline and in the modal)
-    - [ ] Task 3.1: Extend SnippetsContext into a preview document model (snippet tokens + own-text tokens + line breaks), migrating Task 1 reorder onto it
-    - [ ] Task 3.2: Build the editable preview surface (contentEditable rendering colored snippet tokens, textarea-like caret/selection)
-    - [ ] Task 3.3: Verify the click-vs-drag contract (click = caret, hold = drag) and add a drag on/off toggle that disables dragging only
-    - [ ] Task 3.4: Implement edit parsing/sync: own text insertion, Enter → line break, deletion at boundaries, typing inside a snippet splits it between words; focused surface owns its DOM, blurred surface re-renders from the model
-    - [ ] Task 3.5: Update merged-text building/copy to serialize the document (own text + newlines for line breaks)
-    - [ ] Task 3.6: Tests: editing workflows, parse/serialize round-trips, inline-modal sync
+  - [x] **Task 3: Editable Preview Text** - Make the text on the preview area editable (inline and in the modal)
+    - [x] Task 3.1: Extend SnippetsContext into a preview document model (snippet tokens + own-text tokens + line breaks), migrating Task 1 reorder onto it
+    - [x] Task 3.2: Build the editable preview surface (contentEditable rendering colored snippet tokens, textarea-like caret/selection)
+    - [x] Task 3.3: Verify the click-vs-drag contract (click = caret, hold = drag) and add an edit-text toggle gating editing only — dragging stays always live in both modes (deviation from the "drag on/off toggle", user decision 2026-10-16; see ADR 0004 and `.specs/features/preview-area-tools/tasks/editable-preview-text`)
+    - [x] Task 3.4: Implement edit parsing/sync: own text insertion, Enter → line break, deletion at boundaries, typing inside a snippet integrates into the token — no split (deviation from "splits it between words", user decision 2026-10-16; see ADR 0004 and the same spec folder); focused surface owns its DOM, blurred surface re-renders from the model
+    - [x] Task 3.5: Update merged-text building/copy to serialize the document (own text + newlines for line breaks)
+    - [x] Task 3.6: Tests: editing workflows, parse/serialize round-trips, inline-modal sync
 - [ ] **Feature 4: Third Text Input** - Add support for a third text input
   - [ ] Add a button to add a third text input on MergeSession Page
   - [ ] Implement logic to handle three text inputs in the merge session

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   KeyboardSensor,
@@ -16,34 +16,35 @@ import type {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useSnippets } from '../../../../context/SnippetsContext';
-import type { OrderedSnippet } from '../../../../context/SnippetsContext';
+import type { PreviewToken, SnippetToken } from '../../../../context/SnippetsContext';
+import {
+  isSnippetToken,
+  parsePreviewDom,
+  serialize,
+  snippetSlotToTokenIndex,
+  tokensEqualIgnoringEdited,
+} from '../../../../utils/previewDocument';
 
 /**
  * PointerSensor hold-to-drag activation (ADR 0002): the drag starts only
  * when the pointer is held for the delay while moving at most the
  * tolerance — a plain click never starts a drag. Tuning these values is a
- * feel change, not a contract change.
+ * feel change, not a contract change. While edit mode is ON a quick click
+ * therefore falls through as a caret placement (dragging is always live
+ * in both modes — F1).
  */
 export const SNIPPET_DRAG_ACTIVATION = { delay: 50, tolerance: 5 } as const;
 
 /**
- * Composite sortable id for a merge-ordered snippet: `${sourceId}:${id}`.
- * Ids are unique within a source only (the reducer tolerates cross-source
- * id collisions), so bare ids cannot key sortable items.
- */
-export const buildSortableId = (snippet: OrderedSnippet): string =>
-  `${snippet.sourceId}:${snippet.id}`;
-
-/**
  * Landing slot of the dragged snippet, as a gap in the CURRENT render
  * order (0..n — the dragged chip still renders at its origin slot), or
- * null while the drop-indicator needle is hidden. Moving forward lands
+ * null while the drop-indicator needle is hidden. Indexes are positions
+ * among SNIPPET tokens (the sortable population). Moving forward lands
  * the needle AFTER the hovered snippet, moving backward BEFORE it, and
  * hovering the dragged snippet itself (including the pickup instant)
- * lands at the origin slot — the gap moveSnippet(fromIndex, overIndex)
- * drops the chip into (splice out at from, re-insert at over), so the
- * needle can never contradict the drop outcome. A null target or an
- * unresolved index (-1: the snippet vanished mid-drag) hides the needle.
+ * lands at the origin slot — the needle can never contradict the drop
+ * outcome. A null target or an unresolved index (-1: the snippet
+ * vanished mid-drag) hides the needle.
  */
 export const computeNeedleIndex = (
   fromIndex: number,
@@ -57,8 +58,8 @@ export const computeNeedleIndex = (
 
 /**
  * Droppable id for the insertion gap at `slot` (0..n): the invisible
- * in-flow anchors rendered before/between/after the snippets. While a
- * pointer drag hovers a gap, dnd-kit reports it as `over`, so the
+ * in-flow anchors rendered before/between/after the snippet chips. While
+ * a pointer drag hovers a gap, dnd-kit reports it as `over`, so the
  * needle renders at that slot — the needle then never hides or
  * misplaces while the cursor sits in the space between two snippets.
  */
@@ -74,16 +75,54 @@ export const parseGapId = (id: string): number | null => {
 };
 
 /**
- * moveSnippet target index that drops the dragged snippet at gap
- * `slot`. The reducer splices out at fromIndex, then re-inserts at the
- * target index of the REDUCED array, so slots past the removed chip
- * map one index lower. This mapping is what keeps the needle and the
- * drop outcome identical: the needle renders at `slot` exactly.
+ * Position among the snippet tokens where a drop at gap `slot` lands
+ * the dragged chip (0-based). The reducer splices the chip out of
+ * the document before re-inserting it, so slots past the removed chip
+ * map one position lower. This is the announcement-side half of the
+ * token-index gap math; the drop itself lands at
+ * snippetSlotToTokenIndex and the reducer owns the removal
+ * adjustment.
  */
 export const computeGapMoveIndex = (
   fromIndex: number,
   slot: number
 ): number => (slot > fromIndex ? slot - 1 : slot);
+
+/**
+ * Inserts a raw text node at the caret (or over the selection) inside
+ * the editable flow root. Used for the Enter line break (the native
+ * block insertion is prevented and a "\n" text node is created
+ * instead — no <br>, the flow's white-space: pre-wrap carries it)
+ * and for plain-text paste (multi-line text stays one text node; the
+ * parser splits it at the newlines). Returns false when no usable
+ * selection exists inside the root (the caller then no-ops).
+ */
+export const insertTextAtSelection = (
+  root: HTMLElement,
+  text: string
+): boolean => {
+  const view = root.ownerDocument.defaultView;
+  if (!view || typeof view.getSelection !== 'function') {
+    return false;
+  }
+  const selection = view.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return false;
+  }
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) {
+    return false;
+  }
+  range.deleteContents();
+  const node = root.ownerDocument.createTextNode(text);
+  range.insertNode(node);
+  const after = root.ownerDocument.createRange();
+  after.setStartAfter(node);
+  after.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(after);
+  return true;
+};
 
 const SORTING_KEYS = {
   instructions: 'pages.mergeSession.previewArea.sorting.instructions',
@@ -93,21 +132,46 @@ const SORTING_KEYS = {
   cancelled: 'pages.mergeSession.previewArea.sorting.cancelled',
 } as const;
 
+const EDITING_KEYS = {
+  label: 'pages.mergeSession.previewArea.editing.label',
+  placeholder: 'pages.mergeSession.previewArea.editing.placeholder',
+} as const;
+
 /**
- * Composes i18n, the global merge-ordered snippets list, and this
+ * Composes i18n, the preview document from SnippetsContext, and this
  * PreviewArea instance's drag-sorting wiring (sensors, announcements,
- * and drag lifecycle handlers). The optional `onActiveDragChange`
- * callback is additive-only (default no-op): it mirrors this
- * instance's drag lifecycle for consumers such as the preview modal's
- * Escape guard.
+ * drag lifecycle handlers on token indexes) plus — while edit mode is
+ * ON — the editable-surface contract (ADR 0004): the focused surface
+ * owns its DOM (its parsed edits dispatch one whole-document sync
+ * without React reconciling the token children; the snapshot thaws on
+ * blur and on non-text model changes), Enter inserts a "\n" text
+ * node, and paste strips to plain text. The optional
+ * `onActiveDragChange` callback is additive-only (default no-op): it
+ * mirrors this instance's drag lifecycle for consumers such as the
+ * preview modal's Escape guard.
  */
 export function usePreviewArea(
   onActiveDragChange?: (active: boolean) => void
 ) {
   const { t } = useTranslation();
-  const { snippets, moveSnippet } = useSnippets();
+  const {
+    // Aliased on destructure so the DOM global `document` stays
+    // reachable inside this module.
+    document: previewDocument,
+    editEnabled,
+    moveToken,
+    syncDocument,
+    setEditEnabled,
+  } = useSnippets();
 
-  const sortableIds = useMemo(() => snippets.map(buildSortableId), [snippets]);
+  const snippetTokens = useMemo(
+    () => previewDocument.filter(isSnippetToken),
+    [previewDocument]
+  );
+  const sortableIds = useMemo(
+    () => snippetTokens.map((token) => token.tokenId),
+    [snippetTokens]
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -116,17 +180,49 @@ export function usePreviewArea(
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const [activeSnippet, setActiveSnippet] = useState<OrderedSnippet | null>(null);
+  const [activeSnippet, setActiveSnippet] = useState<SnippetToken | null>(null);
   // Insertion slot of the drop-indicator needle; null keeps it hidden
   // (no active drag, or no target resolves).
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(
     null
   );
 
+  // ---- editable surface state (ADR 0004) ---------------------------
+
+  // The segment-flow root (the contentEditable host while edit is ON).
+  const flowRef = useRef<HTMLDivElement | null>(null);
+  const [flowFocused, setFlowFocused] = useState(false);
+  // The token snapshot the focused surface renders from: frozen while
+  // edit is ON and the surface is focused (the browser owns the DOM),
+  // null otherwise (children render from the live model).
+  const [frozenTokens, setFrozenTokens] = useState<PreviewToken[] | null>(null);
+  // Bumped on every thaw (blur, edit toggled OFF) so the flow root's
+  // children remount cleanly from the model — React's reconciliation
+  // must never run against browser-managed DOM, and the remount is
+  // also what resets the native undo stack after a blur.
+  const [renderEpoch, setRenderEpoch] = useState(0);
+  // The last parse this surface dispatched (kept until the next
+  // document change is classified). A NO-OP sync returns
+  // reference-identical state — no re-render — so a one-shot flag
+  // would stick and wrongly absorb the NEXT external change; the
+  // incoming document is instead classified against this parse by
+  // content (ignoring `edited`, the reducer's only transform).
+  const lastParseRef = useRef<PreviewToken[] | null>(null);
+  // The last document this instance has accounted for in a render.
+  const modelRef = useRef<PreviewToken[]>(previewDocument);
+
   const indexOfSortableId = useCallback(
     (id: string) =>
-      snippets.findIndex((snippet) => buildSortableId(snippet) === id),
-    [snippets]
+      snippetTokens.findIndex((token) => token.tokenId === id),
+    [snippetTokens]
+  );
+
+  const tokenIndexOf = useCallback(
+    (id: string) =>
+      previewDocument.findIndex(
+        (token) => isSnippetToken(token) && token.tokenId === id
+      ),
+    [previewDocument]
   );
 
   // Additive drag-lifecycle notification: fires true when a drag
@@ -140,16 +236,167 @@ export function usePreviewArea(
     [onActiveDragChange]
   );
 
+  // Dispatches one whole-document sync of the surface's parsed DOM
+  // and remembers the parse, so the document-change effect can tell
+  // this surface's own edit from an external change.
+  const dispatchParsedSync = useCallback(
+    (parsed: PreviewToken[]) => {
+      lastParseRef.current = parsed;
+      syncDocument(parsed);
+    },
+    [syncDocument]
+  );
+
+  const commitFlow = useCallback(() => {
+    const root = flowRef.current;
+    if (!root) {
+      return;
+    }
+    dispatchParsedSync(parsePreviewDom(root, modelRef.current));
+  }, [dispatchParsedSync]);
+
+  // Mode-aware focused-surface-owns-DOM contract (ADR 0004): an
+  // incoming document change is classified against this surface's
+  // last dispatched parse — content-equal (ignoring `edited`) means
+  // it is the surface's own parsed edit: absorb it (the focused DOM
+  // is the source of truth; the frozen children stay; NO-OP syncs
+  // never reach this effect at all). Every other change (a completed
+  // drag, source-driven reconciliation) is a non-text change — the
+  // focused surface re-renders from the model with a clean-slate
+  // remount (a possible caret reset after a drag is the accepted
+  // trade-off). The shared SnippetsContext document is an external
+  // system for this component: the effect is the sanctioned place
+  // to synchronize with it.
+  useEffect(() => {
+    const ownParse = lastParseRef.current;
+    // Classified (or consumed): a stale parse must never absorb a
+    // later, unrelated change.
+    lastParseRef.current = null;
+    if (
+      ownParse !== null &&
+      tokensEqualIgnoringEdited(previewDocument, ownParse)
+    ) {
+      modelRef.current = previewDocument;
+      return;
+    }
+    if (previewDocument !== modelRef.current) {
+      modelRef.current = previewDocument;
+      if (editEnabled && flowFocused) {
+        // eslint-disable-next-line react/set-state-in-effect -- deliberate: syncing with the external shared-document change
+        setFrozenTokens(previewDocument);
+        setRenderEpoch((epoch) => epoch + 1);
+      }
+    }
+  }, [previewDocument, editEnabled, flowFocused]);
+
+  // Toggling edit OFF mid-typing commits the focused DOM first (no
+  // keystroke is lost), then the read-only flow re-renders from the
+  // model. The editEnabled flag lives in the shared context (an
+  // external system): the effect is the sanctioned place to sync.
+  const previousEditEnabledRef = useRef(editEnabled);
+  useEffect(() => {
+    const wasEnabled = previousEditEnabledRef.current;
+    previousEditEnabledRef.current = editEnabled;
+    if (wasEnabled === editEnabled) {
+      return;
+    }
+    if (!editEnabled) {
+      if (flowFocused) {
+        commitFlow();
+      }
+      // eslint-disable-next-line react/set-state-in-effect -- deliberate: syncing with the external edit-toggle change
+      setFlowFocused(false);
+      setFrozenTokens(null);
+      setRenderEpoch((epoch) => epoch + 1);
+    }
+  }, [editEnabled, flowFocused, commitFlow]);
+
+  const handleFlowFocus = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      // Focus bubbles up from the chips: only the editor host itself
+      // starts the frozen window.
+      if (event.target !== flowRef.current) {
+        return;
+      }
+      setFlowFocused(true);
+      setFrozenTokens(modelRef.current);
+    },
+    []
+  );
+
+  const handleFlowBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      // A chip losing focus must not thaw the editor (focus events
+      // bubble); only the host itself blurring does.
+      if (event.target !== flowRef.current) {
+        return;
+      }
+      commitFlow();
+      setFlowFocused(false);
+      setFrozenTokens(null);
+      setRenderEpoch((epoch) => epoch + 1);
+    },
+    [commitFlow]
+  );
+
+  const handleFlowInput = useCallback(() => {
+    const root = flowRef.current;
+    if (!root) {
+      return;
+    }
+    dispatchParsedSync(parsePreviewDom(root, modelRef.current));
+  }, [dispatchParsedSync]);
+
+  const handleFlowKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== 'Enter') {
+        return;
+      }
+      // Space/Enter on a FOCUSED chip is dnd-kit's keyboard pickup
+      // (the activator only fires when the keydown target is the
+      // activator node); Enter with the caret in the editor host
+      // (target === host) creates a line break.
+      if (event.target !== flowRef.current) {
+        return;
+      }
+      event.preventDefault();
+      const root = flowRef.current;
+      if (root && insertTextAtSelection(root, '\n')) {
+        // Manual DOM edits fire no input event — sync explicitly.
+        commitFlow();
+      }
+    },
+    [commitFlow]
+  );
+
+  const handleFlowPaste = useCallback(
+    (event: React.ClipboardEvent<HTMLDivElement>) => {
+      // Plain-text paste only: the browser never inserts rich content.
+      event.preventDefault();
+      const text = event.clipboardData.getData('text/plain');
+      if (!text) {
+        return;
+      }
+      const root = flowRef.current;
+      if (root && insertTextAtSelection(root, text)) {
+        commitFlow();
+      }
+    },
+    [commitFlow]
+  );
+
+  // ---- drag lifecycle (token indexes) ------------------------------
+
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       notifyActiveDragChange(true);
       const index = indexOfSortableId(String(event.active.id));
-      setActiveSnippet(index >= 0 ? snippets[index] : null);
+      setActiveSnippet(index >= 0 ? snippetTokens[index] : null);
       // Pickup resolves to the dragged item itself: the needle starts
       // at the origin slot.
       setDropIndicatorIndex(index >= 0 ? index : null);
     },
-    [indexOfSortableId, notifyActiveDragChange, snippets]
+    [indexOfSortableId, notifyActiveDragChange, snippetTokens]
   );
 
   const handleDragOver = useCallback(
@@ -160,10 +407,10 @@ export function usePreviewArea(
       const gapSlot = overId === null ? null : parseGapId(overId);
 
       if (gapSlot !== null) {
-        // Gap anchors exist for slots 0..snippets.length; a stale
+        // Gap anchors exist for slots 0..snippetTokens.length; a stale
         // slot (the list shrank mid-drag) hides the needle.
         setDropIndicatorIndex(
-          gapSlot >= 0 && gapSlot <= snippets.length ? gapSlot : null
+          gapSlot >= 0 && gapSlot <= snippetTokens.length ? gapSlot : null
         );
         return;
       }
@@ -171,7 +418,7 @@ export function usePreviewArea(
       const overIndex = overId === null ? null : indexOfSortableId(overId);
       setDropIndicatorIndex(computeNeedleIndex(fromIndex, overIndex));
     },
-    [indexOfSortableId, snippets.length]
+    [indexOfSortableId, snippetTokens.length]
   );
 
   const handleDragEnd = useCallback(
@@ -187,7 +434,9 @@ export function usePreviewArea(
         return;
       }
 
-      const fromIndex = indexOfSortableId(String(active.id));
+      const activeId = String(active.id);
+      const fromIndex = indexOfSortableId(activeId);
+      const fromTokenIndex = tokenIndexOf(activeId);
       const overId = String(over.id);
       const gapSlot = parseGapId(overId);
 
@@ -195,23 +444,44 @@ export function usePreviewArea(
         // Released over an insertion gap: the chip lands exactly at
         // the slot the needle marked (a stale slot after a mid-drag
         // shrink discards the reorder).
-        if (fromIndex < 0 || gapSlot < 0 || gapSlot > snippets.length) {
+        if (
+          fromIndex < 0 ||
+          fromTokenIndex < 0 ||
+          gapSlot < 0 ||
+          gapSlot > snippetTokens.length
+        ) {
           return;
         }
-        moveSnippet(fromIndex, computeGapMoveIndex(fromIndex, gapSlot));
+        moveToken(
+          fromTokenIndex,
+          snippetSlotToTokenIndex(previewDocument, gapSlot)
+        );
         return;
       }
 
-      const toIndex = indexOfSortableId(overId);
+      const overIndex = indexOfSortableId(overId);
+      const overTokenIndex = tokenIndexOf(overId);
 
-      if (fromIndex < 0 || toIndex < 0) {
+      if (fromIndex < 0 || overIndex < 0 || fromTokenIndex < 0 || overTokenIndex < 0) {
         // The dragged snippet vanished mid-drag: discard the reorder.
         return;
       }
 
-      moveSnippet(fromIndex, toIndex);
+      // Forward drops land right AFTER the hovered chip, backward
+      // drops right BEFORE it — exactly where the needle marked.
+      moveToken(
+        fromTokenIndex,
+        fromIndex < overIndex ? overTokenIndex + 1 : overTokenIndex
+      );
     },
-    [indexOfSortableId, moveSnippet, notifyActiveDragChange, snippets.length]
+    [
+      previewDocument,
+      indexOfSortableId,
+      moveToken,
+      notifyActiveDragChange,
+      snippetTokens.length,
+      tokenIndexOf,
+    ]
   );
 
   const handleDragCancel = useCallback(
@@ -224,11 +494,12 @@ export function usePreviewArea(
   );
 
   const announcements = useMemo<Announcements>(() => {
-    // Positions-only announcements: 1-based, no snippet text.
+    // Positions-only announcements: 1-based over the snippet tokens
+    // (the draggable population), no snippet text.
     const describePosition = (key: string, id: string) => {
       const index = indexOfSortableId(id);
       return index >= 0
-        ? t(key, { index: index + 1, count: snippets.length })
+        ? t(key, { index: index + 1, count: snippetTokens.length })
         : undefined;
     };
 
@@ -247,12 +518,12 @@ export function usePreviewArea(
         const gapSlot = parseGapId(overId);
         if (gapSlot !== null) {
           // Gap drop: announce the landing position — the same
-          // move-index identity chip drops use, no new strings.
+          // position identity chip drops use, no new strings.
           const fromIndex = indexOfSortableId(String(active.id));
-          return fromIndex >= 0 && gapSlot <= snippets.length
+          return fromIndex >= 0 && gapSlot <= snippetTokens.length
             ? t(SORTING_KEYS.ended, {
                 index: computeGapMoveIndex(fromIndex, gapSlot) + 1,
-                count: snippets.length,
+                count: snippetTokens.length,
               })
             : undefined;
         }
@@ -260,25 +531,46 @@ export function usePreviewArea(
       },
       onDragCancel: () => t(SORTING_KEYS.cancelled),
     };
-  }, [t, indexOfSortableId, snippets]);
+  }, [t, indexOfSortableId, snippetTokens]);
 
   const screenReaderInstructions = useMemo<ScreenReaderInstructions>(
     () => ({ draggable: t(SORTING_KEYS.instructions) }),
     [t]
   );
 
+  const mergedText = useMemo(() => serialize(previewDocument), [previewDocument]);
+
   return {
     t,
-    snippets,
+    document: previewDocument,
+    editEnabled,
+    // The editable-surface ARIA/attribute values (translated).
+    editingLabel: t(EDITING_KEYS.label),
+    editingPlaceholder: t(EDITING_KEYS.placeholder),
+    // What the flow children render from: the frozen snapshot while
+    // edit is ON and the surface is focused, the live document
+    // otherwise.
+    renderedTokens: frozenTokens ?? previewDocument,
+    renderEpoch,
+    mergedText,
+    isDocumentEmpty: mergedText.length === 0,
+    flowRef,
+    snippetTokens,
     sortableIds,
     sensors,
     announcements,
     screenReaderInstructions,
     activeSnippet,
     dropIndicatorIndex,
+    handleFlowFocus,
+    handleFlowBlur,
+    handleFlowInput,
+    handleFlowKeyDown,
+    handleFlowPaste,
     handleDragStart,
     handleDragEnd,
     handleDragOver,
     handleDragCancel,
+    setEditEnabled,
   };
 }

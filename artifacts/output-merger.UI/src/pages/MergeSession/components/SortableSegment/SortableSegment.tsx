@@ -4,16 +4,17 @@ import type { SortableSegmentProps } from './SortableSegment.types';
 import * as S from './SortableSegment.styles';
 
 function SortableSegment(props: SortableSegmentProps) {
-  const { snippet, sortableId, className } = props;
+  const { token, className } = props;
   const { attributes, isDragging, listeners, setNodeRef, transform, transition } =
-    useSortableSegment(sortableId);
+    useSortableSegment(token.tokenId);
 
   return (
     <S.SegmentChip
       ref={setNodeRef}
       data-testid="preview-snippet"
+      data-token-id={token.tokenId}
       className={className}
-      $color={snippet.color}
+      $color={token.color}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -22,7 +23,7 @@ function SortableSegment(props: SortableSegmentProps) {
       {...attributes}
       {...listeners}
     >
-      {snippet.text}
+      {token.text}
     </S.SegmentChip>
   );
 }

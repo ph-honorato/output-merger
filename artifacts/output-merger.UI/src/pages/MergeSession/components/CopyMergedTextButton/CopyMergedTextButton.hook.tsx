@@ -1,28 +1,28 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSnippets } from '../../../../context/SnippetsContext';
-import type { OrderedSnippet } from '../../../../context/SnippetsContext';
-
-export function buildMergedText(snippets: OrderedSnippet[]): string {
-  return snippets.map((snippet) => snippet.text).join(' ');
-}
+import { serialize } from '../../../../utils/previewDocument';
 
 export function useCopyMergedTextButton() {
   const { t } = useTranslation();
-  const { snippets } = useSnippets();
+  // Aliased on destructure so the DOM global `document` stays
+  // reachable inside this module.
+  const { document: previewDocument, editEnabled } = useSnippets();
   const [toastOpen, setToastOpen] = useState(false);
+
+  const mergedText = useMemo(() => serialize(previewDocument), [previewDocument]);
 
   const handleCopy = useCallback(() => {
     if (!navigator.clipboard) {
       return;
     }
     navigator.clipboard
-      .writeText(buildMergedText(snippets))
+      .writeText(mergedText)
       .then(() => {
         setToastOpen(true);
       })
       .catch(() => {});
-  }, [snippets]);
+  }, [mergedText]);
 
   const handleToastClose = useCallback(() => {
     setToastOpen(false);
@@ -30,7 +30,10 @@ export function useCopyMergedTextButton() {
 
   return {
     t,
-    canCopy: snippets.length > 0,
+    // Gating matrix: edit ON → copy is always enabled (an empty
+    // document copies the empty string); edit OFF → enabled iff the
+    // document serializes to something (today's behavior).
+    canCopy: editEnabled || mergedText.length > 0,
     handleCopy,
     toastOpen,
     handleToastClose,

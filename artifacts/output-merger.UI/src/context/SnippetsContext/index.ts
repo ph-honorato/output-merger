@@ -1,11 +1,17 @@
 export { SnippetsProvider } from './SnippetsContext';
 export { useSnippets } from './SnippetsContext.hook';
-export { snippetsReducer } from './SnippetsContext.reducer';
+export { initialSnippetsState, snippetsReducer } from './SnippetsContext.reducer';
 export type {
-  MoveSnippetAction,
-  OrderedSnippet,
+  LineBreakToken,
+  MoveTokenAction,
+  OwnTextToken,
+  PreviewDocument,
+  PreviewToken,
+  SetEditEnabledAction,
   SetSourceSnippetsAction,
+  SnippetToken,
   SnippetsAction,
   SnippetsContextValue,
   SnippetsState,
+  SyncDocumentAction,
 } from './SnippetsContext.types';

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useSnippets } from '../../../../context/SnippetsContext';
+import { serialize } from '../../../../utils/previewDocument';
 
 /**
  * Composes i18n, the below-md viewport gate, the empty-preview
@@ -19,7 +20,9 @@ export function usePreviewModal() {
   // the closed modal is unreachable on mobile; an open dialog
   // survives a viewport shrink by switching to fullScreen.
   const isBelowMd = useMediaQuery(theme.breakpoints.down('md'));
-  const { snippets } = useSnippets();
+  // Aliased on destructure: the DOM global `document` must stay
+  // reachable for the Escape guard's re-dispatch below.
+  const { document: previewDocument, editEnabled } = useSnippets();
   const [open, setOpen] = useState(false);
   // True while a drag is active in THIS modal's PreviewArea instance
   // (fed by its additive onActiveDragChange callback): Escape then
@@ -60,7 +63,9 @@ export function usePreviewModal() {
   const handleDialogClose = useCallback(
     (_event: unknown, reason: 'backdropClick' | 'escapeKeyDown') => {
       if (reason === 'escapeKeyDown' && dragActive) {
-        document.dispatchEvent(
+        // `document` here is the DOM global — the hook destructures
+        // the preview document from the context under the same name.
+        window.document.dispatchEvent(
           new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }),
         );
         return;
@@ -73,7 +78,10 @@ export function usePreviewModal() {
   return {
     t,
     isBelowMd,
-    canOpen: snippets.length > 0,
+    // Gating matrix: edit ON → the trigger is always enabled (the
+    // empty document is editable, F3); edit OFF → enabled iff the
+    // document serializes to something (today's behavior).
+    canOpen: editEnabled || serialize(previewDocument).length > 0,
     open,
     dragActive,
     handleOpen,

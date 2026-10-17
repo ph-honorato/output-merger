@@ -1,17 +1,105 @@
 import type { Snippet } from '@components';
 
 /**
- * A snippet lifted into the merge sequence: the TextInput snippet plus its
- * source identity and its position in the merge order.
+ * A snippet lifted into the preview document: the source snippet's
+ * identity and color plus the text the document currently holds for
+ * it (which may include text the user typed inside the chip — the
+ * in-snippet integration, deviation b).
  */
-export interface OrderedSnippet extends Snippet {
-  // Stable id of the source that emitted this snippet (e.g. "text-1")
+export interface SnippetToken {
+  kind: 'snippet';
+  /**
+   * Globally unique token id (`${sourceId}:${sourceSnippetId}`) —
+   * also the sortable/draggable id (only snippet tokens sort)
+   */
+  tokenId: string;
+  /**
+   * The id of the source snippet this token references
+   */
+  sourceSnippetId: string;
+  /**
+   * The id of the source that emitted the snippet (e.g. "text-1")
+   */
   sourceId: string;
-  // Position in the merge order; assigned incrementally, gaps allowed
-  order: number;
+  /**
+   * The source snippet's highlight color, captured at creation
+   */
+  color: string;
+  /**
+   * The token's current text (source text, possibly with typed-in
+   * text integrated inside)
+   */
+  text: string;
+  /**
+   * True once the user has typed inside this token: text-frozen for
+   * reconciliation (resizes no longer rewrite it). Never resets.
+   */
+  edited: boolean;
 }
 
-export type SnippetsState = OrderedSnippet[];
+/**
+ * Text typed directly into the preview, not originating from any
+ * snippet — including the explicit `" "` join-separator tokens
+ * reconciliation inserts between snippet tokens.
+ */
+export interface OwnTextToken {
+  kind: 'text';
+  /**
+   * Globally unique token id
+   */
+  tokenId: string;
+  /**
+   * The token's text — never contains "\n" (the parser splits text
+   * runs at line breaks; only snippet tokens may embed newlines)
+   */
+  text: string;
+}
+
+/**
+ * A line break typed into the preview document; serializes as "\n".
+ */
+export interface LineBreakToken {
+  kind: 'line-break';
+  /**
+   * Globally unique token id
+   */
+  tokenId: string;
+}
+
+/**
+ * One token of the preview document. Array position IS the merge
+ * order — there is no separate order integer (ADR 0004).
+ */
+export type PreviewToken = SnippetToken | OwnTextToken | LineBreakToken;
+
+/**
+ * The preview document: a single ordered token array where position
+ * is the merge order.
+ */
+export type PreviewDocument = PreviewToken[];
+
+/**
+ * The reducer state: the document plus the in-memory session state
+ * that reconciliation and editing need.
+ */
+export interface SnippetsState {
+  /**
+   * The preview document
+   */
+  tokens: PreviewToken[];
+  /**
+   * Token ids of snippet tokens the user deleted from the document
+   * (in-memory tombstones): later source emissions must not
+   * re-append them for the session. Cleared when the source
+   * emission no longer reports the id.
+   */
+  tombstones: string[];
+  /**
+   * Session-level edit toggle (default OFF): gates text editing on
+   * both preview surfaces; dragging is always live in both modes
+   */
+  editEnabled: boolean;
+}
 
 export interface SetSourceSnippetsAction {
   type: 'SET_SOURCE_SNIPPETS';
@@ -19,22 +107,67 @@ export interface SetSourceSnippetsAction {
   snippets: Snippet[];
 }
 
-export interface MoveSnippetAction {
-  type: 'MOVE_SNIPPET';
-  // 0-based index into the merge-ordered state array the move starts from
+export interface MoveTokenAction {
+  type: 'MOVE_TOKEN';
+  /**
+   * 0-based index into the document token array the move starts
+   * from (must be a snippet token)
+   */
   fromIndex: number;
-  // 0-based index into the merge-ordered state array the move ends at
+  /**
+   * Insertion point in the CURRENT document token array: the moved
+   * token lands right before the token currently at this index
+   * (=== tokens.length appends at the end)
+   */
   toIndex: number;
 }
 
-export type SnippetsAction = SetSourceSnippetsAction | MoveSnippetAction;
+export interface SyncDocumentAction {
+  type: 'SYNC_DOCUMENT';
+  /**
+   * The parsed document (from the pure DOM→tokens parser) that
+   * replaces the current tokens wholesale
+   */
+  tokens: PreviewToken[];
+}
+
+export interface SetEditEnabledAction {
+  type: 'SET_EDIT_ENABLED';
+  editEnabled: boolean;
+}
+
+export type SnippetsAction =
+  | SetSourceSnippetsAction
+  | MoveTokenAction
+  | SyncDocumentAction
+  | SetEditEnabledAction;
 
 export interface SnippetsContextValue {
-  // All snippets across sources, always sorted by merge order
-  snippets: SnippetsState;
-  // Replaces the snippets recorded for one source (full-array reconciliation)
+  /**
+   * The preview document, always in merge order
+   */
+  document: PreviewDocument;
+  /**
+   * Whether text editing is enabled (shared by both toggle buttons)
+   */
+  editEnabled: boolean;
+  /**
+   * Replaces the snippets recorded for one source (diff-by-id
+   * reconciliation over the snippet tokens in the document — ADR 0001)
+   */
   setSourceSnippets: (sourceId: string, snippets: Snippet[]) => void;
-  // Moves a snippet within the global merge sequence (0-based indexes),
-  // renumbering the sequence to a dense 1..n
-  moveSnippet: (fromIndex: number, toIndex: number) => void;
+  /**
+   * Moves a snippet token within the document (token-index splice
+   * with no-op guards; ADR 0004 / ADR 0001 amendment)
+   */
+  moveToken: (fromIndex: number, toIndex: number) => void;
+  /**
+   * Whole-document sync of a parsed edit (one action per input
+   * event; computes "edited" flags and snippet tombstones)
+   */
+  syncDocument: (tokens: PreviewToken[]) => void;
+  /**
+   * Flips the session-level edit toggle
+   */
+  setEditEnabled: (editEnabled: boolean) => void;
 }

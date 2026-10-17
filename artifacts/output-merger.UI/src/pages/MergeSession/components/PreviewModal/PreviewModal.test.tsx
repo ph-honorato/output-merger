@@ -16,8 +16,7 @@ import type {
   DragEndEvent,
   DragStartEvent,
 } from '@dnd-kit/core';
-import { PreviewArea, PreviewToolbar, CopyMergedTextButton } from '../';
-import { buildMergedText } from '../CopyMergedTextButton/CopyMergedTextButton.hook';
+import { PreviewArea, PreviewToolbar, CopyMergedTextButton, TextEditingToggle } from '../';
 import { usePreviewArea } from '../PreviewArea/PreviewArea.hook';
 import PreviewModal from './PreviewModal';
 
@@ -30,9 +29,10 @@ const makeSnippet = (id: string, text: string, color = '#0080FF'): Snippet => ({
 });
 
 // Mirrors the page composition: the inline preview plus the toolbar
-// (copy button + the modal's own trigger) — so the suite exercises the
-// real duplicate-testid situation (ADR 0003) and its within(dialog)
-// scoping, exactly like the page integration does.
+// (copy button + the modal's own trigger + the edit-text toggle) — so
+// the suite exercises the real duplicate-testid situation (ADR 0003)
+// and its within(dialog) scoping, exactly like the page integration
+// does.
 const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
   const { setSourceSnippets } = useSnippets();
   useEffect(() => {
@@ -46,6 +46,7 @@ const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
       <PreviewToolbar>
         <CopyMergedTextButton />
         <PreviewModal />
+        <TextEditingToggle />
       </PreviewToolbar>
     </>
   );
@@ -338,16 +339,13 @@ describe('PreviewModal dialog', () => {
     renderWithProviders(seedInterleaved());
     const dialog = await openDialog();
 
-    const seeded = [
-      { ...makeSnippet('a1', 'Alpha'), sourceId: 'text-1', order: 1 },
-      { ...makeSnippet('b1', 'Beta'), sourceId: 'text-2', order: 2 },
-      { ...makeSnippet('a2', 'Gamma'), sourceId: 'text-1', order: 3 },
-    ];
     expect(
       within(dialog).getAllByTestId('preview-snippet').map((s) => s.textContent),
     ).toEqual(['Alpha', 'Beta', 'Gamma']);
+    // Byte-identity with the old join for an unedited session
+    // (model-migration parity assertion).
     expect(within(dialog).getByTestId('preview-segment-flow')).toHaveTextContent(
-      buildMergedText(seeded),
+      'Alpha Beta Gamma',
     );
 
     // Duplicate data-testids exist by design while open (ADR 0003):
@@ -360,23 +358,30 @@ describe('PreviewModal dialog', () => {
     expect(areas[1].closest('[aria-hidden="true"]')).toBeNull();
   });
 
-  it('lays the paper out as a row: centered preview zone plus a bare rail with copy on top and close under it', async () => {
+  it('lays the paper out as a row: centered preview zone plus a bare rail with copy, the edit toggle, and close in order', async () => {
     renderWithProviders(seedInterleaved());
     const dialog = await openDialog();
 
     const closeButton = within(dialog).getByTestId('preview-modal-close-button');
     const copyButton = within(dialog).getByTestId('preview-copy-button');
+    const editToggle = within(dialog).getByTestId('preview-edit-toggle');
     const rail = closeButton.parentElement;
     expect(rail).not.toBeNull();
     expect(rail).toContainElement(copyButton);
+    expect(rail).toContainElement(editToggle);
     expect(rail).toContainElement(closeButton);
-    // Copy on top, close under it: the copy button precedes the close
-    // button in the rail.
+    // Rail order (user decision 2026-10-16, F2): copy on top, the edit
+    // toggle under it, close last — all direct children of the rail.
     expect(
-      copyButton.compareDocumentPosition(closeButton) &
+      copyButton.compareDocumentPosition(editToggle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      editToggle.compareDocumentPosition(closeButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(copyButton.parentElement).toBe(rail);
+    expect(editToggle.parentElement).toBe(rail);
     expect(closeButton.parentElement).toBe(rail);
 
     // The rail is a new bare strip, NOT the PreviewToolbar component.
@@ -613,7 +618,11 @@ describe('PreviewModal escape guard wiring (additive onActiveDragChange)', () =>
       wrapper: wrapper(seedInterleaved()),
     });
 
-    expect(result.current.snippets).toHaveLength(3);
+    const snippetTokenIds = () =>
+      result.current.document
+        .filter((token) => token.kind === 'snippet')
+        .map((token) => token.tokenId);
+    expect(result.current.document.filter((token) => token.kind === 'snippet')).toHaveLength(3);
     act(() => {
       result.current.handleDragStart({
         active: { id: 'text-1:a1' },
@@ -623,11 +632,131 @@ describe('PreviewModal escape guard wiring (additive onActiveDragChange)', () =>
         over: { id: 'text-2:b1' },
       } as unknown as DragEndEvent);
     });
-    expect(result.current.snippets.map((snippet) => snippet.id)).toEqual([
-      'b1',
-      'a1',
-      'a2',
-    ]);
+    expect(snippetTokenIds()).toEqual(['text-2:b1', 'text-1:a1', 'text-1:a2']);
     expect(result.current.activeSnippet).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Editable preview text inside the modal (Feature 3 Task 3): the
+// gating matrix on the trigger, the shared toggle pair, and the
+// inline ↔ modal typing sync. Typing is simulated with direct DOM
+// mutation + dispatched input events (jsdom's caret simulation is
+// the spec's flagged fallback).
+// ---------------------------------------------------------------------------
+
+describe('PreviewModal edit gating and inline↔modal typing sync', () => {
+  const typeInto = (flow: HTMLElement, text: string) => {
+    act(() => {
+      flow.focus();
+    });
+    flow.appendChild(document.createTextNode(text));
+    fireEvent.input(flow);
+  };
+
+  const inlineFlow = (dialog: HTMLElement) => {
+    const flows = screen.getAllByTestId('preview-segment-flow');
+    const inline = flows.find((flow) => !dialog.contains(flow));
+    expect(inline).toBeDefined();
+    return inline as HTMLElement;
+  };
+
+  it('enables the open trigger on an empty document while edit is ON (gating matrix)', () => {
+    renderWithProviders([]);
+    expect(screen.getByTestId('preview-modal-open-button')).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId('preview-edit-toggle'));
+
+    expect(screen.getByTestId('preview-modal-open-button')).toBeEnabled();
+  });
+
+  it('opens the editable empty editor inside the dialog: placeholder hint, no empty-state block, copy enabled', async () => {
+    renderWithProviders([]);
+    fireEvent.click(screen.getByTestId('preview-edit-toggle'));
+    const dialog = await openDialog();
+
+    const flow = within(dialog).getByTestId('preview-segment-flow');
+    expect(flow).toHaveAttribute('contenteditable', 'true');
+    expect(flow).toHaveAttribute(
+      'data-placeholder',
+      'Type here to add your own text',
+    );
+    expect(within(dialog).queryByTestId('preview-empty')).toBeNull();
+    expect(within(dialog).getByTestId('preview-copy-button')).toBeEnabled();
+    // Identical quadrants inline: the inline instance is the same
+    // editable editor, not the empty-state block.
+    expect(inlineFlow(dialog)).toHaveAttribute('contenteditable', 'true');
+    expect(screen.queryByTestId('preview-empty')).toBeNull();
+  });
+
+  it('shares one edit state between the toolbar toggle and the rail toggle', async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+
+    const [toolbarToggle] = screen.getAllByTestId('preview-edit-toggle');
+    const railToggle = within(dialog).getByTestId('preview-edit-toggle');
+    expect(toolbarToggle).not.toBe(railToggle);
+    expect(toolbarToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(railToggle).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(railToggle);
+
+    expect(railToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(toolbarToggle).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(toolbarToggle);
+
+    expect(railToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toolbarToggle).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('syncs typing in the modal editor to the inline flow live', async () => {
+    renderWithProviders([['text-1', [makeSnippet('a1', 'Alpha')]]]);
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+    typeInto(within(dialog).getByTestId('preview-segment-flow'), ' own');
+
+    expect(within(dialog).getByTestId('preview-segment-flow').textContent).toBe(
+      'Alpha own',
+    );
+    expect(inlineFlow(dialog).textContent).toBe('Alpha own');
+  });
+
+  it('syncs typing inline to the modal flow live (both directions)', async () => {
+    renderWithProviders([['text-1', [makeSnippet('a1', 'Alpha')]]]);
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+    // MUI's focus trap confines real focus to the dialog while it is
+    // open (manual-pass item), so the inline edit is simulated the
+    // jsdom way — DOM mutation + input event, no focus handoff. The
+    // per-input sync is what keeps the blurred twin (the dialog's
+    // flow) truthful; the inline node itself would be frozen if it
+    // owned the focus, so only the dialog side is asserted here.
+    const inline = inlineFlow(dialog);
+    inline.appendChild(document.createTextNode(' typed inline'));
+    fireEvent.input(inline);
+
+    expect(within(dialog).getByTestId('preview-segment-flow').textContent).toBe(
+      'Alpha typed inline',
+    );
+  });
+
+  it('loses nothing when Escape closes the dialog mid-typing', async () => {
+    renderWithProviders([['text-1', [makeSnippet('a1', 'Alpha')]]]);
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+    typeInto(within(dialog).getByTestId('preview-segment-flow'), ' kept');
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('preview-segment-flow').textContent).toBe(
+      'Alpha kept',
+    );
+    expect(screen.getAllByTestId('preview-area')).toHaveLength(1);
   });
 });

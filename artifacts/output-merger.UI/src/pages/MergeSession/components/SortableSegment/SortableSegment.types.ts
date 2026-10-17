@@ -1,4 +1,4 @@
-import type { OrderedSnippet } from '../../../../context/SnippetsContext';
+import type { SnippetToken } from '../../../../context/SnippetsContext';
 
 /**
  * Props for the SortableSegment component
@@ -6,14 +6,10 @@ import type { OrderedSnippet } from '../../../../context/SnippetsContext';
  */
 export interface SortableSegmentProps {
   /**
-   * The merge-ordered snippet rendered by this segment
+   * The merge-ordered snippet token rendered by this segment — its
+   * tokenId is the sortable id and the parser's data-token-id key
    */
-  snippet: OrderedSnippet;
-  /**
-   * Composite sortable id (`${sourceId}:${id}`) — unique even when
-   * snippet ids collide across sources
-   */
-  sortableId: string;
+  token: SnippetToken;
   /**
    * Optional class name applied to the root element
    */
