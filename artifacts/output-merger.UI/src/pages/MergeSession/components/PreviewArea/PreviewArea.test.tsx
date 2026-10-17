@@ -1694,7 +1694,7 @@ describe("PreviewArea editable surface", () => {
     consoleSpy.mockRestore();
   });
 
-  it("ships the editable cursor/min-height styles and the placeholder rule only in edit mode", () => {
+  it("ships the editable cursor/min-height/outline styles and the placeholder rule only in edit mode", () => {
     renderWithProviders(seedInterleaved());
     const css = () =>
       Array.from(document.querySelectorAll("style"))
@@ -1707,14 +1707,24 @@ describe("PreviewArea editable surface", () => {
 
     enableEditing();
 
-    expect(screen.getByTestId("preview-segment-flow")).toHaveStyle({
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(flow).toHaveStyle({
       cursor: "text",
     });
-    expect(screen.getByTestId("preview-segment-flow")).toHaveStyle({
+    expect(flow).toHaveStyle({
       minHeight: "28px",
     });
+    // The UA's default focus outline (a black box around the flow on
+    // click) is removed for the editing host only — the caret is its
+    // own focus indicator (user decision 2026-10-17).
+    expect(flow).toHaveStyle({
+      outlineStyle: "none",
+    });
+    expect(css()).toContain("outline:none");
     expect(css()).toContain(":empty::before");
     expect(css()).toContain("content:attr(data-placeholder)");
+    // Chip focus rings are untouched.
+    expect(css()).toContain(":focus-visible");
   });
 
   it("follows the active language for the editor label and placeholder", async () => {
@@ -1867,7 +1877,7 @@ describe("PreviewArea editing workflows", () => {
     ).toBe("text-1:a1");
   });
 
-  it("creates a line break on Enter (preventDefault, \\\\n text node)", () => {
+  it("creates a line break on Enter (preventDefault, \\n text node) with the caret on the new line", () => {
     renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
     enableEditing();
     const flow = screen.getByTestId("preview-segment-flow");
@@ -1889,9 +1899,146 @@ describe("PreviewArea editing workflows", () => {
 
     // A "\n" text node landed at the caret and synced into the model.
     expect(flow.textContent).toContain("\n");
-    expect(screen.getByTestId("document-probe").textContent).toBe(
-      "Alpha\n",
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha\n");
+
+    // The invisible-line fix (user report 2026-10-17): a trailing
+    // "\n" renders no empty last line in pre-wrap, so the handler
+    // plants exactly one bogus <br> line anchor right after the
+    // newline (Chrome's own contentEditable technique) and leaves the
+    // caret logically BETWEEN the two — on the new line.
+    const newlineNode = Array.from(flow.childNodes).find(
+      (node) => node.nodeType === Node.TEXT_NODE && (node as Text).data === "\n",
     );
+    expect(newlineNode).toBeDefined();
+    expect(flow.querySelectorAll("br")).toHaveLength(1);
+    expect(newlineNode?.nextSibling?.nodeName).toBe("BR");
+    // Parser/serialization neutrality: the anchor contributes no
+    // textContent and no token — the WYSIWYG invariant holds even
+    // while focused.
+    expect(flow.textContent).toBe("Alpha\n");
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha\n");
+    // The caret is a collapsed selection right after the "\n" —
+    // between the newline and the anchor.
+    const selection = window.getSelection();
+    expect(selection?.rangeCount).toBe(1);
+    const range = selection?.getRangeAt(0);
+    expect(range?.collapsed).toBe(true);
+    expect(range?.startContainer).toBe(flow);
+    expect(flow.childNodes[range ? range.startOffset - 1 : -1]).toBe(
+      newlineNode,
+    );
+    expect(flow.childNodes[range ? range.startOffset : -1].nodeName).toBe("BR");
+  });
+
+  it("does not stack the line anchor: repeated Enter at the end keeps exactly one", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    // Collapse to the end ONCE (the real caret then stays after each
+    // inserted newline — between it and the anchor — like a browser).
+    expect(collapseSelectionAtEnd(flow)).toBe(true);
+    const pressEnter = () => {
+      const keydown = new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(keydown);
+      });
+    };
+    pressEnter();
+    pressEnter();
+    pressEnter();
+
+    // One anchor serves every trailing newline.
+    expect(flow.querySelectorAll("br")).toHaveLength(1);
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha\n\n\n",
+    );
+    expect(flow.textContent).toBe("Alpha\n\n\n");
+  });
+
+  it("plants no line anchor when content follows the newline (Enter between chips)", () => {
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "Alpha")]],
+      ["text-2", [makeSnippet("b1", "Beta")]],
+    ]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    // Caret right after the first chip (a boundary between two
+    // children of the flow root).
+    const chipAlpha = screen.getAllByTestId("preview-snippet")[0];
+    const caretOffset = Array.from(flow.childNodes).indexOf(chipAlpha) + 1;
+    const range = document.createRange();
+    range.setStart(flow, caretOffset);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const keydown = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      flow.dispatchEvent(keydown);
+    });
+
+    // The following separator/chips render the line box: no anchor.
+    expect(flow.querySelectorAll("br")).toHaveLength(0);
+    expect(screen.getByTestId("document-probe").textContent).toContain("\n");
+  });
+
+  it("replants the line anchor on re-focus when the document ends with a line break (and thaw removes it)", () => {
+    renderWithProviders([]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    typeIntoFlow(flow, "line");
+    expect(collapseSelectionAtEnd(flow)).toBe(true);
+    const keydown = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      flow.dispatchEvent(keydown);
+    });
+    expect(flow.querySelectorAll("br")).toHaveLength(1);
+
+    // Blur: the commit parses (the anchor is invisible to the model)
+    // and the thaw remount rebuilds the children from the model —
+    // the anchor self-heals away.
+    act(() => {
+      flow.blur();
+    });
+    const afterBlur = screen.getByTestId("preview-segment-flow");
+    expect(afterBlur.querySelectorAll("br")).toHaveLength(0);
+    expect(afterBlur.textContent).toBe("line\n");
+    expect(screen.getByTestId("document-probe").textContent).toBe("line\n");
+
+    // Focus back: the re-rendered trailing "\n" has no line box of
+    // its own, so the focus handler plants the anchor again —
+    // clicking at the end shows the caret on the empty last line.
+    act(() => {
+      afterBlur.focus();
+    });
+    const refocused = screen.getByTestId("preview-segment-flow");
+    expect(refocused).toBe(afterBlur); // focus does not remount
+    expect(refocused.querySelectorAll("br")).toHaveLength(1);
+    expect(refocused.textContent).toBe("line\n");
   });
 
   it("keeps Enter on a focused chip as dnd-kit's pickup instead of a line break", async () => {
@@ -2048,6 +2195,32 @@ describe("PreviewArea editing workflows", () => {
       "line one\n<b>bold</b>\nline three",
     );
     expect(flow.textContent).toContain("\n");
+    // The paste does not END with a newline — the last line has
+    // content, no line anchor is needed.
+    expect(flow.querySelectorAll("br")).toHaveLength(0);
+  });
+
+  it("anchors the last line when a paste ends with a newline (same invisible-line rule as Enter)", () => {
+    renderWithProviders([]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    expect(collapseSelectionAtEnd(flow)).toBe(true);
+
+    fireEvent.paste(flow, {
+      clipboardData: {
+        getData: (type: string) => (type === "text/plain" ? "top\nbottom\n" : ""),
+      },
+    });
+
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "top\nbottom\n",
+    );
+    // Exactly one anchor after the pasted node's trailing "\n".
+    expect(flow.querySelectorAll("br")).toHaveLength(1);
+    expect(flow.textContent).toBe("top\nbottom\n");
   });
 
   it("no-ops a paste with no text data", () => {

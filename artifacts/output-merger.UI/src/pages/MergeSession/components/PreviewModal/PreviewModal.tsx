@@ -13,8 +13,10 @@ import * as S from "./PreviewModal.styles";
  * disabled while the preview is empty) and, when open, an MUI Dialog
  * that renders the SAME unmodified PreviewArea from SnippetsContext
  * (zero duplicated snippet state — ADR 0003) plus the existing
- * CopyMergedTextButton and a close button in a bare right-side tools
- * rail. No visible title: a visually hidden DialogTitle names the
+ * CopyMergedTextButton, a close button, and the edit-text toggle in a
+ * bare right-side tools rail (user decision 2026-10-17: rail order
+ * copy → close → toggle, supersedes the F2 order "copy → toggle →
+ * close"). No visible title: a visually hidden DialogTitle names the
  * dialog for assistive tech.
  */
 function PreviewModal(props: PreviewModalProps) {
@@ -62,7 +64,6 @@ function PreviewModal(props: PreviewModalProps) {
           </S.PreviewZone>
           <S.ToolsRail>
             <CopyMergedTextButton />
-            <TextEditingToggle />
             <IconButton
               data-testid="preview-modal-close-button"
               aria-label={t("pages.mergeSession.previewArea.modal.close")}
@@ -70,6 +71,7 @@ function PreviewModal(props: PreviewModalProps) {
             >
               <CloseFullscreen />
             </IconButton>
+            <TextEditingToggle />
           </S.ToolsRail>
         </S.ModalLayout>
       </Dialog>

@@ -267,6 +267,22 @@ describe('parsePreviewDom', () => {
     expect(tokens).toHaveLength(3);
   });
 
+  it('treats a bogus <br> line anchor as parser-neutral (no token, no text)', () => {
+    // The invisible-line fix (user report 2026-10-17) plants a <br>
+    // after a trailing "\n" so the caret gets a visible line box. The
+    // parser must never see it: it flattens unknown elements to their
+    // textContent, and a <br> has none — no token, no serialization
+    // footprint, and textContent stays equal to serialize(document).
+    const br = document.createElement('br');
+    const root = buildFlow([chip('text-1:a1', 'Alpha'), textNode('\n'), br]);
+
+    const tokens = parsePreviewDom(root, [snippetToken('text-1:a1', 'Alpha')]);
+
+    expect(root.textContent).toBe('Alpha\n');
+    expect(serialize(tokens)).toBe('Alpha\n');
+    expect(tokens.map((token) => token.kind)).toEqual(['snippet', 'line-break']);
+  });
+
   it('degrades a duplicated chip id to plain text (never corrupt tokens)', () => {
     const root = buildFlow([chip('text-1:a1', 'Alpha'), chip('text-1:a1', 'Alpha')]);
 

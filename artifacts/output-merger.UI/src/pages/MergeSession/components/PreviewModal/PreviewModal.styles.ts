@@ -83,9 +83,10 @@ export const ModalPreviewArea = styled.div<{
  * no card chrome (deliberately NOT the PreviewToolbar component —
  * no duplicate preview-toolbar testid, no card-inside-card), top-
  * aligned, inset theme.spacing(2) from the right edge so it does
- * not interfere with the centralization of the preview. Copy on
- * top, close under it. Stays visible in fullScreen so close remains
- * reachable on the resize edge.
+ * not interfere with the centralization of the preview. Rail order
+ * (user decision 2026-10-17, superseding the F2 order): copy on
+ * top, close under it, the edit-text toggle last. Stays visible in
+ * fullScreen so close remains reachable on the resize edge.
  */
 export const ToolsRail = styled.div`
   display: flex;

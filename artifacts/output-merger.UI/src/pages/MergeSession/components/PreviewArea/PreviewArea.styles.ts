@@ -38,6 +38,12 @@ export const SegmentFlow = styled.div<{ $editing?: boolean }>`
   ${({ $editing }) =>
     $editing
       ? css`
+          /* The caret is the editing host's own focus indicator
+           * (user decision 2026-10-17): the UA's default focus
+           * outline — a black box around the whole flow on click —
+           * is removed for the editing state only. Chips, buttons,
+           * and every other focus ring are untouched. */
+          outline: none;
           cursor: text;
           min-height: 1.75em;
 

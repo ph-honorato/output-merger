@@ -358,7 +358,7 @@ describe('PreviewModal dialog', () => {
     expect(areas[1].closest('[aria-hidden="true"]')).toBeNull();
   });
 
-  it('lays the paper out as a row: centered preview zone plus a bare rail with copy, the edit toggle, and close in order', async () => {
+  it('lays the paper out as a row: centered preview zone plus a bare rail with copy, close, and the edit toggle in order', async () => {
     renderWithProviders(seedInterleaved());
     const dialog = await openDialog();
 
@@ -370,14 +370,15 @@ describe('PreviewModal dialog', () => {
     expect(rail).toContainElement(copyButton);
     expect(rail).toContainElement(editToggle);
     expect(rail).toContainElement(closeButton);
-    // Rail order (user decision 2026-10-16, F2): copy on top, the edit
-    // toggle under it, close last — all direct children of the rail.
+    // Rail order (user decision 2026-10-17, superseding the F2 order
+    // "copy → toggle → close"): copy on top, close under it, the
+    // edit toggle last — all direct children of the rail.
     expect(
-      copyButton.compareDocumentPosition(editToggle) &
+      copyButton.compareDocumentPosition(closeButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      editToggle.compareDocumentPosition(closeButton) &
+      closeButton.compareDocumentPosition(editToggle) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(copyButton.parentElement).toBe(rail);

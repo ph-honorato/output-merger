@@ -94,24 +94,25 @@ export const computeGapMoveIndex = (
  * block insertion is prevented and a "\n" text node is created
  * instead — no <br>, the flow's white-space: pre-wrap carries it)
  * and for plain-text paste (multi-line text stays one text node; the
- * parser splits it at the newlines). Returns false when no usable
- * selection exists inside the root (the caller then no-ops).
+ * parser splits it at the newlines). Returns the created text node,
+ * or null when no usable selection exists inside the root (the
+ * caller then no-ops).
  */
 export const insertTextAtSelection = (
   root: HTMLElement,
   text: string
-): boolean => {
+): Text | null => {
   const view = root.ownerDocument.defaultView;
   if (!view || typeof view.getSelection !== 'function') {
-    return false;
+    return null;
   }
   const selection = view.getSelection();
   if (!selection || selection.rangeCount === 0) {
-    return false;
+    return null;
   }
   const range = selection.getRangeAt(0);
   if (!root.contains(range.commonAncestorContainer)) {
-    return false;
+    return null;
   }
   range.deleteContents();
   const node = root.ownerDocument.createTextNode(text);
@@ -121,7 +122,112 @@ export const insertTextAtSelection = (
   after.collapse(true);
   selection.removeAllRanges();
   selection.addRange(after);
-  return true;
+  return node;
+};
+
+/**
+ * True for nodes that contribute neither text nor a rendered line to
+ * the flow's end: zero-length text nodes, comments, the zero-footprint
+ * insertion-gap anchors, and the drop-indicator needle. Scans for the
+ * block's meaningful end skip these.
+ */
+const isZeroFootprintNode = (node: Node): boolean => {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return (node as Text).data === '';
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return true; // comments and other non-rendering nodes
+  }
+  const element = node as HTMLElement;
+  return (
+    element.dataset?.gapSlot !== undefined ||
+    element.getAttribute('data-testid') === 'preview-drop-indicator'
+  );
+};
+
+/**
+ * Plants a bogus `<br>` line anchor right after a trailing "\n" text
+ * node — Chrome's own native contentEditable technique for pre-wrap
+ * blocks (user-reported fix, 2026-10-17): a newline at the very end
+ * of the block renders no empty last line, so a caret placed after it
+ * has no visible line box and appears stuck on the previous line.
+ * The anchor forces the line box; the caret — already placed right
+ * after the "\n" by the insertion — sits between the two and renders
+ * on the new line. Rules:
+ * - planted only when nothing meaningful follows the newline (only
+ *   zero-footprint anchors or nothing): content after the newline
+ *   renders the line box by itself;
+ * - never stacked: an already-planted anchor is enough;
+ * - never touches the selection — pure DOM planting, so the re-focus
+ *   path can use it without moving a user-placed caret;
+ * - invisible to the model: the parser recurses into unknown elements
+ *   and flattens to their textContent, and a `<br>` has none — no
+ *   token, no serialization footprint, and the WYSIWYG invariant
+ *   (`flow.textContent === serialize(document)`) holds even while
+ *   focused. The thaw re-render rebuilds the children from the model,
+ *   so the anchor self-heals away on blur and on edit-off.
+ * A `<br>` is not a droppable/sortable node, so dnd-kit's measured
+ * rects are unperturbed.
+ */
+export const ensureTrailingLineAnchor = (newlineNode: Text): void => {
+  const parent = newlineNode.parentNode;
+  if (!parent) {
+    return;
+  }
+  let sibling = newlineNode.nextSibling;
+  let anchorExists = false;
+  while (sibling !== null) {
+    if (
+      sibling.nodeType === Node.ELEMENT_NODE &&
+      (sibling as HTMLElement).tagName === 'BR'
+    ) {
+      anchorExists = true; // one trailing anchor is enough
+    } else if (!isZeroFootprintNode(sibling)) {
+      // Meaningful content follows the newline: it renders the line
+      // box, no anchor needed.
+      return;
+    }
+    sibling = sibling.nextSibling;
+  }
+  if (anchorExists) {
+    return;
+  }
+  const anchor = newlineNode.ownerDocument.createElement('br');
+  parent.insertBefore(anchor, newlineNode.nextSibling);
+};
+
+/**
+ * The flow's last meaningful DOM node when it is a text node ending
+ * with "\n" (the re-rendered trailing line break), or null. Used on
+ * focus: a document that already ends with a line break renders no
+ * empty last line either, so clicking back at the end would show the
+ * caret on the previous line without an anchor.
+ */
+export const findTrailingNewlineNode = (root: HTMLElement): Text | null => {
+  const children = root.childNodes;
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    const node = children[index];
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as HTMLElement;
+      if (
+        element.tagName === 'BR' ||
+        element.dataset?.gapSlot !== undefined ||
+        element.getAttribute('data-testid') === 'preview-drop-indicator'
+      ) {
+        continue;
+      }
+      return null; // a chip or unknown element ends the block
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node as Text;
+      if (text.data === '') {
+        continue;
+      }
+      return text.data.endsWith('\n') ? text : null;
+    }
+    // Comments and other non-rendering nodes: keep walking.
+  }
+  return null;
 };
 
 const SORTING_KEYS = {
@@ -320,6 +426,16 @@ export function usePreviewArea(
       }
       setFlowFocused(true);
       setFrozenTokens(modelRef.current);
+      // A document that already ends with a line break renders no
+      // empty last line either (same pre-wrap quirk as the Enter
+      // path): plant the anchor so clicking at the end shows the
+      // caret on the new line. Focus opens the frozen window, so
+      // React will not reconcile the planted node away until thaw.
+      const root = flowRef.current;
+      const trailing = root ? findTrailingNewlineNode(root) : null;
+      if (trailing) {
+        ensureTrailingLineAnchor(trailing);
+      }
     },
     []
   );
@@ -361,7 +477,15 @@ export function usePreviewArea(
       }
       event.preventDefault();
       const root = flowRef.current;
-      if (root && insertTextAtSelection(root, '\n')) {
+      if (!root) {
+        return;
+      }
+      const newlineNode = insertTextAtSelection(root, '\n');
+      if (newlineNode) {
+        // A trailing "\n" renders no empty last line in pre-wrap: the
+        // caret would appear stuck on the previous line. Plant the
+        // bogus anchor so the new line has a visible line box.
+        ensureTrailingLineAnchor(newlineNode);
         // Manual DOM edits fire no input event — sync explicitly.
         commitFlow();
       }
@@ -378,7 +502,16 @@ export function usePreviewArea(
         return;
       }
       const root = flowRef.current;
-      if (root && insertTextAtSelection(root, text)) {
+      if (!root) {
+        return;
+      }
+      const inserted = insertTextAtSelection(root, text);
+      if (inserted) {
+        // A paste ending in "\n" lands in the same invisible-line
+        // situation as the Enter path: anchor the last line.
+        if (text.endsWith('\n')) {
+          ensureTrailingLineAnchor(inserted);
+        }
         commitFlow();
       }
     },
