@@ -21,10 +21,13 @@ import {
   serialize,
 } from "../../../../utils/previewDocument";
 import {
+  abuttingChipFromCaret,
   buildGapId,
   classifyCaretRelativeChip,
+  collapseGapSpaces,
   computeGapMoveIndex,
   computeNeedleIndex,
+  findCaretGap,
   insertSplitPasteAtChipEnd,
   parseGapId,
   SNIPPET_DRAG_ACTIVATION,
@@ -2403,6 +2406,1168 @@ describe("PreviewArea editing workflows", () => {
     expect(flow.textContent).toBe("Alphatail\n");
   });
 
+  // -----------------------------------------------------------------
+  // Round 4 (user decision 2026-10-17): "we always have at least one
+  // white space between snippets and texts" — typing auto-separation
+  // (Rule 1) and gap collapse on caret exit (Rule 2).
+  // -----------------------------------------------------------------
+
+  // Realistic typing: insert characters into a text node at a caret
+  // offset, move the caret after the typed text, fire input.
+  const typeIntoNode = (
+    flow: HTMLElement,
+    node: Text,
+    offset: number,
+    text: string,
+  ) => {
+    node.insertData(offset, text);
+    setCaretInNode(node, offset + text.length);
+    fireEvent.input(flow);
+  };
+
+  const setCaretInNode = (node: Node, offset: number) => {
+    const range = document.createRange();
+    range.setStart(node, offset);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  };
+
+  const dispatchSelectionChange = () => {
+    act(() => {
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+  };
+
+  const pressArrow = (flow: HTMLElement, key: "ArrowLeft" | "ArrowRight") => {
+    const keydown = new KeyboardEvent("keydown", {
+      key,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      flow.dispatchEvent(keydown);
+    });
+    return keydown;
+  };
+
+  // Realistic input: dispatch an InputEvent with inputType/data — the
+  // real-browser event shape (the redirect's currency).
+  const realisticInput = (
+    flow: HTMLElement,
+    init: { inputType?: string; data?: string | null },
+  ) => {
+    act(() => {
+      flow.dispatchEvent(
+        new window.InputEvent("input", { bubbles: true, ...init }),
+      );
+    });
+  };
+
+  // Realistic typing: the browser's insertText with data — insert the
+  // chars, move the caret after them, fire the realistic input.
+  const typeRealistic = (
+    flow: HTMLElement,
+    node: Text,
+    offset: number,
+    data: string,
+  ) => {
+    node.insertData(offset, data);
+    setCaretInNode(node, offset + data.length);
+    realisticInput(flow, { inputType: "insertText", data });
+  };
+
+  const seedTwoChips = (): Array<[string, Snippet[]]> => [
+    ["text-1", [makeSnippet("a1", "Alpha")]],
+    ["text-2", [makeSnippet("b1", "Beta")]],
+  ];
+
+  const separatorNodeOf = (flow: HTMLElement) =>
+    Array.from(flow.childNodes).find(
+      (node) => node.nodeType === Node.TEXT_NODE,
+    ) as Text;
+
+  describe("chip-territory redirect (round 5, user decision 2026-10-18)", () => {
+    it("redirects text typed at the gap's LEFT edge into the left snippet (append, caret inside, edited)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The user's case 1: typing at the left edge of the gap space
+      // joins the CURRENT (left) snippet.
+      const chipAlpha = screen.getAllByTestId("preview-snippet")[0];
+      const chipText = chipAlpha.firstChild as Text;
+      typeRealistic(flow, separatorNodeOf(flow), 0, "text");
+
+      // The run moved INTO chipA: its text grew, the separator stays,
+      // the chip is edited, and the caret sits inside the chip after
+      // the run (subsequent typing integrates natively, Q3).
+      expect(chipAlpha.textContent).toBe("Alphatext");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alphatext Beta",
+      );
+      expect(screen.getByTestId("edited-probe").textContent).toBe("true");
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(chipText);
+      expect(range?.startOffset).toBe("Alphatext".length);
+
+      // Continued typing integrates into the chip without a second
+      // redirect (the caret is already chip territory).
+      typeRealistic(flow, chipText, chipText.data.length, "Z");
+      expect(chipAlpha.textContent).toBe("AlphatextZ");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlphatextZ Beta",
+      );
+    });
+
+    it("redirects text typed at the gap's RIGHT edge into the right snippet (prepend)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const chipBeta = screen.getAllByTestId("preview-snippet")[1];
+      const chipText = chipBeta.firstChild as Text;
+      typeRealistic(flow, separatorNodeOf(flow), 1, "text");
+
+      expect(chipBeta.textContent).toBe("textBeta");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha textBeta",
+      );
+      expect(flow.textContent).toBe("Alpha textBeta");
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(chipText);
+      expect(range?.startOffset).toBe("text".length);
+    });
+
+    it("redirects a multi-character run as one unit", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const chipAlpha = screen.getAllByTestId("preview-snippet")[0];
+      typeRealistic(flow, separatorNodeOf(flow), 0, "abc");
+
+      expect(chipAlpha.textContent).toBe("Alphaabc");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alphaabc Beta",
+      );
+    });
+
+    it("keeps the round-4 seam behavior: typing between GLUED snippets plants spaces on both sides (agent default)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The user deleted the separator: glue the chips first.
+      const separator = separatorNodeOf(flow);
+      separator.remove();
+      fireEvent.input(flow);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlphaBeta",
+      );
+
+      // Type at the boundary right after the first chip (realistic
+      // insertText — the seam needs the run's data).
+      const chipAlpha = screen.getAllByTestId("preview-snippet")[0];
+      const boundary = Array.from(flow.childNodes).indexOf(chipAlpha) + 1;
+      const typed = document.createTextNode("");
+      flow.insertBefore(typed, flow.childNodes[boundary] ?? null);
+      typeRealistic(flow, typed, 0, "X");
+
+      // Symmetric ambiguity: spaces both sides, the run stays own
+      // text, the caret stays inside it.
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha X Beta",
+      );
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(typed);
+      expect(range?.startOffset).toBe(1);
+    });
+
+    it("redirects typing at the flow start into the first snippet and at the flow end into the last", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // Flow start, directly before the chip: chip territory — the
+      // browser inserts the run into the flow at the boundary.
+      const chip = screen.getByTestId("preview-snippet");
+      const chipText = chip.firstChild as Text;
+      const boundary = Array.from(flow.childNodes).indexOf(chip);
+      const typedStart = document.createTextNode("X");
+      flow.insertBefore(typedStart, flow.childNodes[boundary] ?? null);
+      setCaretInNode(typedStart, 1);
+      realisticInput(flow, { inputType: "insertText", data: "X" });
+
+      expect(chip.textContent).toBe("XAlpha");
+      expect(screen.getByTestId("document-probe").textContent).toBe("XAlpha");
+      expect(screen.getByTestId("edited-probe").textContent).toBe("true");
+
+      // Flow end, directly after the chip: append. The caret is
+      // already inside the chip's text (the redirect moved it there).
+      typeRealistic(flow, chipText, chipText.data.length, "Y");
+      expect(chip.textContent).toBe("XAlphaY");
+      expect(screen.getByTestId("document-probe").textContent).toBe("XAlphaY");
+    });
+
+    it("redirects typing at a chip edge with own text on the far side: the run joins the chip, one space parts it from the own text", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The user deleted the separator and has own text glued to the
+      // first chip; the caret sits at offset 0 of that text — the
+      // position directly abuts chipA on the left.
+      const separator = separatorNodeOf(flow);
+      separator.data = "hello";
+      fireEvent.input(flow);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlphahelloBeta",
+      );
+
+      const chipAlpha = screen.getAllByTestId("preview-snippet")[0];
+      typeRealistic(flow, separator, 0, "X");
+
+      // X joins chipA; the far side ("hello") keeps one space from
+      // the grown chip.
+      expect(chipAlpha.textContent).toBe("AlphaX");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlphaX helloBeta",
+      );
+      expect(screen.getByTestId("edited-probe").textContent).toBe("true");
+    });
+
+    it("keeps `mytext|` + chip territory: the char joins the chip, a space parts it from the own text (single-chip)", () => {
+      renderWithProviders([["text-2", [makeSnippet("b1", "Beta")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // Own text glued directly before the chip; the caret at its end
+      // directly abuts chipB on the right.
+      const chip = screen.getByTestId("preview-snippet");
+      const myText = document.createTextNode("mytext");
+      flow.insertBefore(myText, chip);
+      fireEvent.input(flow);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "mytextBeta",
+      );
+
+      typeRealistic(flow, myText, myText.data.length, "X");
+
+      expect(chip.textContent).toBe("XBeta");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "mytext XBeta",
+      );
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(chip.firstChild as Text);
+      expect(range?.startOffset).toBe(1);
+    });
+
+    it("keeps chip + `|mytext` symmetric: the run joins the chip, a space parts the own text", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const chip = screen.getByTestId("preview-snippet");
+      const myText = document.createTextNode("mytext");
+      flow.appendChild(myText);
+      fireEvent.input(flow);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alphamytext",
+      );
+
+      // The caret at offset 0 of the own text directly abuts chipA.
+      typeRealistic(flow, myText, 0, "X");
+
+      expect(chip.textContent).toBe("AlphaX");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlphaX mytext",
+      );
+    });
+
+    it("treats a line break between the caret and a chip as separation on that side only", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const separator = separatorNodeOf(flow);
+      separator.data = "\n\n";
+      fireEvent.input(flow);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha\n\nBeta",
+      );
+
+      // Between the two newlines: free territory — typing is own text.
+      typeRealistic(flow, separator, 1, "X");
+      expect(screen.getAllByTestId("preview-snippet")[0].textContent).toBe(
+        "Alpha",
+      );
+      expect(screen.getAllByTestId("preview-snippet")[1].textContent).toBe(
+        "Beta",
+      );
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha\nX\nBeta",
+      );
+
+      // Right before the chip (after the second newline): chip
+      // territory — the run redirects into the chip's start.
+      typeRealistic(flow, separator, separator.data.length, "Y");
+      expect(screen.getAllByTestId("preview-snippet")[1].textContent).toBe(
+        "YBeta",
+      );
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha\nX\nYBeta",
+      );
+    });
+
+    it("never redirects a bare (data-less) input event: the run stays flow content", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The jsdom-typical bare event cannot identify the typed run —
+      // no redirect, no plants; the sync still runs.
+      typeIntoNode(flow, separatorNodeOf(flow), 0, "X");
+      expect(screen.getAllByTestId("preview-snippet")[0].textContent).toBe(
+        "Alpha",
+      );
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlphaX Beta",
+      );
+    });
+
+    it("does not auto-space typing inside a chip (Q3 integration stays glued)", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const chip = screen.getByTestId("preview-snippet");
+      const chipText = chip.firstChild as Text;
+      typeIntoNode(flow, chipText, "Alpha".length, "X");
+      expect(chip.textContent).toBe("AlphaX");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlphaX",
+      );
+
+      typeIntoNode(flow, chipText, 2, "Y");
+      expect(chip.textContent).toBe("AlYphaX");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlYphaX",
+      );
+    });
+
+    it("does not auto-space whitespace typing in the gap (the user manages spacing)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      typeIntoNode(flow, separatorNodeOf(flow), 0, " ");
+
+      // No spaces planted — the gap just grows.
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha  Beta",
+      );
+      expect(flow.textContent).toBe("Alpha  Beta");
+    });
+
+    it("keeps the caret stable on continued seam typing (the planted spaces block re-firing)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // Glue the chips, then type at the seam (realistic data).
+      const separator = separatorNodeOf(flow);
+      separator.remove();
+      fireEvent.input(flow);
+
+      const chipAlpha = screen.getAllByTestId("preview-snippet")[0];
+      const boundary = Array.from(flow.childNodes).indexOf(chipAlpha) + 1;
+      const typed = document.createTextNode("");
+      flow.insertBefore(typed, flow.childNodes[boundary] ?? null);
+      typeRealistic(flow, typed, 0, "X");
+
+      // The caret is right after the typed text, BEFORE the trailing
+      // space — the leading space precedes the run (it sits after the
+      // zero-footprint gap anchor).
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(typed);
+      expect(range?.startOffset).toBe(1);
+      expect((typed.previousSibling as Text).data).toBe(" ");
+      expect(
+        ((typed.nextElementSibling as HTMLElement).nextSibling as Text).data,
+      ).toBe(" ");
+
+      // Continued typing flows into the run; the planted spaces block
+      // re-firing (no double spacing).
+      typeRealistic(flow, typed, 1, "Y");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha XY Beta",
+      );
+      expect(flow.textContent).toBe("Alpha XY Beta");
+    });
+
+    // -----------------------------------------------------------------
+    // Realistic InputEvent regression (tester round-4 cycle-1 finding):
+    // real browsers label EVERY input event via InputEvent.inputType —
+    // deletions (deleteContentBackward, deleteByCut, historyUndo, …)
+    // and whitespace keystrokes included. The per-input contract
+    // (EDIT-33) holds for all of them: the auto-separation gates gate
+    // ONLY the space planting, never the model sync.
+    // -----------------------------------------------------------------
+
+    it("syncs the model on a real-browser deletion input (deleteContentBackward)", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Hello")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The user backspaces one character of the chip's text: the
+      // browser's input event is deleteContentBackward (data null).
+      const chip = screen.getByTestId("preview-snippet");
+      const chipText = chip.firstChild as Text;
+      chipText.data = "Hell";
+      setCaretInNode(chipText, "Hell".length);
+      realisticInput(flow, { inputType: "deleteContentBackward", data: null });
+
+      // EDIT-33: every input event parses and syncs — the model holds
+      // the deletion, not the pre-edit text.
+      expect(screen.getByTestId("document-probe").textContent).toBe("Hell");
+      expect(flow.textContent).toBe("Hell");
+    });
+
+    it("syncs the model on a whitespace-only insertText input and plants nothing", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The user types a space into the gap: insertText with data ' ' —
+      // synced like any other input, but never auto-separated.
+      const separator = separatorNodeOf(flow);
+      separator.insertData(0, " ");
+      setCaretInNode(separator, 1);
+      realisticInput(flow, { inputType: "insertText", data: " " });
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha  Beta",
+      );
+      expect(flow.textContent).toBe("Alpha  Beta");
+    });
+
+    it("redirects a realistic non-whitespace insertText typed at a glued run's chip edge (and syncs)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // Glue the chips with an own-text run first.
+      const separator = separatorNodeOf(flow);
+      separator.data = "text";
+      fireEvent.input(flow);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "AlphatextBeta",
+      );
+
+      // The browser types "X" at the run's end — the position directly
+      // abuts chipB (the right chip): chip territory.
+      separator.insertData(separator.data.length, "X");
+      setCaretInNode(separator, separator.data.length);
+      realisticInput(flow, { inputType: "insertText", data: "X" });
+
+      // The run redirected into chipB (prepend) and one space parts
+      // the own text from the grown chip.
+      expect(
+        screen.getAllByTestId("preview-snippet")[1].textContent,
+      ).toBe("XBeta");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alphatext XBeta",
+      );
+      expect(flow.textContent).toBe("Alphatext XBeta");
+    });
+
+    it("control: a bare input event (jsdom-typical, no inputType) still syncs", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Hello")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const chip = screen.getByTestId("preview-snippet");
+      (chip.firstChild as Text).data = "Hell";
+      fireEvent.input(flow);
+
+      expect(screen.getByTestId("document-probe").textContent).toBe("Hell");
+    });
+  });
+
+  describe("gap collapse on caret exit (round 4, rule 2)", () => {
+    it("leaves the visited one-space gap unchanged when no text is typed (case 2 verbatim)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // Click into the gap: visit it, then leave — nothing changes.
+      const separator = separatorNodeOf(flow);
+      setCaretInNode(separator, 0);
+      dispatchSelectionChange();
+      setCaretInNode(separator, 1);
+      dispatchSelectionChange();
+      const chipText = (screen.getAllByTestId("preview-snippet")[0]
+        .firstChild as Text);
+      setCaretInNode(chipText, 2);
+      dispatchSelectionChange();
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta",
+      );
+      expect(flow.textContent).toBe("Alpha Beta");
+    });
+
+    it("keeps the scaffold's two spaces while the caret stays, collapses them to one on exit (round-5 interplay)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // ArrowLeft from the gap's right edge scaffolds the free zone:
+      // the run becomes two spaces, the caret centered.
+      const separator = separatorNodeOf(flow);
+      setCaretInNode(separator, 1);
+      const keydown = pressArrow(flow, "ArrowLeft");
+      expect(keydown.defaultPrevented).toBe(true);
+      expect(separator.data).toBe("  ");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha  Beta",
+      );
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(separator);
+      expect(range?.startOffset).toBe(1);
+
+      // The caret stays in the scaffold (the caret-position signal):
+      // the two spaces remain.
+      dispatchSelectionChange();
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha  Beta",
+      );
+
+      // Leave the place by moving the caret: the scaffold collapses
+      // to one space and the model resyncs (rule 2, exit path).
+      const chipText = (screen.getAllByTestId("preview-snippet")[0]
+        .firstChild as Text);
+      setCaretInNode(chipText, 2);
+      dispatchSelectionChange();
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta",
+      );
+      expect(flow.textContent).toBe("Alpha Beta");
+    });
+
+    it("collapses deliberately typed extra spaces on caret exit (shape-based, not provenance-based)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const separator = separatorNodeOf(flow);
+      typeIntoNode(flow, separator, 0, "  ");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha   Beta",
+      );
+
+      // The caret still inside: no collapse.
+      dispatchSelectionChange();
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha   Beta",
+      );
+
+      // Leave: collapse to one.
+      const chipText = (screen.getAllByTestId("preview-snippet")[0]
+        .firstChild as Text);
+      setCaretInNode(chipText, 1);
+      dispatchSelectionChange();
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta",
+      );
+    });
+
+    it("collapses the gap on blur when the caret leaves by blurring inside it", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const separator = separatorNodeOf(flow);
+      typeIntoNode(flow, separator, 0, "  ");
+      setCaretInNode(separator, 2);
+      // The caret-position signal seeds the tracker with the gap…
+      dispatchSelectionChange();
+
+      act(() => {
+        flow.blur();
+      });
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta",
+      );
+      expect(flow.textContent).toBe("Alpha Beta");
+    });
+
+    it("never collapses a run containing a newline", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const separator = separatorNodeOf(flow);
+      separator.data = " \n ";
+      fireEvent.input(flow);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha \n Beta",
+      );
+
+      // "Leave" the caret from inside the run: nothing collapses —
+      // newlines are content, not gap spaces.
+      setCaretInNode(separator, 3);
+      dispatchSelectionChange();
+      const chipText = (screen.getAllByTestId("preview-snippet")[0]
+        .firstChild as Text);
+      setCaretInNode(chipText, 1);
+      dispatchSelectionChange();
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha \n Beta",
+      );
+    });
+
+    it("never collapses a whitespace run that is not between two chips (document end)", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const trailing = document.createTextNode("  ");
+      flow.appendChild(trailing);
+      setCaretInNode(trailing, 1);
+      fireEvent.input(flow);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha  ",
+      );
+
+      // Enter the run and leave it: it is not bounded by chips on
+      // both sides — no collapse ever.
+      dispatchSelectionChange();
+      setCaretInNode(trailing, 2);
+      dispatchSelectionChange();
+      const chipText = (screen.getByTestId("preview-snippet")
+        .firstChild as Text);
+      setCaretInNode(chipText, 1);
+      dispatchSelectionChange();
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha  ",
+      );
+    });
+
+    it("does not collapse while the caret moves within the same gap", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const separator = separatorNodeOf(flow);
+      typeIntoNode(flow, separator, 0, "  ");
+
+      // Move around inside the same run: still three spaces.
+      setCaretInNode(separator, 2);
+      dispatchSelectionChange();
+      setCaretInNode(separator, 1);
+      dispatchSelectionChange();
+      setCaretInNode(separator, 3);
+      dispatchSelectionChange();
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha   Beta",
+      );
+    });
+
+    it("resyncs the blurred twin surface when the gap collapses", () => {
+      const TwoFlows = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
+        const { setSourceSnippets } = useSnippets();
+        useEffect(() => {
+          updates.forEach(([sourceId, snippets]) =>
+            setSourceSnippets(sourceId, snippets),
+          );
+        }, [updates, setSourceSnippets]);
+        return (
+          <>
+            <DocumentProbe />
+            <TextEditingToggle />
+            <PreviewArea />
+            <PreviewArea />
+          </>
+        );
+      };
+      render(
+        <I18nextProvider i18n={i18n}>
+          <MuiThemeProvider theme={theme}>
+            <StyledThemeProvider theme={theme}>
+              <SnippetsProvider>
+                <TwoFlows updates={seedTwoChips()} />
+              </SnippetsProvider>
+            </StyledThemeProvider>
+          </MuiThemeProvider>
+        </I18nextProvider>,
+      );
+      enableEditing();
+      const flowAt = (index: number) =>
+        screen.getAllByTestId("preview-segment-flow")[index];
+
+      act(() => {
+        flowAt(0).focus();
+      });
+      const separator = separatorNodeOf(flowAt(0));
+      separator.data = "   ";
+      setCaretInNode(separator, 1);
+      fireEvent.input(flowAt(0));
+      expect(flowAt(1).textContent).toBe("Alpha   Beta");
+
+      // The caret-position signal seeds the tracker with the
+      // three-space gap; the twin shows it live.
+      dispatchSelectionChange();
+
+      // Leave the gap: the collapse commits, and the blurred twin
+      // re-renders from the model.
+      const chipText = (screen.getAllByTestId("preview-snippet")[0]
+        .firstChild as Text);
+      setCaretInNode(chipText, 1);
+      dispatchSelectionChange();
+
+      expect(flowAt(1).textContent).toBe("Alpha Beta");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta",
+      );
+    });
+  });
+
+  describe("arrow scaffolds (round 5, rule B — user decision 2026-10-18)", () => {
+    it("scaffolds the between-chips gap from both chip boundaries and both gap edges", () => {
+      // From chip2's start (inside the chip at offset 0), ArrowLeft.
+      {
+        const { unmount } = renderWithProviders(seedTwoChips());
+        enableEditing();
+        const flow = screen.getByTestId("preview-segment-flow");
+        act(() => {
+          flow.focus();
+        });
+        const [, chipBeta] = screen.getAllByTestId("preview-snippet");
+        setCaretInNode(chipBeta.firstChild as Text, 0);
+        const keydown = pressArrow(flow, "ArrowLeft");
+        expect(keydown.defaultPrevented).toBe(true);
+        const separator = separatorNodeOf(flow);
+        expect(separator.data).toBe("  ");
+        const range = window.getSelection()?.getRangeAt(0);
+        expect(range?.startContainer).toBe(separator);
+        expect(range?.startOffset).toBe(1);
+        expect(screen.getByTestId("document-probe").textContent).toBe(
+          "Alpha  Beta",
+        );
+        unmount();
+      }
+      // From chip1's end (inside the chip at its text end), ArrowRight.
+      {
+        const { unmount } = renderWithProviders(seedTwoChips());
+        enableEditing();
+        const flow = screen.getByTestId("preview-segment-flow");
+        act(() => {
+          flow.focus();
+        });
+        const [chipAlpha] = screen.getAllByTestId("preview-snippet");
+        setCaretInNode(chipAlpha.firstChild as Text, "Alpha".length);
+        const keydown = pressArrow(flow, "ArrowRight");
+        expect(keydown.defaultPrevented).toBe(true);
+        const separator = separatorNodeOf(flow);
+        expect(separator.data).toBe("  ");
+        expect(screen.getByTestId("document-probe").textContent).toBe(
+          "Alpha  Beta",
+        );
+        unmount();
+      }
+      // From the gap's left edge (separator offset 0), ArrowRight.
+      {
+        const { unmount } = renderWithProviders(seedTwoChips());
+        enableEditing();
+        const flow = screen.getByTestId("preview-segment-flow");
+        act(() => {
+          flow.focus();
+        });
+        const separator = separatorNodeOf(flow);
+        setCaretInNode(separator, 0);
+        const keydown = pressArrow(flow, "ArrowRight");
+        expect(keydown.defaultPrevented).toBe(true);
+        expect(separator.data).toBe("  ");
+        unmount();
+      }
+    });
+
+    it("typing in the scaffold is spaced own text (no redirect), and typing disarms the collapse", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const separator = separatorNodeOf(flow);
+      setCaretInNode(separator, 1);
+      pressArrow(flow, "ArrowLeft");
+      expect(separator.data).toBe("  ");
+
+      // Type at the center: own text with spaces both sides — the
+      // chips never grow (no redirect: scaffold territory).
+      separator.insertData(1, "mid");
+      setCaretInNode(separator, 4);
+      realisticInput(flow, { inputType: "insertText", data: "mid" });
+      expect(
+        screen.getAllByTestId("preview-snippet")[0].textContent,
+      ).toBe("Alpha");
+      expect(
+        screen.getAllByTestId("preview-snippet")[1].textContent,
+      ).toBe("Beta");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha mid Beta",
+      );
+
+      // Typed content disarms rule 2: leaving keeps the text.
+      const chipText = (screen.getAllByTestId("preview-snippet")[0]
+        .firstChild as Text);
+      setCaretInNode(chipText, 1);
+      dispatchSelectionChange();
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha mid Beta",
+      );
+    });
+
+    it("arrows leaving the scaffold hop into the chips' interiors and collapse it (rule 2)", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const separator = separatorNodeOf(flow);
+      setCaretInNode(separator, 1);
+      pressArrow(flow, "ArrowLeft");
+
+      // ArrowLeft again: hop into chip1's text END, the gap collapses.
+      const [chipAlpha, chipBeta] = screen.getAllByTestId("preview-snippet");
+      const keydown = pressArrow(flow, "ArrowLeft");
+      expect(keydown.defaultPrevented).toBe(true);
+      let range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(chipAlpha.firstChild as Text);
+      expect(range?.startOffset).toBe("Alpha".length);
+      expect(separator.data).toBe(" ");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta",
+      );
+
+      // Scaffold again from the right edge and hop right: into
+      // chip2's text START, same collapse.
+      setCaretInNode(separator, 1);
+      pressArrow(flow, "ArrowLeft");
+      expect(separator.data).toBe("  ");
+      const keydownRight = pressArrow(flow, "ArrowRight");
+      expect(keydownRight.defaultPrevented).toBe(true);
+      range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(chipBeta.firstChild as Text);
+      expect(range?.startOffset).toBe(0);
+      expect(separator.data).toBe(" ");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta",
+      );
+    });
+
+    it("doc start: ArrowLeft at the first position scaffolds a leading space; typing is own text; ArrowRight back removes it and typing joins the snippet", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The caret inside the first chip at offset 0, ArrowLeft.
+      const chip = screen.getByTestId("preview-snippet");
+      const chipText = chip.firstChild as Text;
+      setCaretInNode(chipText, 0);
+      const keydown = pressArrow(flow, "ArrowLeft");
+      expect(keydown.defaultPrevented).toBe(true);
+
+      // One space before the snippet; the caret at the space's start.
+      const scaffold = Array.from(flow.childNodes).find(
+        (node) => node.nodeType === Node.TEXT_NODE,
+      ) as Text;
+      expect(scaffold.data).toBe(" ");
+      expect(flow.firstChild === scaffold || scaffold === chip.previousSibling)
+        .toBe(true);
+      let range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(scaffold);
+      expect(range?.startOffset).toBe(0);
+      expect(screen.getByTestId("document-probe").textContent).toBe(" Alpha");
+
+      // Typing is OWN TEXT (scaffold territory — no redirect) and the
+      // scaffold space becomes its trailing separator.
+      typeRealistic(flow, scaffold, 0, "X");
+      expect(chip.textContent).toBe("Alpha");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "X Alpha",
+      );
+
+      // Typed: everything stays (content) — the caret moved on
+      // natively and the space is no longer removable.
+      setCaretInNode(chipText, 1);
+      dispatchSelectionChange();
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "X Alpha",
+      );
+      void scaffold;
+    });
+
+    it("doc start untouched scaffold: ArrowRight removes it, restores the caret at chip1's start, and typing integrates again", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const chip = screen.getByTestId("preview-snippet");
+      const chipText = chip.firstChild as Text;
+      setCaretInNode(chipText, 0);
+      pressArrow(flow, "ArrowLeft");
+      const scaffold = chip.previousSibling as Text;
+      expect(scaffold.data).toBe(" ");
+
+      // Nothing typed: ArrowRight removes the space and the caret is
+      // back at the chip's offset 0 — typing belongs to the snippet.
+      const keydown = pressArrow(flow, "ArrowRight");
+      expect(keydown.defaultPrevented).toBe(true);
+      expect(scaffold.isConnected).toBe(false);
+      expect(screen.getByTestId("document-probe").textContent).toBe("Alpha");
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(chipText);
+      expect(range?.startOffset).toBe(0);
+
+      typeRealistic(flow, chipText, 0, "X");
+      expect(chip.textContent).toBe("XAlpha");
+      expect(screen.getByTestId("document-probe").textContent).toBe("XAlpha");
+    });
+
+    it("doc start scaffold: click-away and blur remove the untouched space", () => {
+      // Click-away (the caret leaves via the selectionchange path).
+      {
+        const { unmount } = renderWithProviders([
+          ["text-1", [makeSnippet("a1", "Alpha")]],
+        ]);
+        enableEditing();
+        const flow = screen.getByTestId("preview-segment-flow");
+        act(() => {
+          flow.focus();
+        });
+        const chip = screen.getByTestId("preview-snippet");
+        const chipText = chip.firstChild as Text;
+        setCaretInNode(chipText, 0);
+        pressArrow(flow, "ArrowLeft");
+        const scaffold = chip.previousSibling as Text;
+
+        setCaretInNode(chipText, 2);
+        dispatchSelectionChange();
+        expect(scaffold.isConnected).toBe(false);
+        expect(screen.getByTestId("document-probe").textContent).toBe("Alpha");
+        unmount();
+      }
+      // Blur removes it too (the commit parses the removed DOM).
+      {
+        renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+        enableEditing();
+        const flow = screen.getByTestId("preview-segment-flow");
+        act(() => {
+          flow.focus();
+        });
+        const chip = screen.getByTestId("preview-snippet");
+        const chipText = chip.firstChild as Text;
+        setCaretInNode(chipText, 0);
+        pressArrow(flow, "ArrowLeft");
+        const scaffold = chip.previousSibling as Text;
+
+        act(() => {
+          flow.blur();
+        });
+        expect(scaffold.isConnected).toBe(false);
+        expect(screen.getByTestId("document-probe").textContent).toBe("Alpha");
+      }
+    });
+
+    it("doc start: ArrowLeft from the flow-start position (directly before the first chip) also scaffolds", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const chip = screen.getByTestId("preview-snippet");
+      const chipIndex = Array.from(flow.childNodes).indexOf(chip);
+      setCaretInNode(flow, chipIndex);
+      const keydown = pressArrow(flow, "ArrowLeft");
+      expect(keydown.defaultPrevented).toBe(true);
+      const scaffold = chip.previousSibling as Text;
+      expect(scaffold.data).toBe(" ");
+      expect(screen.getByTestId("document-probe").textContent).toBe(" Alpha");
+    });
+
+    it("doc end: ArrowRight at the last position scaffolds a trailing space; typing is own text; ArrowLeft back removes it", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // From inside the last chip at its text end.
+      const chip = screen.getByTestId("preview-snippet");
+      const chipText = chip.firstChild as Text;
+      setCaretInNode(chipText, chipText.data.length);
+      const keydown = pressArrow(flow, "ArrowRight");
+      expect(keydown.defaultPrevented).toBe(true);
+
+      const scaffold = chip.nextSibling as Text;
+      expect(scaffold.data).toBe(" ");
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(scaffold);
+      expect(range?.startOffset).toBe(1);
+      expect(screen.getByTestId("document-probe").textContent).toBe("Alpha ");
+
+      // Typing is own text; the scaffold space becomes its leading
+      // separator (`Alpha X`).
+      typeRealistic(flow, scaffold, 1, "X");
+      expect(chip.textContent).toBe("Alpha");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha X",
+      );
+    });
+
+    it("doc end untouched scaffold: ArrowLeft removes it and restores the caret at the chip's end", () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const chip = screen.getByTestId("preview-snippet");
+      const chipText = chip.firstChild as Text;
+      setCaretInNode(chipText, chipText.data.length);
+      pressArrow(flow, "ArrowRight");
+      const scaffold = chip.nextSibling as Text;
+
+      const keydown = pressArrow(flow, "ArrowLeft");
+      expect(keydown.defaultPrevented).toBe(true);
+      expect(scaffold.isConnected).toBe(false);
+      expect(screen.getByTestId("document-probe").textContent).toBe("Alpha");
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(chipText);
+      expect(range?.startOffset).toBe(chipText.data.length);
+
+      // Typing at the restored position joins the snippet again.
+      typeRealistic(flow, chipText, chipText.data.length, "Y");
+      expect(chip.textContent).toBe("AlphaY");
+    });
+
+    it("native arrows stay native: ArrowUp/ArrowDown and arrows into chip interiors do nothing special", () => {
+      renderWithProviders(seedTwoChips());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // ArrowLeft at chip1's INTERIOR (not offset 0): native — no
+      // preventDefault, no scaffold.
+      const [chipAlpha] = screen.getAllByTestId("preview-snippet");
+      setCaretInNode(chipAlpha.firstChild as Text, 2);
+      const keydown = pressArrow(flow, "ArrowLeft");
+      expect(keydown.defaultPrevented).toBe(false);
+      expect(separatorNodeOf(flow).data).toBe(" ");
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta",
+      );
+    });
+  });
+
   it("keeps Enter on a focused chip as dnd-kit's pickup instead of a line break", async () => {
     renderWithProviders(seedInterleaved());
     enableEditing();
@@ -2816,6 +3981,55 @@ describe("classifyCaretRelativeChip + insertSplitPasteAtChipEnd (line-break esca
     expect(chip2.textContent).toBe("Beta");
     expect(tail2.data).toBe("\nnext");
     expect(root2.textContent).toBe("Beta\nnext");
+  });
+
+  it("walks caret boundaries to abutting chips and computes caret gaps (round-4 units)", () => {
+    const root = document.createElement("div");
+    const chipA = document.createElement("span");
+    chipA.dataset.tokenId = "text-1:a1";
+    chipA.textContent = "Alpha";
+    const sep = document.createTextNode(" ");
+    const chipB = document.createElement("span");
+    chipB.dataset.tokenId = "text-2:b1";
+    chipB.textContent = "Beta";
+    const gap = document.createElement("span"); // a transparent anchor
+    gap.dataset.gapSlot = "1";
+    root.append(chipA, gap, sep, chipB);
+
+    // The caret inside "text" glued between the chips (no separator).
+    sep.data = "text";
+    expect(abuttingChipFromCaret(root, sep, 1, "before")).toBe(chipA);
+    expect(abuttingChipFromCaret(root, sep, 1, "after")).toBe(chipB);
+    // A whitespace anywhere between the caret and the chip blocks.
+    sep.data = "a b";
+    expect(abuttingChipFromCaret(root, sep, 3, "before")).toBeNull();
+    expect(abuttingChipFromCaret(root, sep, 2, "after")).toBe(chipB);
+    // The walker reports the abutting chip even with no text between
+    // (the caret at offset 0 walks through the transparent anchor to
+    // chipA); the PLANT gate is the adjacent-character check in
+    // ensureTypedTextSeparation, not the walker.
+    expect(abuttingChipFromCaret(root, sep, 0, "before")).toBe(chipA);
+    // Gap computation: a spaces-only run between two chips is a gap.
+    sep.data = "  ";
+    const gapSpan = findCaretGap(root, sep, 1);
+    expect(gapSpan?.firstNode).toBe(sep);
+    expect(gapSpan?.lastNode).toBe(sep);
+    // A newline in the run disqualifies it.
+    sep.data = " \n ";
+    expect(findCaretGap(root, sep, 1)).toBeNull();
+    // Not bounded by chips on both sides: no gap.
+    const lone = document.createElement("div");
+    const loneText = document.createTextNode("  ");
+    lone.appendChild(loneText);
+    expect(findCaretGap(lone, loneText, 1)).toBeNull();
+    // Collapse: two spaces → one (returns true), one space → no-op.
+    sep.data = "  ";
+    const span = findCaretGap(root, sep, 1);
+    expect(span && collapseGapSpaces(root, span)).toBe(true);
+    expect(sep.data).toBe(" ");
+    const single = findCaretGap(root, sep, 1);
+    expect(single && collapseGapSpaces(root, single)).toBe(false);
+    expect(sep.data).toBe(" ");
   });
 });
 

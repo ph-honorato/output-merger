@@ -221,25 +221,40 @@ export const classifyCaretRelativeChip = (
 /**
  * Plants a raw text node as the chip's SIBLING — right after it
  * (`side === 'after'`) or right before it (`side === 'before'`) —
- * instead of inside the chip's content, and places the caret right
- * after the node (the same Range/Selection technique
- * insertTextAtSelection uses). The Enter escape path
- * ("a line break never enters a snippet", user decision 2026-10-17)
- * and the paste escape paths (round 3: the same rule applies to
- * pasted text) build on it; content planted here is flow content —
- * own text/line-break tokens after parse — never snippet content.
+ * instead of inside the chip's content, WITHOUT touching the
+ * selection (the caret stays wherever it is — required by the typing
+ * auto-separation rule, which must leave the caret inside the typed
+ * run). Content planted here is flow content — own text/line-break
+ * tokens after parse — never snippet content.
+ */
+const plantTextBesideChip = (
+  chip: HTMLElement,
+  side: 'before' | 'after',
+  text: string
+): Text => {
+  const node = chip.ownerDocument.createTextNode(text);
+  chip.parentNode?.insertBefore(
+    node,
+    side === 'before' ? chip : chip.nextSibling
+  );
+  return node;
+};
+
+/**
+ * Plants a raw text node as the chip's SIBLING (see
+ * plantTextBesideChip) and places the caret right after the node (the
+ * same Range/Selection technique insertTextAtSelection uses). The
+ * Enter escape path ("a line break never enters a snippet", user
+ * decision 2026-10-17) and the paste escape paths (round 3: the same
+ * rule applies to pasted text) build on it.
  */
 const insertTextBesideChip = (
   chip: HTMLElement,
   side: 'before' | 'after',
   text: string
 ): Text => {
+  const node = plantTextBesideChip(chip, side, text);
   const doc = chip.ownerDocument;
-  const node = doc.createTextNode(text);
-  chip.parentNode?.insertBefore(
-    node,
-    side === 'before' ? chip : chip.nextSibling
-  );
   const after = doc.createRange();
   after.setStartAfter(node);
   after.collapse(true);
@@ -286,6 +301,615 @@ export const insertSplitPasteAtChipEnd = (
   }
   return insertTextBesideChip(chip, 'after', text.slice(firstNewline));
 };
+
+// ---------------------------------------------------------------------------
+// Typing auto-separation + gap collapse (user decision 2026-10-17,
+// round 4): "we always have at least one white space between snippets
+// and texts".
+// ---------------------------------------------------------------------------
+
+const isChipElement = (node: Node): node is HTMLElement =>
+  node.nodeType === Node.ELEMENT_NODE &&
+  (node as HTMLElement).dataset?.tokenId !== undefined;
+
+/**
+ * True for everything the caret boundary walks skip: comments and
+ * every element that is not a snippet chip (insertion-gap anchors,
+ * the drop-indicator needle, the bogus <br> line anchor, wrapper
+ * debris). Text nodes and chips are the only content the walks see —
+ * mirroring the parser's transparency for everything that is
+ * neither.
+ */
+const isWalkTransparent = (node: Node): boolean =>
+  node.nodeType !== Node.TEXT_NODE && !isChipElement(node);
+
+/**
+ * Walks from the caret position toward one side, accumulating the
+ * NON-WHITESPACE text it crosses (through parser-transparent
+ * elements), until a snippet chip. Any whitespace character between
+ * the caret and the chip means a separator exists → { chip: null,
+ * crossed: <text-so-far> }. The `crossed` string is the round-5
+ * redirect's currency: for an insertText event the just-typed run is
+ * exactly `data`, so a chip reached through `crossed === data` abuts
+ * the PRE-TYPING caret position directly (chip territory), while a
+ * chip reached through longer text is farther away (free territory).
+ */
+export interface ChipBoundary {
+  chip: HTMLElement | null;
+  crossed: string;
+}
+
+export const chipBoundaryFromCaret = (
+  root: HTMLElement,
+  container: Node,
+  offset: number,
+  direction: 'before' | 'after'
+): ChipBoundary => {
+  void root;
+  let crossed = '';
+
+  // Phase 1: the container's own text on the walk's side of the caret.
+  if (container.nodeType === Node.TEXT_NODE) {
+    const data = (container as Text).data;
+    const fragment =
+      direction === 'before' ? data.slice(0, offset) : data.slice(offset);
+    for (let index = 0; index < fragment.length; index += 1) {
+      if (/\s/.test(fragment[index])) {
+        return { chip: null, crossed };
+      }
+      crossed += fragment[index];
+    }
+  }
+
+  // Phase 2: sibling walk toward the direction.
+  let sibling: ChildNode | null;
+  if (container.nodeType === Node.TEXT_NODE) {
+    sibling =
+      direction === 'before'
+        ? container.previousSibling
+        : container.nextSibling;
+  } else {
+    const children = (container as HTMLElement).childNodes;
+    const index = direction === 'before' ? offset - 1 : offset;
+    sibling =
+      index >= 0 && index < children.length ? (children[index] ?? null) : null;
+  }
+  while (sibling !== null) {
+    if (sibling.nodeType === Node.TEXT_NODE) {
+      const data = (sibling as Text).data;
+      for (let index = 0; index < data.length; index += 1) {
+        if (/\s/.test(data[index])) {
+          return { chip: null, crossed };
+        }
+        crossed += data[index];
+      }
+    } else if (isChipElement(sibling)) {
+      return { chip: sibling, crossed };
+    }
+    // Transparent elements: keep walking.
+    sibling =
+      direction === 'before'
+        ? sibling.previousSibling
+        : sibling.nextSibling;
+  }
+  return { chip: null, crossed }; // the flow edge without a chip
+};
+
+/**
+ * The snippet chip that DIRECTLY abuts the caret on one side, if any
+ * (the chip-only view of chipBoundaryFromCaret).
+ */
+export const abuttingChipFromCaret = (
+  root: HTMLElement,
+  container: Node,
+  offset: number,
+  direction: 'before' | 'after'
+): HTMLElement | null =>
+  chipBoundaryFromCaret(root, container, offset, direction).chip;
+
+/**
+ * The flow-text character immediately adjacent to the caret on one
+ * side (through transparent elements; empty text nodes keep the
+ * walk going). Chips and flow edges return null — a caret between
+ * two chips with no text has no adjacent flow character, so typing
+ * separation never plants anything into an empty gap.
+ */
+const adjacentFlowCharacter = (
+  container: Node,
+  offset: number,
+  side: 'before' | 'after'
+): string | null => {
+  if (
+    container.nodeType === Node.TEXT_NODE &&
+    (side === 'before' ? offset > 0 : offset < (container as Text).data.length)
+  ) {
+    const data = (container as Text).data;
+    return side === 'before' ? data[offset - 1] : data[offset];
+  }
+  let sibling: ChildNode | null;
+  if (container.nodeType === Node.TEXT_NODE) {
+    sibling = side === 'before' ? container.previousSibling : container.nextSibling;
+  } else {
+    const children = (container as HTMLElement).childNodes;
+    const index = side === 'before' ? offset - 1 : offset;
+    sibling =
+      index >= 0 && index < children.length ? (children[index] ?? null) : null;
+  }
+  while (sibling !== null) {
+    if (sibling.nodeType === Node.TEXT_NODE) {
+      const data = (sibling as Text).data;
+      if (data.length > 0) {
+        return side === 'before' ? data[data.length - 1] : data[0];
+      }
+    } else if (isChipElement(sibling)) {
+      return null;
+    }
+    sibling =
+      side === 'before' ? sibling.previousSibling : sibling.nextSibling;
+  }
+  return null;
+};
+
+/**
+ * Places the caret (the shared Range/Selection technique) at a node
+ * offset — the redirect, scaffold, and arrow paths use it to move
+ * the caret programmatically.
+ */
+const placeCaret = (node: Node, offset: number): void => {
+  const doc = node.ownerDocument;
+  if (!doc) {
+    return;
+  }
+  const range = doc.createRange();
+  range.setStart(node, offset);
+  range.collapse(true);
+  const view = doc.defaultView;
+  const selection = view?.getSelection();
+  if (selection) {
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+};
+
+/** The chip's first text child, or null. */
+const firstTextChildOf = (chip: HTMLElement): Text | null => {
+  const children = chip.childNodes;
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index];
+    if (child.nodeType === Node.TEXT_NODE) {
+      return child as Text;
+    }
+  }
+  return null;
+};
+
+/** The chip's last text child, or null. */
+const lastTextChildOf = (chip: HTMLElement): Text | null => {
+  const children = chip.childNodes;
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    const child = children[index];
+    if (child.nodeType === Node.TEXT_NODE) {
+      return child as Text;
+    }
+  }
+  return null;
+};
+
+/**
+ * Appends `data` to the chip's text (its last text child, creating
+ * one when the chip has no text) and returns that text node.
+ */
+const appendRunToChip = (chip: HTMLElement, data: string): Text => {
+  let text = lastTextChildOf(chip);
+  if (!text) {
+    text = chip.ownerDocument.createTextNode('');
+    chip.appendChild(text);
+  }
+  text.insertData(text.data.length, data);
+  return text;
+};
+
+/** Prepends `data` to the chip's text, symmetric to appendRunToChip. */
+const prependRunToChip = (chip: HTMLElement, data: string): Text => {
+  let text = firstTextChildOf(chip);
+  if (!text) {
+    text = chip.ownerDocument.createTextNode('');
+    chip.insertBefore(text, chip.firstChild ?? null);
+  }
+  text.insertData(0, data);
+  return text;
+};
+
+/**
+ * Removes the just-typed run from the flow: for an insertText event
+ * the browser inserted exactly `data` ending at the caret, so the
+ * chars to remove sit in the caret's text node right before the
+ * offset (or, for an element-boundary caret, in the text child
+ * before it). Exotic DOM shapes return false — the run then stays
+ * flow content and the sync still runs (the always-sync contract).
+ */
+const extractTypedRunEndingAtCaret = (range: Range, data: string): boolean => {
+  const { startContainer: container, startOffset: offset } = range;
+  if (container.nodeType === Node.TEXT_NODE) {
+    const text = container as Text;
+    if (
+      offset >= data.length &&
+      text.data.slice(offset - data.length, offset) === data
+    ) {
+      text.deleteData(offset - data.length, data.length);
+      return true;
+    }
+    return false;
+  }
+  if (container.nodeType === Node.ELEMENT_NODE) {
+    const children = (container as HTMLElement).childNodes;
+    const previous = offset - 1 >= 0 ? children[offset - 1] : undefined;
+    if (previous && previous.nodeType === Node.TEXT_NODE) {
+      const text = previous as Text;
+      if (text.data.endsWith(data)) {
+        text.deleteData(text.data.length - data.length, data.length);
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+/**
+ * Round-5 rule A — the chip-territory redirect (user decision
+ * 2026-10-18: "every caret position directly abutting a chip is the
+ * chip's territory"). When a non-whitespace insertText lands at a
+ * caret position that DIRECTLY abutted a chip before typing (the
+ * walk from the caret crosses exactly the typed run to a chip on the
+ * left, or crosses nothing to a chip on the right), the typed run
+ * moves INTO the chip — appended after its text for a left chip,
+ * prepended before it for a right chip — and the caret follows inside
+ * the chip (subsequent typing integrates natively, Q3). The chip's
+ * text grows, so its `edited` flag becomes true on the sync. If the
+ * insertion point's far side directly abuts non-whitespace own text
+ * (e.g. `mytext|` before the chip), ONE space is planted outside the
+ * chip between them (the ≥1-space-between-snippet-and-text rule).
+ * The seam — two GLUED chips with the caret exactly between them —
+ * keeps the round-4 behavior (agent default): spaces on both sides,
+ * the typed run stays own text. Whitespace typing, deletions, bare
+ * (data-less) events, and positions not directly abutting a chip are
+ * untouched; the caller runs the parse+sync for EVERY input event
+ * regardless.
+ */
+export const redirectTypedRunToChipTerritory = (
+  root: HTMLElement,
+  range: Range,
+  data: string
+): void => {
+  if (!range.collapsed) {
+    return;
+  }
+  // Typing inside a chip (any position) is native Q3 integration.
+  if (classifyCaretRelativeChip(root, range).chip) {
+    return;
+  }
+  const { startContainer, startOffset } = range;
+  const before = chipBoundaryFromCaret(root, startContainer, startOffset, 'before');
+  const after = chipBoundaryFromCaret(root, startContainer, startOffset, 'after');
+  // The pre-typing caret directly abutted the left chip iff the walk
+  // crossed exactly the typed run; the right chip iff it crossed
+  // nothing (the run sits between the caret and the left content).
+  const directLeft = before.chip !== null && before.crossed === data;
+  const directRight = after.chip !== null && after.crossed === '';
+
+  if (directLeft && directRight && before.chip && after.chip) {
+    // Seam (agent default, kept from round 4): symmetric ambiguity —
+    // spaces on both sides, the run stays own text.
+    plantTextBesideChip(before.chip, 'after', ' ');
+    plantTextBesideChip(after.chip, 'before', ' ');
+    return;
+  }
+  if (directLeft && before.chip) {
+    if (!extractTypedRunEndingAtCaret(range, data)) {
+      return;
+    }
+    const chipText = appendRunToChip(before.chip, data);
+    placeCaret(chipText, chipText.data.length);
+    if (after.crossed.length > 0) {
+      // Far side: own text directly abutting the insertion point
+      // keeps one space from the grown chip.
+      plantTextBesideChip(before.chip, 'after', ' ');
+    }
+    return;
+  }
+  if (directRight && after.chip) {
+    if (!extractTypedRunEndingAtCaret(range, data)) {
+      return;
+    }
+    const chipText = prependRunToChip(after.chip, data);
+    placeCaret(chipText, data.length);
+    const farText = before.crossed.slice(0, before.crossed.length - data.length);
+    if (farText.length > 0) {
+      plantTextBesideChip(after.chip, 'before', ' ');
+    }
+    return;
+  }
+  // Free territory: no redirect, no plants (round-4 rule 1 rescoped
+  // to the seam and the doc-edge scaffolds).
+};
+
+/**
+ * The caret's current "gap": a spaces-only (no `\n`, no tabs) run of
+ * text DIRECTLY between two snippet chips — the place the user's
+ * round-4 rule calls "between two snippets". Null when the caret is
+ * not inside such a run (content, edges, line breaks, or runs not
+ * bounded by chips on both sides do not count).
+ */
+export interface CaretGap {
+  firstNode: Text;
+  lastNode: Text;
+  /** The run's total space count (the scaffold arrow rules branch on it). */
+  spaces: number;
+}
+
+export const findCaretGap = (
+  root: HTMLElement,
+  container: Node,
+  offset: number
+): CaretGap | null => {
+  void root;
+  let spaces = 0;
+  let firstNode: Text | null = null;
+  let lastNode: Text | null = null;
+
+  // Phase 1: the container's own text around the caret must be
+  // spaces only, on both sides.
+  if (container.nodeType === Node.TEXT_NODE) {
+    const data = (container as Text).data;
+    const before = data.slice(0, offset);
+    const after = data.slice(offset);
+    if (/[^ ]/.test(before) || /[^ ]/.test(after)) {
+      return null;
+    }
+    spaces += before.length + after.length;
+    firstNode = container as Text;
+    lastNode = container as Text;
+  }
+
+  // Phase 2: walk left for the first chip through spaces-only text.
+  let sibling: ChildNode | null;
+  if (container.nodeType === Node.TEXT_NODE) {
+    sibling = container.previousSibling;
+  } else {
+    const children = (container as HTMLElement).childNodes;
+    sibling =
+      offset - 1 >= 0 && offset - 1 < children.length
+        ? (children[offset - 1] ?? null)
+        : null;
+  }
+  while (sibling !== null) {
+    if (sibling.nodeType === Node.TEXT_NODE) {
+      const data = (sibling as Text).data;
+      if (/[^ ]/.test(data)) {
+        return null;
+      }
+      spaces += data.length;
+      firstNode = sibling as Text;
+    } else if (isChipElement(sibling)) {
+      break;
+    }
+    sibling = sibling.previousSibling;
+  }
+  if (sibling === null || !isChipElement(sibling)) {
+    return null; // no chip bounds the run on the left
+  }
+
+  // Phase 3: walk right, symmetric.
+  if (container.nodeType === Node.TEXT_NODE) {
+    sibling = container.nextSibling;
+  } else {
+    const children = (container as HTMLElement).childNodes;
+    sibling =
+      offset >= 0 && offset < children.length
+        ? (children[offset] ?? null)
+        : null;
+  }
+  while (sibling !== null) {
+    if (sibling.nodeType === Node.TEXT_NODE) {
+      const data = (sibling as Text).data;
+      if (/[^ ]/.test(data)) {
+        return null;
+      }
+      spaces += data.length;
+      lastNode = sibling as Text;
+    } else if (isChipElement(sibling)) {
+      break;
+    }
+    sibling = sibling.nextSibling;
+  }
+  if (sibling === null || !isChipElement(sibling)) {
+    return null; // no chip bounds the run on the right
+  }
+
+  if (spaces < 1 || !firstNode || !lastNode) {
+    return null;
+  }
+  return { firstNode, lastNode, spaces };
+};
+
+/**
+ * Collapses a tracked gap to exactly one space (the user's "keep
+ * only one white space"): re-validates the span first — the nodes
+ * must still be connected, the run must still be spaces-only text
+ * directly between two chips, and hold MORE than one space (a
+ * single-space gap and the caret-stays case never collapse). The
+ * first text node keeps one space; every other text node of the span
+ * is emptied (the parser prunes empty text nodes on the next sync).
+ * Returns true when the collapse happened (the caller commits).
+ */
+export const collapseGapSpaces = (
+  root: HTMLElement,
+  gap: CaretGap
+): boolean => {
+  if (!root.contains(gap.firstNode) || !root.contains(gap.lastNode)) {
+    return false;
+  }
+  // Re-validate the span: spaces-only text, nothing else inside.
+  let spaces = 0;
+  let node: ChildNode | null = gap.firstNode;
+  for (;;) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const data = (node as Text).data;
+      if (/[^ ]/.test(data)) {
+        return false; // the user typed content into it
+      }
+      spaces += data.length;
+    } else if (!isWalkTransparent(node)) {
+      return false;
+    }
+    if (node === gap.lastNode) {
+      break;
+    }
+    node = node.nextSibling;
+    if (node === null) {
+      return false; // the span chain broke
+    }
+  }
+  if (spaces <= 1) {
+    return false;
+  }
+  // Re-validate the chip boundaries around the span.
+  let left: ChildNode | null = gap.firstNode.previousSibling;
+  while (left !== null && isWalkTransparent(left)) {
+    left = left.previousSibling;
+  }
+  if (left === null || !isChipElement(left)) {
+    return false;
+  }
+  let right: ChildNode | null = gap.lastNode.nextSibling;
+  while (right !== null && isWalkTransparent(right)) {
+    right = right.nextSibling;
+  }
+  if (right === null || !isChipElement(right)) {
+    return false;
+  }
+  // Collapse: the first text node keeps exactly one space; the rest
+  // are emptied (pruned from the model on the next parse).
+  let seenFirst = false;
+  node = gap.firstNode;
+  for (;;) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      (node as Text).data = seenFirst ? '' : ' ';
+      seenFirst = true;
+    }
+    if (node === gap.lastNode) {
+      break;
+    }
+    node = node.nextSibling;
+    if (node === null) {
+      break;
+    }
+  }
+  return true;
+};
+
+// ---------------------------------------------------------------------------
+// Round 5 (user decision 2026-10-18): the chip-territory redirect
+// (above) + the arrow-created free zones ("scaffolds"). Rule B's
+// helpers: meaningful-chip scans, single-space gap lookup, chip hops.
+// ---------------------------------------------------------------------------
+
+/**
+ * The flow's first meaningful chip — every node before it (skipping
+ * transparents and empty text nodes) must be that chip; any content
+ * before means the text does not "start with a snippet". Null when
+ * there is no such chip.
+ */
+export const firstMeaningfulChip = (root: HTMLElement): HTMLElement | null => {
+  const children = root.childNodes;
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index];
+    if (child.nodeType === Node.TEXT_NODE) {
+      // Empty text nodes are parser-pruned strays — skip them; any
+      // content means the text does not start with a snippet.
+      if ((child as Text).data.length > 0) {
+        return null;
+      }
+      continue;
+    }
+    if (isChipElement(child)) {
+      return child;
+    }
+    // transparent elements: keep scanning
+  }
+  return null;
+};
+
+/** The flow's last meaningful chip, symmetric to firstMeaningfulChip. */
+export const lastMeaningfulChip = (root: HTMLElement): HTMLElement | null => {
+  const children = root.childNodes;
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    const child = children[index];
+    if (child.nodeType === Node.TEXT_NODE) {
+      if ((child as Text).data.length > 0) {
+        return null;
+      }
+      continue;
+    }
+    if (isChipElement(child)) {
+      return child;
+    }
+  }
+  return null;
+};
+
+/**
+ * The single `" "` text node directly on one side of a chip (through
+ * transparents) that is itself bounded by another chip on its far
+ * side — the one-space between-chips gap. Anything else (no text,
+ * multi-space, own text, a flow edge) returns null.
+ */
+const singleSpaceGapBesideChip = (
+  chip: HTMLElement,
+  side: 'before' | 'after'
+): Text | null => {
+  let node: ChildNode | null =
+    side === 'before' ? chip.previousSibling : chip.nextSibling;
+  while (node !== null && isWalkTransparent(node)) {
+    node = side === 'before' ? node.previousSibling : node.nextSibling;
+  }
+  if (node === null || node.nodeType !== Node.TEXT_NODE) {
+    return null;
+  }
+  const text = node as Text;
+  if (text.data !== ' ') {
+    return null;
+  }
+  let beyond: ChildNode | null =
+    side === 'before' ? text.previousSibling : text.nextSibling;
+  while (beyond !== null && isWalkTransparent(beyond)) {
+    beyond = side === 'before' ? beyond.previousSibling : beyond.nextSibling;
+  }
+  return beyond !== null && isChipElement(beyond) ? text : null;
+};
+
+/** The first chip on one side of a node (through transparents). */
+const chipBesideNode = (
+  node: Node,
+  side: 'before' | 'after'
+): HTMLElement | null => {
+  let sibling: ChildNode | null =
+    side === 'before' ? node.previousSibling : node.nextSibling;
+  while (sibling !== null && isWalkTransparent(sibling)) {
+    sibling = side === 'before' ? sibling.previousSibling : sibling.nextSibling;
+  }
+  return sibling !== null && isChipElement(sibling) ? sibling : null;
+};
+
+/** The chip bounding a between-chips gap on one side. */
+const chipBoundingGapSide = (
+  gap: CaretGap,
+  side: 'left' | 'right'
+): HTMLElement | null =>
+  chipBesideNode(
+    side === 'left' ? gap.firstNode : gap.lastNode,
+    side === 'left' ? 'before' : 'after'
+  );
 
 /**
  * True for nodes that contribute neither text nor a rendered line to
@@ -478,6 +1102,17 @@ export function usePreviewArea(
   const lastParseRef = useRef<PreviewToken[] | null>(null);
   // The last document this instance has accounted for in a render.
   const modelRef = useRef<PreviewToken[]>(previewDocument);
+  // Gap-collapse tracking (user decision 2026-10-17, round 4): the
+  // caret's current spaces-only between-chips run, plus whether the
+  // document-level selectionchange listener is attached.
+  const gapRef = useRef<CaretGap | null>(null);
+  const gapListenerActiveRef = useRef(false);
+  // Round-5 doc-edge scaffold (user decision 2026-10-18): the space
+  // node an arrow created at the document's start/end, by identity —
+  // removed on exit when nothing was typed into it.
+  const scaffoldRef = useRef<{ node: Text; edge: 'doc-start' | 'doc-end' } | null>(
+    null
+  );
 
   const indexOfSortableId = useCallback(
     (id: string) =>
@@ -523,6 +1158,89 @@ export function usePreviewArea(
     dispatchParsedSync(parsePreviewDom(root, modelRef.current));
   }, [dispatchParsedSync]);
 
+  // ---- gap collapse on caret exit (user decision 2026-10-17,
+  // round 4): a spaces-only run directly between two chips keeps any
+  // number of spaces while the caret stays inside it, and collapses
+  // to exactly one space the moment the caret leaves it — by click,
+  // arrow navigation (selectionchange), or blur. ---------------------
+
+  const handleSelectionChange = useCallback(() => {
+    const root = flowRef.current;
+    if (!root) {
+      return;
+    }
+    const range = selectionRangeInRoot(root);
+    const currentGap =
+      range && range.collapsed
+        ? findCaretGap(root, range.startContainer, range.startOffset)
+        : null;
+    const tracked = gapRef.current;
+    gapRef.current = currentGap;
+    const sameGap =
+      tracked !== null &&
+      currentGap !== null &&
+      tracked.firstNode === currentGap.firstNode &&
+      tracked.lastNode === currentGap.lastNode;
+    if (tracked && !sameGap && collapseGapSpaces(root, tracked)) {
+      // The collapse is a DOM edit: one commit; the focused surface
+      // absorbs it as its own parse, the blurred twin re-renders.
+      commitFlow();
+    }
+    // Round-5 doc-edge scaffold: the caret leaving an untouched
+    // scaffold (click-away, arrows that did not handle it) removes
+    // it — the free zone only exists while the caret occupies it.
+    const scaffold = scaffoldRef.current;
+    if (scaffold) {
+      const inside =
+        range !== null && range.collapsed && range.startContainer === scaffold.node;
+      if (!inside) {
+        scaffoldRef.current = null;
+        if (
+          root.contains(scaffold.node) &&
+          scaffold.node.data === ' '
+        ) {
+          scaffold.node.remove();
+          commitFlow();
+        }
+      }
+    }
+  }, [commitFlow]);
+
+  const startGapTracking = useCallback(() => {
+    const root = flowRef.current;
+    if (!root) {
+      return;
+    }
+    // Seed the tracked gap with the caret that just landed.
+    const range = selectionRangeInRoot(root);
+    gapRef.current =
+      range && range.collapsed
+        ? findCaretGap(root, range.startContainer, range.startOffset)
+        : null;
+    if (!gapListenerActiveRef.current) {
+      document.addEventListener('selectionchange', handleSelectionChange);
+      gapListenerActiveRef.current = true;
+    }
+  }, [handleSelectionChange]);
+
+  const stopGapTracking = useCallback((): CaretGap | null => {
+    const tracked = gapRef.current;
+    gapRef.current = null;
+    if (gapListenerActiveRef.current) {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      gapListenerActiveRef.current = false;
+    }
+    return tracked;
+  }, [handleSelectionChange]);
+
+  // Safety: the listener never outlives the surface.
+  useEffect(
+    () => () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+    },
+    [handleSelectionChange]
+  );
+
   // Mode-aware focused-surface-owns-DOM contract (ADR 0004): an
   // incoming document change is classified against this surface's
   // last dispatched parse — content-equal (ignoring `edited`) means
@@ -559,8 +1277,10 @@ export function usePreviewArea(
 
   // Toggling edit OFF mid-typing commits the focused DOM first (no
   // keystroke is lost), then the read-only flow re-renders from the
-  // model. The editEnabled flag lives in the shared context (an
-  // external system): the effect is the sanctioned place to sync.
+  // model — leaving the editor by any means also collapses a >1 gap
+  // the caret may still be in. The editEnabled flag lives in the
+  // shared context (an external system): the effect is the sanctioned
+  // place to sync.
   const previousEditEnabledRef = useRef(editEnabled);
   useEffect(() => {
     const wasEnabled = previousEditEnabledRef.current;
@@ -569,7 +1289,19 @@ export function usePreviewArea(
       return;
     }
     if (!editEnabled) {
+      const tracked = stopGapTracking();
       if (flowFocused) {
+        const root = flowRef.current;
+        if (tracked && root) {
+          collapseGapSpaces(root, tracked);
+        }
+        // Round-5: leaving the editor removes an untouched doc-edge
+        // scaffold before the commit.
+        const scaffold = scaffoldRef.current;
+        scaffoldRef.current = null;
+        if (root && scaffold && root.contains(scaffold.node) && scaffold.node.data === ' ') {
+          scaffold.node.remove();
+        }
         commitFlow();
       }
       // eslint-disable-next-line react/set-state-in-effect -- deliberate: syncing with the external edit-toggle change
@@ -577,7 +1309,7 @@ export function usePreviewArea(
       setFrozenTokens(null);
       setRenderEpoch((epoch) => epoch + 1);
     }
-  }, [editEnabled, flowFocused, commitFlow]);
+  }, [editEnabled, flowFocused, commitFlow, stopGapTracking]);
 
   const handleFlowFocus = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
@@ -598,8 +1330,10 @@ export function usePreviewArea(
       if (trailing) {
         ensureTrailingLineAnchor(trailing);
       }
+      // Gap tracking starts with the caret that just landed.
+      startGapTracking();
     },
-    []
+    [startGapTracking]
   );
 
   const handleFlowBlur = useCallback(
@@ -609,32 +1343,318 @@ export function usePreviewArea(
       if (event.target !== flowRef.current) {
         return;
       }
+      // Blur is leaving: collapse the gap the caret may still be in
+      // BEFORE the commit, so the commit parses the collapsed DOM.
+      const tracked = stopGapTracking();
+      const root = flowRef.current;
+      if (tracked && root) {
+        collapseGapSpaces(root, tracked);
+      }
+      // Round-5: blur also removes an untouched doc-edge scaffold.
+      const scaffold = scaffoldRef.current;
+      scaffoldRef.current = null;
+      if (root && scaffold && root.contains(scaffold.node) && scaffold.node.data === ' ') {
+        scaffold.node.remove();
+      }
       commitFlow();
       setFlowFocused(false);
       setFrozenTokens(null);
       setRenderEpoch((epoch) => epoch + 1);
     },
+    [commitFlow, stopGapTracking]
+  );
+
+  const handleFlowInput = useCallback(
+    (event: React.FormEvent<HTMLDivElement>) => {
+      const root = flowRef.current;
+      if (!root) {
+        return;
+      }
+      // EVERY input event syncs the model (EDIT-33: one parse + one
+      // whole-document sync per input — the round-4 cycle-1 fix is
+      // sacred). Real browsers label every input via InputEvent —
+      // deletions (deleteContentBackward, deleteByCut, historyUndo,
+      // …) and whitespace keystrokes included — so the round-5
+      // redirect gates gate ONLY the chip-territory redirect, never
+      // the sync below.
+      const nativeEvent = event.nativeEvent as InputEvent;
+      const inputType = nativeEvent?.inputType;
+      const data = nativeEvent?.data;
+      const isInsertion = !inputType || inputType.startsWith('insert');
+      const hasTypedRun =
+        typeof data === 'string' && data.length > 0 && /\S/.test(data);
+      const range = selectionRangeInRoot(root);
+      if (isInsertion && hasTypedRun && range && range.collapsed) {
+        // Round-5 rule A (user decision 2026-10-18): typing at a caret
+        // position that directly abutted a chip is the chip's
+        // territory — the typed run moves into the chip (or, at a
+        // glued seam, keeps the round-4 spaces-both-sides behavior).
+        // Bare (data-less) events — the jsdom-driven suites — never
+        // redirect: the run cannot be identified safely.
+        redirectTypedRunToChipTerritory(root, range, data as string);
+      }
+      dispatchParsedSync(parsePreviewDom(root, modelRef.current));
+    },
+    [dispatchParsedSync]
+  );
+
+  /**
+   * Creates the round-5 doc-edge scaffold: ONE space planted outside
+   * the first/last chip, the caret inside it, tracked by node
+   * identity. The caret placement makes typing produce the user's
+   * pinned results: doc-start at the space's START (the typed run
+   * precedes the space → `X Alpha`), doc-end at its END (the run
+   * follows the space → `Alpha X`). Leaving the previous zone first:
+   * an untouched older scaffold is removed, and the caret's previous
+   * between-chips gap collapses (rule 2, the exit path).
+   */
+  const createDocEdgeScaffold = useCallback(
+    (root: HTMLElement, chip: HTMLElement, edge: 'doc-start' | 'doc-end') => {
+      const previousScaffold = scaffoldRef.current;
+      scaffoldRef.current = null;
+      if (
+        previousScaffold &&
+        root.contains(previousScaffold.node) &&
+        previousScaffold.node.data === ' '
+      ) {
+        previousScaffold.node.remove();
+      }
+      const trackedGap = gapRef.current;
+      gapRef.current = null;
+      if (trackedGap && collapseGapSpaces(root, trackedGap)) {
+        commitFlow();
+      }
+      const node = plantTextBesideChip(
+        chip,
+        edge === 'doc-start' ? 'before' : 'after',
+        ' '
+      );
+      placeCaret(node, edge === 'doc-start' ? 0 : 1);
+      scaffoldRef.current = { node, edge };
+      commitFlow();
+    },
     [commitFlow]
   );
 
-  const handleFlowInput = useCallback(() => {
-    const root = flowRef.current;
-    if (!root) {
-      return;
-    }
-    dispatchParsedSync(parsePreviewDom(root, modelRef.current));
-  }, [dispatchParsedSync]);
+  // Round-5 rule B (user decision 2026-10-18): arrows create the free
+  // zones — ArrowLeft/ArrowRight at a between-chips gap edge (or from
+  // the adjacent chip's boundary) expand the one-space gap to two
+  // with the caret centered; at the document's start/end they
+  // scaffold ONE space outside the first/last chip. Arrows leaving a
+  // >1-space gap hop directly into the bounding chips' interiors
+  // (the gap's edge positions are click-only territory — agent
+  // default); the arrow back from an untouched doc-edge scaffold
+  // removes it and restores the caret inside the chip. ArrowUp/Down
+  // stay native.
+  const handleArrowNavigation = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const root = flowRef.current;
+      if (!root) {
+        return;
+      }
+      const range = selectionRangeInRoot(root);
+      if (!range || !range.collapsed) {
+        return;
+      }
+      const key = event.key;
+      const { startContainer, startOffset } = range;
+
+      // 1. The active doc-edge scaffold: the arrow toward its chip on
+      //    an UNTOUCHED scaffold removes it and restores the caret
+      //    inside the chip (the user's belongs-to-the-snippet flow).
+      const scaffold = scaffoldRef.current;
+      if (
+        scaffold &&
+        root.contains(scaffold.node) &&
+        range.startContainer === scaffold.node
+      ) {
+        const towardChip =
+          (scaffold.edge === 'doc-start' && key === 'ArrowRight') ||
+          (scaffold.edge === 'doc-end' && key === 'ArrowLeft');
+        scaffoldRef.current = null; // leaving the scaffold, one way or the other
+        if (towardChip && scaffold.node.data === ' ') {
+          event.preventDefault();
+          const chip = chipBesideNode(
+            scaffold.node,
+            scaffold.edge === 'doc-start' ? 'after' : 'before'
+          );
+          scaffold.node.remove();
+          if (chip) {
+            const chipText =
+              scaffold.edge === 'doc-start'
+                ? firstTextChildOf(chip)
+                : lastTextChildOf(chip);
+            if (chipText) {
+              placeCaret(
+                chipText,
+                scaffold.edge === 'doc-start' ? 0 : chipText.data.length
+              );
+            }
+          }
+          commitFlow();
+          return;
+        }
+        // Typed content or the far arrow: native (the scaffold is
+        // content now; the tracker removes the ref on caret exit).
+        return;
+      }
+
+      // 2. Inside a >1-space between-chips gap (the scaffold, or
+      //    deliberately typed extra spaces): arrows hop into the
+      //    bounding chips' interiors; rule 2 collapses the gap on
+      //    the exit.
+      const gap = findCaretGap(root, startContainer, startOffset);
+      if (gap && gap.spaces > 1) {
+        let hopped = false;
+        if (key === 'ArrowLeft') {
+          const leftChip = chipBoundingGapSide(gap, 'left');
+          const chipText = leftChip ? lastTextChildOf(leftChip) : null;
+          if (chipText) {
+            event.preventDefault();
+            placeCaret(chipText, chipText.data.length);
+            hopped = true;
+          }
+        } else if (key === 'ArrowRight') {
+          const rightChip = chipBoundingGapSide(gap, 'right');
+          const chipText = rightChip ? firstTextChildOf(rightChip) : null;
+          if (chipText) {
+            event.preventDefault();
+            placeCaret(chipText, 0);
+            hopped = true;
+          }
+        }
+        if (hopped) {
+          const tracked = gapRef.current;
+          gapRef.current = null;
+          if (tracked && collapseGapSpaces(root, tracked)) {
+            commitFlow();
+          }
+        }
+        return;
+      }
+
+      // 3. A one-space between-chips gap: the arrow INTO the gap
+      //    (from either edge) expands it to two spaces with the
+      //    caret centered — the scaffolded free zone.
+      if (gap && gap.spaces === 1) {
+        const after = chipBoundaryFromCaret(root, startContainer, startOffset, 'after');
+        const before = chipBoundaryFromCaret(root, startContainer, startOffset, 'before');
+        const atRightEdge = after.chip !== null && after.crossed === '';
+        const atLeftEdge = before.chip !== null && before.crossed === '';
+        if (
+          (key === 'ArrowLeft' && atRightEdge) ||
+          (key === 'ArrowRight' && atLeftEdge)
+        ) {
+          event.preventDefault();
+          const separator = gap.firstNode;
+          separator.insertData(0, ' ');
+          placeCaret(separator, 1);
+          gapRef.current = findCaretGap(root, separator, 1);
+          commitFlow();
+        }
+        // The arrow toward a chip from an edge stays native.
+        return;
+      }
+
+      // 4. The caret inside a chip at its boundary: into the adjacent
+      //    one-space gap → scaffold; at the document's first/last
+      //    position → the doc-edge scaffold.
+      const classification = classifyCaretRelativeChip(root, range);
+      const chip = classification.chip;
+      if (
+        chip &&
+        key === 'ArrowLeft' &&
+        classification.position === 'inside-chip-at-start'
+      ) {
+        const separator = singleSpaceGapBesideChip(chip, 'before');
+        if (separator) {
+          event.preventDefault();
+          separator.insertData(0, ' ');
+          placeCaret(separator, 1);
+          gapRef.current = findCaretGap(root, separator, 1);
+          commitFlow();
+          return;
+        }
+        if (firstMeaningfulChip(root) === chip) {
+          event.preventDefault();
+          createDocEdgeScaffold(root, chip, 'doc-start');
+        }
+        return;
+      }
+      if (
+        chip &&
+        key === 'ArrowRight' &&
+        classification.position === 'inside-chip-at-end'
+      ) {
+        const separator = singleSpaceGapBesideChip(chip, 'after');
+        if (separator) {
+          event.preventDefault();
+          separator.insertData(0, ' ');
+          placeCaret(separator, 1);
+          gapRef.current = findCaretGap(root, separator, 1);
+          commitFlow();
+          return;
+        }
+        if (lastMeaningfulChip(root) === chip) {
+          event.preventDefault();
+          createDocEdgeScaffold(root, chip, 'doc-end');
+        }
+        return;
+      }
+      if (chip) {
+        return; // interior of a chip: native
+      }
+
+      // 5. The flow position directly before the first chip / after
+      //    the last chip (the doc-edge free-zone creation).
+      if (key === 'ArrowLeft') {
+        const first = firstMeaningfulChip(root);
+        const after = chipBoundaryFromCaret(root, startContainer, startOffset, 'after');
+        const beforeChar = adjacentFlowCharacter(startContainer, startOffset, 'before');
+        if (
+          first !== null &&
+          after.chip === first &&
+          after.crossed === '' &&
+          beforeChar === null
+        ) {
+          event.preventDefault();
+          createDocEdgeScaffold(root, first, 'doc-start');
+        }
+        return;
+      }
+      if (key === 'ArrowRight') {
+        const last = lastMeaningfulChip(root);
+        const before = chipBoundaryFromCaret(root, startContainer, startOffset, 'before');
+        const afterChar = adjacentFlowCharacter(startContainer, startOffset, 'after');
+        if (
+          last !== null &&
+          before.chip === last &&
+          before.crossed === '' &&
+          afterChar === null
+        ) {
+          event.preventDefault();
+          createDocEdgeScaffold(root, last, 'doc-end');
+        }
+        return;
+      }
+    },
+    [commitFlow, createDocEdgeScaffold]
+  );
 
   const handleFlowKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== 'Enter') {
-        return;
-      }
       // Space/Enter on a FOCUSED chip is dnd-kit's keyboard pickup
       // (the activator only fires when the keydown target is the
-      // activator node); Enter with the caret in the editor host
-      // (target === host) creates a line break.
+      // activator node); keys with the caret in the editor host
+      // (target === host) drive the editor.
       if (event.target !== flowRef.current) {
+        return;
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        handleArrowNavigation(event);
+        return;
+      }
+      if (event.key !== 'Enter') {
         return;
       }
       event.preventDefault();
@@ -683,7 +1703,7 @@ export function usePreviewArea(
         commitFlow();
       }
     },
-    [commitFlow]
+    [commitFlow, handleArrowNavigation]
   );
 
   const handleFlowPaste = useCallback(
