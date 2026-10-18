@@ -89,6 +89,26 @@ export const computeGapMoveIndex = (
 ): number => (slot > fromIndex ? slot - 1 : slot);
 
 /**
+ * The selection's current range, when it is usable and inside the
+ * flow root (the shared guard of the caret paths). Null otherwise.
+ */
+const selectionRangeInRoot = (root: HTMLElement): Range | null => {
+  const view = root.ownerDocument.defaultView;
+  if (!view || typeof view.getSelection !== 'function') {
+    return null;
+  }
+  const selection = view.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) {
+    return null;
+  }
+  return range;
+};
+
+/**
  * Inserts a raw text node at the caret (or over the selection) inside
  * the editable flow root. Used for the Enter line break (the native
  * block insertion is prevented and a "\n" text node is created
@@ -110,8 +130,8 @@ export const insertTextAtSelection = (
   if (!selection || selection.rangeCount === 0) {
     return null;
   }
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.commonAncestorContainer)) {
+  const range = selectionRangeInRoot(root);
+  if (!range) {
     return null;
   }
   range.deleteContents();
@@ -123,6 +143,148 @@ export const insertTextAtSelection = (
   selection.removeAllRanges();
   selection.addRange(after);
   return node;
+};
+
+/**
+ * Where a collapsed caret sits relative to the nearest snippet chip
+ * (`[data-token-id]` ancestor, walking up from the range's start
+ * container and stopping at the flow root):
+ * - `inside-chip-at-end` — at the chip's very end text boundary
+ *   (nothing of the chip's content follows the caret);
+ * - `inside-chip-at-start` — at offset 0 of the chip's content
+ *   (nothing of the chip's content precedes the caret);
+ * - `inside-chip-mid` — inside the chip, neither boundary;
+ * - `outside-chip` — the caret is not inside any chip (and every
+ *   non-collapsed selection: Enter over a selection keeps today's
+ *   delete-and-insert path).
+ *
+ * The Enter handler uses this for the "a line break never enters a
+ * snippet" rule (user decision 2026-10-17): only the two boundary
+ * cases take the escape path; a mid-chip Enter (and every typed
+ * character) keeps the Q3 in-snippet integration contract.
+ */
+export type CaretChipPosition =
+  | 'inside-chip-at-end'
+  | 'inside-chip-at-start'
+  | 'inside-chip-mid'
+  | 'outside-chip';
+
+export interface CaretChipClassification {
+  position: CaretChipPosition;
+  chip: HTMLElement | null;
+}
+
+export const classifyCaretRelativeChip = (
+  root: HTMLElement,
+  range: Range
+): CaretChipClassification => {
+  if (!range.collapsed) {
+    // Enter over a selection: keep today's path (delete, then insert
+    // at the remaining caret). The escape applies to collapsed carets.
+    return { position: 'outside-chip', chip: null };
+  }
+  let node: Node | null = range.startContainer;
+  let chip: HTMLElement | null = null;
+  while (node && node !== root) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as HTMLElement;
+      if (element.dataset?.tokenId !== undefined) {
+        chip = element;
+        break;
+      }
+    }
+    node = node.parentNode;
+  }
+  if (!chip) {
+    return { position: 'outside-chip', chip: null };
+  }
+  // Boundary probes: the text of the chip's content after (resp.
+  // before) the caret. Works for text-node and element containers
+  // alike, and is exact about chip content — a trailing space inside
+  // the chip keeps the caret "mid" until it moves past it.
+  const doc = root.ownerDocument;
+  const toEnd = doc.createRange();
+  toEnd.setStart(range.startContainer, range.startOffset);
+  toEnd.setEndAfter(chip);
+  if (toEnd.toString() === '') {
+    return { position: 'inside-chip-at-end', chip };
+  }
+  const toStart = doc.createRange();
+  toStart.setStartBefore(chip);
+  toStart.setEnd(range.startContainer, range.startOffset);
+  if (toStart.toString() === '') {
+    return { position: 'inside-chip-at-start', chip };
+  }
+  return { position: 'inside-chip-mid', chip };
+};
+
+/**
+ * Plants a raw text node as the chip's SIBLING — right after it
+ * (`side === 'after'`) or right before it (`side === 'before'`) —
+ * instead of inside the chip's content, and places the caret right
+ * after the node (the same Range/Selection technique
+ * insertTextAtSelection uses). The Enter escape path
+ * ("a line break never enters a snippet", user decision 2026-10-17)
+ * and the paste escape paths (round 3: the same rule applies to
+ * pasted text) build on it; content planted here is flow content —
+ * own text/line-break tokens after parse — never snippet content.
+ */
+const insertTextBesideChip = (
+  chip: HTMLElement,
+  side: 'before' | 'after',
+  text: string
+): Text => {
+  const doc = chip.ownerDocument;
+  const node = doc.createTextNode(text);
+  chip.parentNode?.insertBefore(
+    node,
+    side === 'before' ? chip : chip.nextSibling
+  );
+  const after = doc.createRange();
+  after.setStartAfter(node);
+  after.collapse(true);
+  const view = doc.defaultView;
+  const selection = view?.getSelection();
+  if (selection) {
+    selection.removeAllRanges();
+    selection.addRange(after);
+  }
+  return node;
+};
+
+const insertLineBreakOutsideChip = (
+  chip: HTMLElement,
+  side: 'before' | 'after'
+): Text => insertTextBesideChip(chip, side, '\n');
+
+/**
+ * The at-end split-paste path (user decision 2026-10-17, round 3:
+ * "a line break never enters a snippet" applies to pasted text —
+ * "pasted text integrates into the snippet only up to its first
+ * newline"). The pasted PREFIX (before the first newline) inserts
+ * at the caret INSIDE the chip (Q3 integration: the chip's text
+ * grows, so its `edited` flag becomes true — the user modified the
+ * chip); the first newline and everything after it insert as flow
+ * content immediately AFTER the chip element (line-break + own-text
+ * tokens after parse). Returns the tail node — the caller runs the
+ * trailing-line-anchor bookkeeping and the commit. An empty prefix
+ * (the paste starts with the newline) reduces to the round-2 Enter
+ * escape: nothing integrates, the whole paste lands after the chip.
+ */
+export const insertSplitPasteAtChipEnd = (
+  chip: HTMLElement,
+  range: Range,
+  text: string
+): Text => {
+  const firstNewline = text.indexOf('\n');
+  const prefix = text.slice(0, firstNewline);
+  if (prefix.length > 0) {
+    // Insert at the caret, inside the chip: Range.insertNode splits
+    // the chip's text node at the boundary as needed (the same
+    // mechanics a typed character relies on).
+    range.insertNode(chip.ownerDocument.createTextNode(prefix));
+  }
+  return insertTextBesideChip(chip, 'after', text.slice(firstNewline));
 };
 
 /**
@@ -480,11 +642,42 @@ export function usePreviewArea(
       if (!root) {
         return;
       }
-      const newlineNode = insertTextAtSelection(root, '\n');
+      // "A line break never enters a snippet" (user decision
+      // 2026-10-17): browsers place a click-at-the-end caret INSIDE
+      // the chip's text node, and inserting there would make the
+      // newline — and everything typed on the next line — part of
+      // the snippet token (the parser takes the chip's whole
+      // textContent). At a chip's end/start text boundary the "\n"
+      // is therefore planted OUTSIDE the chip, as its sibling; the
+      // caret follows it, so the new line's text is own text in the
+      // flow. Mid-chip Enters (and every typed character) keep the
+      // Q3 in-snippet integration contract.
+      const range = selectionRangeInRoot(root);
+      const classification = range
+        ? classifyCaretRelativeChip(root, range)
+        : null;
+      let newlineNode: Text | null = null;
+      if (
+        classification?.position === 'inside-chip-at-end' &&
+        classification.chip
+      ) {
+        newlineNode = insertLineBreakOutsideChip(classification.chip, 'after');
+      } else if (
+        classification?.position === 'inside-chip-at-start' &&
+        classification.chip
+      ) {
+        newlineNode = insertLineBreakOutsideChip(
+          classification.chip,
+          'before'
+        );
+      } else {
+        newlineNode = insertTextAtSelection(root, '\n');
+      }
       if (newlineNode) {
         // A trailing "\n" renders no empty last line in pre-wrap: the
         // caret would appear stuck on the previous line. Plant the
-        // bogus anchor so the new line has a visible line box.
+        // bogus anchor so the new line has a visible line box (when
+        // the newline now ends the block, e.g. the chip was last).
         ensureTrailingLineAnchor(newlineNode);
         // Manual DOM edits fire no input event — sync explicitly.
         commitFlow();
@@ -505,15 +698,56 @@ export function usePreviewArea(
       if (!root) {
         return;
       }
-      const inserted = insertTextAtSelection(root, text);
-      if (inserted) {
-        // A paste ending in "\n" lands in the same invisible-line
-        // situation as the Enter path: anchor the last line.
-        if (text.endsWith('\n')) {
-          ensureTrailingLineAnchor(inserted);
+      // "A line break never enters a snippet" applies to pasted text
+      // too (user decision 2026-10-17, round 3: pasted text integrates
+      // into the snippet only up to its first newline):
+      // - caret OUTSIDE any chip → plain insert (unchanged);
+      // - caret inside a chip, paste with NO newline → full
+      //   integration (a single-line paste behaves like typed
+      //   characters);
+      // - caret at the chip's END boundary, paste WITH a newline →
+      //   split at the first newline (prefix integrates into the
+      //   chip, the newline and everything after land after the chip
+      //   as flow content);
+      // - caret at the chip's START boundary, paste WITH a newline →
+      //   the WHOLE paste lands before the chip as flow content:
+      //   integrating the prefix would scramble the pasted reading
+      //   order (only the chip's text follows the caret there, so the
+      //   tail would render before the prefix without splitting the
+      //   chip — the rejected deviation b). Geometric agent default,
+      //   recorded in implementation.md;
+      // - caret mid-chip, paste WITH a newline → full integration
+      //   (unchanged, consistent with mid-chip Enter: an
+      //   order-preserving escape is impossible without splitting).
+      const firstNewline = text.indexOf('\n');
+      const range = selectionRangeInRoot(root);
+      let inserted: Text | null = null;
+      if (range) {
+        const { position, chip } = classifyCaretRelativeChip(root, range);
+        if (chip && firstNewline >= 0 && position === 'inside-chip-at-end') {
+          inserted = insertSplitPasteAtChipEnd(chip, range, text);
+        } else if (
+          chip &&
+          firstNewline >= 0 &&
+          position === 'inside-chip-at-start'
+        ) {
+          inserted = insertTextBesideChip(chip, 'before', text);
+        } else {
+          inserted = insertTextAtSelection(root, text);
         }
-        commitFlow();
+      } else {
+        inserted = insertTextAtSelection(root, text);
       }
+      if (!inserted) {
+        return;
+      }
+      // A tail ending in "\n" lands in the same invisible-line
+      // situation as the Enter path: anchor the last line (the
+      // sibling walk inside no-ops when a separator or chip follows).
+      if (inserted.data.endsWith('\n')) {
+        ensureTrailingLineAnchor(inserted);
+      }
+      commitFlow();
     },
     [commitFlow]
   );

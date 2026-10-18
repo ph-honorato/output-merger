@@ -22,8 +22,10 @@ import {
 } from "../../../../utils/previewDocument";
 import {
   buildGapId,
+  classifyCaretRelativeChip,
   computeGapMoveIndex,
   computeNeedleIndex,
+  insertSplitPasteAtChipEnd,
   parseGapId,
   SNIPPET_DRAG_ACTIVATION,
   usePreviewArea,
@@ -55,6 +57,23 @@ const DocumentProbe = () => {
   );
 };
 
+// Renders the edited flag of the first snippet token (model truth) —
+// the paste suites assert that a prefix integration marks the chip
+// edited while escape-only paths leave it untouched.
+const EditedProbe = () => {
+  const { document } = useSnippets();
+  const snippet = document.find(isSnippetToken);
+  return (
+    <span
+      data-testid="edited-probe"
+      style={{ display: "none" }}
+      aria-hidden="true"
+    >
+      {String(snippet?.edited ?? false)}
+    </span>
+  );
+};
+
 const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
   const { setSourceSnippets } = useSnippets();
   useEffect(() => {
@@ -65,6 +84,7 @@ const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
   return (
     <>
       <DocumentProbe />
+      <EditedProbe />
       <TextEditingToggle />
       <PreviewArea />
     </>
@@ -2041,6 +2061,348 @@ describe("PreviewArea editing workflows", () => {
     expect(refocused.textContent).toBe("line\n");
   });
 
+  // -----------------------------------------------------------------
+  // "A line break never enters a snippet" (user decision 2026-10-17):
+  // clicking right at the end of a snippet's text places the caret
+  // INSIDE the chip span; Enter must plant the "\n" OUTSIDE the chip
+  // so the next line's typing is own text, never snippet content.
+  // Mid-chip Enters (and every typed character) keep the Q3
+  // in-snippet integration contract.
+  // -----------------------------------------------------------------
+
+  const caretInsideChip = (chip: HTMLElement, offset: number) => {
+    // The React-rendered chip holds its text as a single text node.
+    const textNode = chip.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(textNode, offset);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  };
+
+  const pressEnterOnFlow = (flow: HTMLElement) => {
+    const keydown = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      flow.dispatchEvent(keydown);
+    });
+    return keydown;
+  };
+
+  it("escapes the chip when Enter hits the end boundary: the line break and the next line's typing are never snippet content", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    // The caret INSIDE the chip, right after its last character —
+    // exactly where a browser places a click at the snippet's end.
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, "Alpha".length);
+    pressEnterOnFlow(flow);
+
+    // The "\n" is the chip's SIBLING, not part of its content…
+    expect(chip.textContent).toBe("Alpha");
+    expect(chip.nextSibling?.nodeType).toBe(Node.TEXT_NODE);
+    expect((chip.nextSibling as Text).data).toBe("\n");
+    // …the model keeps the snippet token unchanged with a line-break
+    // token after it.
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha\n");
+    // The newline ends the block (the chip was last): the bogus <br>
+    // anchor is planted after it, and the caret sits between the two.
+    expect(flow.querySelectorAll("br")).toHaveLength(1);
+    const selection = window.getSelection();
+    const range = selection?.getRangeAt(0);
+    expect(range?.startContainer).toBe(flow);
+    expect(flow.childNodes[range ? range.startOffset - 1 : -1]).toBe(
+      chip.nextSibling,
+    );
+
+    // Typing on the new line lands as own text, never in the snippet.
+    const newlineNode = chip.nextSibling as Text;
+    flow.insertBefore(document.createTextNode("next line"), newlineNode.nextSibling);
+    fireEvent.input(flow);
+    expect(chip.textContent).toBe("Alpha");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha\nnext line",
+    );
+  });
+
+  it("escapes the chip at the end boundary even when a separator follows (no anchor planted)", () => {
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "Alpha")]],
+      ["text-2", [makeSnippet("b1", "Beta")]],
+    ]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getAllByTestId("preview-snippet")[0];
+    caretInsideChip(chip, "Alpha".length);
+    pressEnterOnFlow(flow);
+
+    // The separator stays content: the newline sits between the chip
+    // and its separator, the snippet token is unchanged…
+    expect(chip.textContent).toBe("Alpha");
+    expect((chip.nextSibling as Text).data).toBe("\n");
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha\n Beta");
+    // …and the separator means the newline does not end the block: no
+    // bogus anchor.
+    expect(flow.querySelectorAll("br")).toHaveLength(0);
+
+    // Typing after the newline is own text between the line break and
+    // the separator — not snippet content.
+    const newlineNode = chip.nextSibling as Text;
+    flow.insertBefore(document.createTextNode("own"), newlineNode.nextSibling);
+    fireEvent.input(flow);
+    expect(chip.textContent).toBe("Alpha");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha\nown Beta",
+    );
+  });
+
+  it("escapes the chip when Enter hits the start boundary (symmetric case): the line break precedes the snippet", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, 0);
+    pressEnterOnFlow(flow);
+
+    // The "\n" is the chip's PRECEDING sibling; the snippet token is
+    // unchanged; the chip's content follows the newline, so no anchor.
+    expect(chip.textContent).toBe("Alpha");
+    expect(chip.previousSibling?.nodeType).toBe(Node.TEXT_NODE);
+    expect((chip.previousSibling as Text).data).toBe("\n");
+    expect(screen.getByTestId("document-probe").textContent).toBe("\nAlpha");
+    expect(flow.querySelectorAll("br")).toHaveLength(0);
+
+    // Typing lands on the new line BEFORE the chip as own text.
+    const newlineNode = chip.previousSibling as Text;
+    flow.insertBefore(document.createTextNode("prefix "), newlineNode.nextSibling);
+    fireEvent.input(flow);
+    expect(chip.textContent).toBe("Alpha");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "\nprefix Alpha",
+    );
+  });
+
+  it("keeps mid-chip Enter integrated into the snippet text (the rejected split stays rejected)", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, 2);
+    pressEnterOnFlow(flow);
+
+    // The newline embeds INSIDE the chip (Q3 integration): the token
+    // text grows with it and no sibling "\n" appears.
+    expect(chip.textContent).toBe("Al\npha");
+    expect(chip.nextSibling?.nodeType).not.toBe(Node.TEXT_NODE);
+    expect(chip.previousSibling?.nodeType).not.toBe(Node.TEXT_NODE);
+    expect(screen.getByTestId("document-probe").textContent).toBe("Al\npha");
+  });
+
+  // -----------------------------------------------------------------
+  // "A line break never enters a snippet" — the paste extension (user
+  // decision 2026-10-17, round 3): pasted text integrates into the
+  // snippet only up to its first newline; the newline and everything
+  // after it land outside the chip. Single-line pastes behave exactly
+  // like typed characters (full integration).
+  // -----------------------------------------------------------------
+
+  const pasteIntoFlow = (flow: HTMLElement, text: string) => {
+    fireEvent.paste(flow, {
+      clipboardData: {
+        getData: (type: string) => (type === "text/plain" ? text : ""),
+      },
+    });
+  };
+
+  it("splits an at-end multi-line paste at the first newline: the prefix integrates, the tail is flow content after the snippet, and the chip becomes edited", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, "Alpha".length);
+    pasteIntoFlow(flow, "past\nsecond\nthird");
+
+    // The prefix (before the first newline) integrates into the chip…
+    expect(chip.textContent).toBe("Alphapast");
+    // …and the chip is marked edited (the user modified its text).
+    expect(screen.getByTestId("edited-probe").textContent).toBe("true");
+    // The first newline and everything after it are the chip's
+    // following SIBLING — flow content, never snippet content.
+    expect(chip.nextSibling?.nodeType).toBe(Node.TEXT_NODE);
+    expect((chip.nextSibling as Text).data).toBe("\nsecond\nthird");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alphapast\nsecond\nthird",
+    );
+    // The caret sits logically after the inserted content.
+    const range = window.getSelection()?.getRangeAt(0);
+    expect(range?.startContainer).toBe(flow);
+    expect(flow.childNodes[range ? range.startOffset - 1 : -1]).toBe(
+      chip.nextSibling,
+    );
+  });
+
+  it("treats an at-end paste starting with a newline as the Enter escape: the chip is untouched and unedited", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, "Alpha".length);
+    pasteIntoFlow(flow, "\nnext");
+
+    // Empty prefix: nothing integrates — the whole paste lands after
+    // the chip, exactly like the round-2 Enter escape.
+    expect(chip.textContent).toBe("Alpha");
+    expect(screen.getByTestId("edited-probe").textContent).toBe("false");
+    expect((chip.nextSibling as Text).data).toBe("\nnext");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha\nnext",
+    );
+  });
+
+  it("still fully integrates an at-end single-line paste (single-line pastes behave like typed characters)", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, "Alpha".length);
+    pasteIntoFlow(flow, "suffix");
+
+    expect(chip.textContent).toBe("Alphasuffix");
+    expect(chip.nextSibling?.nodeType).not.toBe(Node.TEXT_NODE);
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alphasuffix",
+    );
+    expect(screen.getByTestId("edited-probe").textContent).toBe("true");
+  });
+
+  it("lands an at-start multi-line paste wholly before the chip, reading order preserved (geometric default)", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, 0);
+    pasteIntoFlow(flow, "head\nline2");
+
+    // Integrating the prefix at the start boundary would scramble
+    // the pasted reading order (the tail would render before the
+    // prefix without splitting the chip), so the WHOLE paste lands
+    // before the chip as flow content.
+    expect(chip.textContent).toBe("Alpha");
+    expect(screen.getByTestId("edited-probe").textContent).toBe("false");
+    expect(chip.previousSibling?.nodeType).toBe(Node.TEXT_NODE);
+    expect((chip.previousSibling as Text).data).toBe("head\nline2");
+    // Reading order: the pasted lines, then the snippet.
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "head\nline2Alpha",
+    );
+    // The caret sits after the inserted content.
+    const range = window.getSelection()?.getRangeAt(0);
+    expect(range?.startContainer).toBe(flow);
+    expect(flow.childNodes[range ? range.startOffset - 1 : -1]).toBe(
+      chip.previousSibling,
+    );
+  });
+
+  it("still fully integrates an at-start single-line paste", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, 0);
+    pasteIntoFlow(flow, "pre ");
+
+    expect(chip.textContent).toBe("pre Alpha");
+    expect(chip.previousSibling?.nodeType).not.toBe(Node.TEXT_NODE);
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "pre Alpha",
+    );
+  });
+
+  it("keeps a mid-chip multi-line paste fully integrated (unchanged, like mid-chip Enter)", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, 2);
+    pasteIntoFlow(flow, "x\ny");
+
+    // An order-preserving escape is impossible without splitting the
+    // chip (the rejected deviation b): the paste embeds entirely.
+    expect(chip.textContent).toBe("Alx\nypha");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alx\nypha",
+    );
+  });
+
+  it("plants the bogus <br> when an at-end split paste leaves the tail ending the block with a newline (round-1 rule through the new path)", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+
+    const chip = screen.getByTestId("preview-snippet");
+    caretInsideChip(chip, "Alpha".length);
+    pasteIntoFlow(flow, "tail\n");
+
+    // Prefix integrates; the tail "\n" ends the block (the chip was
+    // last) → exactly one bogus anchor after it.
+    expect(chip.textContent).toBe("Alphatail");
+    expect((chip.nextSibling as Text).data).toBe("\n");
+    expect(flow.querySelectorAll("br")).toHaveLength(1);
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alphatail\n",
+    );
+    // WYSIWYG through the new path.
+    expect(flow.textContent).toBe("Alphatail\n");
+  });
+
   it("keeps Enter on a focused chip as dnd-kit's pickup instead of a line break", async () => {
     renderWithProviders(seedInterleaved());
     enableEditing();
@@ -2325,6 +2687,135 @@ describe("PreviewArea editing workflows", () => {
     } finally {
       restoreRects.mockRestore();
     }
+  });
+});
+
+describe("classifyCaretRelativeChip + insertSplitPasteAtChipEnd (line-break escape helpers)", () => {
+  // Pure-DOM units: the classifier takes a root and a range, no
+  // React and no selection global needed.
+  const buildRoot = () => {
+    const root = document.createElement("div");
+    const chip = document.createElement("span");
+    chip.dataset.tokenId = "text-1:a1";
+    chip.textContent = "Alpha";
+    root.appendChild(document.createTextNode("lead "));
+    root.appendChild(chip);
+    root.appendChild(document.createTextNode(" tail"));
+    return { root, chip };
+  };
+
+  const rangeAt = (root: HTMLElement, node: Node, offset: number) => {
+    const range = root.ownerDocument.createRange();
+    range.setStart(node, offset);
+    range.collapse(true);
+    return range;
+  };
+
+  it("classifies a caret inside the chip at its end text boundary (text-node and element containers)", () => {
+    const { root, chip } = buildRoot();
+    const chipText = chip.firstChild as Text;
+    expect(classifyCaretRelativeChip(root, rangeAt(root, chipText, 5)).position).toBe(
+      "inside-chip-at-end",
+    );
+    expect(classifyCaretRelativeChip(root, rangeAt(root, chip, 1)).position).toBe(
+      "inside-chip-at-end",
+    );
+    // The classification carries the chip for the escape path.
+    expect(classifyCaretRelativeChip(root, rangeAt(root, chipText, 5)).chip).toBe(
+      chip,
+    );
+  });
+
+  it("classifies a caret inside the chip at its start text boundary (text-node and element containers)", () => {
+    const { root, chip } = buildRoot();
+    const chipText = chip.firstChild as Text;
+    expect(classifyCaretRelativeChip(root, rangeAt(root, chipText, 0)).position).toBe(
+      "inside-chip-at-start",
+    );
+    expect(classifyCaretRelativeChip(root, rangeAt(root, chip, 0)).position).toBe(
+      "inside-chip-at-start",
+    );
+  });
+
+  it("classifies a mid-chip caret as inside-chip-mid — including just before trailing chip content", () => {
+    const { root, chip } = buildRoot();
+    const chipText = chip.firstChild as Text;
+    expect(classifyCaretRelativeChip(root, rangeAt(root, chipText, 2)).position).toBe(
+      "inside-chip-mid",
+    );
+    // Exactness: a chip whose text ends with a space (by-design
+    // double spaces exist) keeps the caret "mid" until it moves past
+    // that space — the space is chip content.
+    chip.textContent = "Alpha ";
+    const withSpace = chip.firstChild as Text;
+    expect(
+      classifyCaretRelativeChip(root, rangeAt(root, withSpace, 5)).position,
+    ).toBe("inside-chip-mid");
+    expect(
+      classifyCaretRelativeChip(root, rangeAt(root, withSpace, 6)).position,
+    ).toBe("inside-chip-at-end");
+  });
+
+  it("classifies carets outside any chip as outside-chip", () => {
+    const { root, chip } = buildRoot();
+    const lead = root.firstChild as Text;
+    const tail = root.lastChild as Text;
+    expect(classifyCaretRelativeChip(root, rangeAt(root, lead, 2)).position).toBe(
+      "outside-chip",
+    );
+    expect(classifyCaretRelativeChip(root, rangeAt(root, tail, 1)).position).toBe(
+      "outside-chip",
+    );
+    // A caret at a child boundary of the root, right next to the chip,
+    // is still outside it (container is the root).
+    expect(
+      classifyCaretRelativeChip(
+        root,
+        rangeAt(root, root, Array.from(root.childNodes).indexOf(chip) + 1),
+      ).position,
+    ).toBe("outside-chip");
+    // Enter over a non-collapsed selection keeps today's path.
+    const selectionRange = root.ownerDocument.createRange();
+    selectionRange.setStart(lead, 0);
+    selectionRange.setEnd(tail, 2);
+    expect(classifyCaretRelativeChip(root, selectionRange).position).toBe(
+      "outside-chip",
+    );
+    expect(classifyCaretRelativeChip(root, selectionRange).chip).toBeNull();
+  });
+
+  it("splits a paste at the chip's end: prefix inside the chip, tail as the following sibling (unit)", () => {
+    // Pure-DOM unit of the at-end split mechanics.
+    const root = document.createElement("div");
+    const chip = document.createElement("span");
+    chip.dataset.tokenId = "text-1:a1";
+    chip.textContent = "Alpha";
+    root.appendChild(chip);
+    const caret = root.ownerDocument.createRange();
+    const chipText = chip.firstChild as Text;
+    caret.setStart(chipText, "Alpha".length);
+    caret.collapse(true);
+
+    const tail = insertSplitPasteAtChipEnd(chip, caret, "past\nsecond");
+
+    expect(chip.textContent).toBe("Alphapast");
+    expect(chip.nextSibling).toBe(tail);
+    expect(tail.data).toBe("\nsecond");
+    expect(root.textContent).toBe("Alphapast\nsecond");
+
+    // Empty prefix reduces to the escape: nothing integrates.
+    const root2 = document.createElement("div");
+    const chip2 = document.createElement("span");
+    chip2.dataset.tokenId = "text-1:b1";
+    chip2.textContent = "Beta";
+    root2.appendChild(chip2);
+    const caret2 = root2.ownerDocument.createRange();
+    caret2.setStart(chip2.firstChild as Text, "Beta".length);
+    caret2.collapse(true);
+    const tail2 = insertSplitPasteAtChipEnd(chip2, caret2, "\nnext");
+    expect(chip2.textContent).toBe("Beta");
+    expect(tail2.data).toBe("\nnext");
+    expect(root2.textContent).toBe("Beta\nnext");
   });
 });
 
