@@ -76,7 +76,9 @@ function PreviewArea(props: PreviewAreaProps) {
   const { flowChildren, renderedSnippetIds } = useMemo(() => {
     const tokenElements = renderedTokens.map((token) => {
       if (isSnippetToken(token)) {
-        return <SortableSegment key={token.tokenId} token={token} />;
+        return (
+          <SortableSegment key={token.tokenId} token={token} editing={editEnabled} />
+        );
       }
       if (token.kind === 'text') {
         return <Fragment key={token.tokenId}>{token.text}</Fragment>;
@@ -114,7 +116,7 @@ function PreviewArea(props: PreviewAreaProps) {
     }
 
     return { flowChildren: children, renderedSnippetIds: snippetIds };
-  }, [renderedTokens, dropIndicatorIndex]);
+  }, [renderedTokens, dropIndicatorIndex, editEnabled]);
 
   // Gating matrix (edit OFF/ON × empty/non-empty): edit OFF + empty
   // keeps today's empty state; edit ON renders the editable root even

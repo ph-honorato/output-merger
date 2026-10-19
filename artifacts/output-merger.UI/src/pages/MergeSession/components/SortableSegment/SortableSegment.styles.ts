@@ -8,6 +8,9 @@ type StyledTheme = DefaultTheme & Theme;
 interface SegmentChipProps {
   // Snippet color used for the chip tint and its hover deepening
   $color?: string;
+  // Round 6: while true (edit mode ON) the chip is a plain span of
+  // the editor — text cursor, text selection, no drag affordances.
+  $editing?: boolean;
 }
 
 export const SegmentChip = styled.span<SegmentChipProps>`
@@ -15,17 +18,23 @@ export const SegmentChip = styled.span<SegmentChipProps>`
   -webkit-box-decoration-break: clone;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   white-space: pre-wrap;
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-  -webkit-touch-callout: none;
+  cursor: ${({ $editing }) => ($editing ? 'text' : 'grab')};
+  user-select: ${({ $editing }) => ($editing ? 'text' : 'none')};
+  -webkit-user-select: ${({ $editing }) => ($editing ? 'text' : 'none')};
+  touch-action: ${({ $editing }) => ($editing ? 'auto' : 'none')};
+  -webkit-touch-callout: ${({ $editing }) => ($editing ? 'default' : 'none')};
   background-color: ${({ $color }) =>
     $color ? withAlpha($color, 0.3) : 'transparent'};
 
   &:hover {
-    background-color: ${({ $color }) =>
-      $color ? withAlpha($color, 0.4) : 'transparent'};
+    background-color: ${({ $color, $editing }) =>
+      $editing
+        ? $color
+          ? withAlpha($color, 0.3)
+          : 'transparent'
+        : $color
+          ? withAlpha($color, 0.4)
+          : 'transparent'};
   }
 
   &:focus-visible {

@@ -20,7 +20,7 @@
   "pages.mergeSession.previewArea.empty": "Selecione alguns trechos nas entradas para começar",
   "pages.mergeSession.previewArea.copy.button": "Copiar texto mesclado para a área de transferência",
   "pages.mergeSession.previewArea.copy.toast": "Texto copiado para a área de transferência",
-  "pages.mergeSession.previewArea.sorting.instructions": "Para pegar um trecho, pressione Espaço ou Enter. Enquanto arrasta, use as setas para movê-lo. Pressione Espaço ou Enter novamente para soltá-lo, ou Escape para cancelar.",
+  "pages.mergeSession.previewArea.sorting.instructions": "Para pegar um trecho, pressione Espaço ou Enter. Enquanto arrasta, use as setas para movê-lo. Pressione Espaço ou Enter novamente para soltá-lo, ou Escape para cancelar. Com a edição de texto ativada, posicione o cursor dentro de um trecho e pressione Ctrl+Espaço para levantá-lo; Enter o solta e Escape cancela.",
   "pages.mergeSession.previewArea.sorting.started": "Trecho {{index}} de {{count}} pego.",
   "pages.mergeSession.previewArea.sorting.over": "O trecho agora está sobre a posição {{index}} de {{count}}.",
   "pages.mergeSession.previewArea.sorting.ended": "Trecho solto na posição {{index}} de {{count}}.",

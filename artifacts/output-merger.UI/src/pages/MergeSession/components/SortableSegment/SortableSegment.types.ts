@@ -11,6 +11,14 @@ export interface SortableSegmentProps {
    */
   token: SnippetToken;
   /**
+   * Round 6 (user decision 2026-10-18): while true (edit mode ON)
+   * the chip renders as a plain span of the editor — no focus/a11y
+   * attributes, text cursor, text selection — while the node ref and
+   * the keyboard activator listener stay attached (the Ctrl+Space
+   * entry). Default false (edit mode OFF: full dnd-kit semantics).
+   */
+  editing?: boolean;
+  /**
    * Optional class name applied to the root element
    */
   className?: string;

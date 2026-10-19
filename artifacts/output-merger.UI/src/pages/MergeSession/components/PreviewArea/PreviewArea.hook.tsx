@@ -302,6 +302,72 @@ export const insertSplitPasteAtChipEnd = (
   return insertTextBesideChip(chip, 'after', text.slice(firstNewline));
 };
 
+/** The chip element for a token id, or null (the restore path). */
+const findChipByTokenId = (
+  root: HTMLElement,
+  tokenId: string
+): HTMLElement | null => {
+  const chips = root.querySelectorAll<HTMLElement>('[data-token-id]');
+  for (const chip of Array.from(chips)) {
+    if (chip.dataset.tokenId === tokenId) {
+      return chip;
+    }
+  }
+  return null;
+};
+
+/** The chip's text children, in order. */
+const textChildrenOf = (chip: HTMLElement): Text[] =>
+  Array.from(chip.childNodes).filter(
+    (node): node is Text => node.nodeType === Node.TEXT_NODE
+  );
+
+/**
+ * Round-6 rule B helpers: the saved caret for the keyboard-sort
+ * restore (the caret position at Ctrl+Space, so the drop/cancel can
+ * put it back inside the sorted snippet). A text-node caret inside
+ * the chip saves its exact (text child index, offset); any other
+ * caret geometry (the container is the chip ELEMENT — a programmatic
+ * or element-boundary caret — or an unresolvable shape) saves the
+ * BOUNDARY SENTINEL { textChildIndex: -1, offset: +Infinity }: the
+ * restore's index fallback selects the LAST text child and the
+ * offset clamp lands at its END — the documented chip-end fallback
+ * for the boundary geometry (a tester round-6 finding: returning
+ * null here skipped the restore entirely, leaving the host
+ * unfocused after the drop's remount).
+ */
+export interface KeyboardSortCaret {
+  tokenId: string;
+  textChildIndex: number;
+  offset: number;
+}
+
+const BOUNDARY_SENTINEL: Pick<KeyboardSortCaret, 'textChildIndex' | 'offset'> = {
+  textChildIndex: -1,
+  offset: Number.POSITIVE_INFINITY,
+};
+
+const savedKeyboardSortCaret = (
+  chip: HTMLElement,
+  range: Range
+): KeyboardSortCaret | null => {
+  const tokenId = chip.dataset.tokenId ?? '';
+  if (!tokenId) {
+    return null;
+  }
+  const container = range.startContainer;
+  if (container.nodeType === Node.TEXT_NODE && chip.contains(container)) {
+    const textChildren = textChildrenOf(chip);
+    const textChildIndex = textChildren.indexOf(container as Text);
+    if (textChildIndex >= 0) {
+      return { tokenId, textChildIndex, offset: range.startOffset };
+    }
+  }
+  // Boundary caret or an unresolvable shape: the sentinel restores
+  // to the chip's end.
+  return { tokenId, ...BOUNDARY_SENTINEL };
+};
+
 // ---------------------------------------------------------------------------
 // Typing auto-separation + gap collapse (user decision 2026-10-17,
 // round 4): "we always have at least one white space between snippets
@@ -1065,11 +1131,26 @@ export function usePreviewArea(
     [snippetTokens]
   );
 
-  const sensors = useSensors(
+  // Round 6 (user decision 2026-10-18): while edit mode is ON the
+  // mouse serves the editor — the pointer sensor is NOT mounted for
+  // the editing surface. Both sensor sets are created by separate
+  // unconditional hooks (the hooks themselves are never
+  // conditionalized); the mounted array is filtered per mode:
+  // keyboard-only while editing, pointer + keyboard while not.
+  const pointerSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: SNIPPET_DRAG_ACTIVATION,
-    }),
+    })
+  );
+  const keyboardSensors = useSensors(
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+  const sensors = useMemo(
+    () =>
+      editEnabled
+        ? keyboardSensors
+        : [...pointerSensors, ...keyboardSensors],
+    [editEnabled, pointerSensors, keyboardSensors]
   );
 
   const [activeSnippet, setActiveSnippet] = useState<SnippetToken | null>(null);
@@ -1113,6 +1194,14 @@ export function usePreviewArea(
   const scaffoldRef = useRef<{ node: Text; edge: 'doc-start' | 'doc-end' } | null>(
     null
   );
+  // Round-6 keyboard sort (user decision 2026-10-18): while edit mode
+  // is ON, Ctrl+Space with the caret inside a snippet lifts it. The
+  // ref guards the keydown paths synchronously; the state drives the
+  // post-drop/cancel caret restoration effect.
+  const keyboardSortActiveRef = useRef(false);
+  const [keyboardSortActive, setKeyboardSortActive] = useState(false);
+  const savedSortCaretRef = useRef<KeyboardSortCaret | null>(null);
+  const pendingCaretRestoreRef = useRef<KeyboardSortCaret | null>(null);
 
   const indexOfSortableId = useCallback(
     (id: string) =>
@@ -1650,6 +1739,71 @@ export function usePreviewArea(
       if (event.target !== flowRef.current) {
         return;
       }
+      const root = flowRef.current;
+      if (!root) {
+        return;
+      }
+      // Round 6: while a snippet is raised (keyboard sort), editing
+      // keys are suspended — everything is preventDefaulted so no
+      // input fires mid-sort. The sensor-owned keys (bare Space and
+      // Enter — both native end codes in the installed 6.3.1 —
+      // Escape — cancel — and the arrows — move — plus Tab) still
+      // PROPAGATE so the sensor's document-level listeners handle
+      // them; every other key is stopped outright. A second
+      // Ctrl+Space is a NO-OP by contract, so its ctrl-modified
+      // Space code is stopped too — the sensor would otherwise read
+      // the bare Space code as a drop.
+      if (keyboardSortActiveRef.current) {
+        event.preventDefault();
+        const code = event.nativeEvent.code;
+        const sensorOwnedKey =
+          code === 'Space' ||
+          code === 'Enter' ||
+          code === 'Escape' ||
+          code === 'ArrowLeft' ||
+          code === 'ArrowRight' ||
+          code === 'ArrowUp' ||
+          code === 'ArrowDown' ||
+          code === 'Tab';
+        const ctrlModified =
+          (event.ctrlKey || event.metaKey) && event.key === ' ';
+        if (!sensorOwnedKey || ctrlModified) {
+          event.stopPropagation();
+        }
+        return;
+      }
+      // Round 6 (user decision 2026-10-18): Ctrl+Space with the
+      // caret inside a snippet lifts it into keyboard sorting. The
+      // chip cannot take focus while editing (plain spans), so the
+      // activation keydown is dispatched directly on the chip
+      // element — the sensor's activator only requires the keydown
+      // TARGET to be the activator node (verified in the installed
+      // source), and the keyboard activator stays attached while
+      // editing (it is the only mounted sensor).
+      if (event.key === ' ' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        const range = selectionRangeInRoot(root);
+        const classification =
+          range && range.collapsed
+            ? classifyCaretRelativeChip(root, range)
+            : null;
+        if (!classification?.chip) {
+          return; // caret outside a snippet: no-op
+        }
+        savedSortCaretRef.current = savedKeyboardSortCaret(
+          classification.chip,
+          range as Range
+        );
+        classification.chip.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: ' ',
+            code: 'Space',
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+        return;
+      }
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         handleArrowNavigation(event);
         return;
@@ -1658,10 +1812,6 @@ export function usePreviewArea(
         return;
       }
       event.preventDefault();
-      const root = flowRef.current;
-      if (!root) {
-        return;
-      }
       // "A line break never enters a snippet" (user decision
       // 2026-10-17): browsers place a click-at-the-end caret INSIDE
       // the chip's text node, and inserting there would make the
@@ -1708,6 +1858,11 @@ export function usePreviewArea(
 
   const handleFlowPaste = useCallback(
     (event: React.ClipboardEvent<HTMLDivElement>) => {
+      // Round 6: pasting is suspended while a snippet is raised.
+      if (keyboardSortActiveRef.current) {
+        event.preventDefault();
+        return;
+      }
       // Plain-text paste only: the browser never inserts rich content.
       event.preventDefault();
       const text = event.clipboardData.getData('text/plain');
@@ -1782,6 +1937,10 @@ export function usePreviewArea(
       // Pickup resolves to the dragged item itself: the needle starts
       // at the origin slot.
       setDropIndicatorIndex(index >= 0 ? index : null);
+      // Round 6: a raised snippet suspends editing keydowns while
+      // edit mode is on (the guard is inert while edit is off).
+      keyboardSortActiveRef.current = true;
+      setKeyboardSortActive(true);
     },
     [indexOfSortableId, notifyActiveDragChange, snippetTokens]
   );
@@ -1813,6 +1972,14 @@ export function usePreviewArea(
       notifyActiveDragChange(false);
       setActiveSnippet(null);
       setDropIndicatorIndex(null);
+      // Round 6: the sort ended — schedule the caret restoration
+      // (after the drop's re-render; a no-op drop restores into the
+      // unchanged chip).
+      if (keyboardSortActiveRef.current) {
+        keyboardSortActiveRef.current = false;
+        setKeyboardSortActive(false);
+        pendingCaretRestoreRef.current = savedSortCaretRef.current;
+      }
       const { active, over } = event;
 
       if (!over || active.id === over.id) {
@@ -1876,9 +2043,48 @@ export function usePreviewArea(
       notifyActiveDragChange(false);
       setActiveSnippet(null);
       setDropIndicatorIndex(null);
+      // Round 6: cancelled — the snippet never moved; restore the
+      // caret right away (the document is unchanged).
+      if (keyboardSortActiveRef.current) {
+        keyboardSortActiveRef.current = false;
+        setKeyboardSortActive(false);
+        pendingCaretRestoreRef.current = savedSortCaretRef.current;
+      }
     },
     [notifyActiveDragChange]
   );
+
+  // Round 6: after a keyboard sort ends (drop or cancel), restore the
+  // host focus and place the caret back inside the sorted snippet —
+  // at the position saved at Ctrl+Space when it still resolves, at
+  // the chip's end otherwise (agent default). The timer lets the
+  // drop's re-render (and the edit-mode remount) commit first.
+  useEffect(() => {
+    if (keyboardSortActive || !pendingCaretRestoreRef.current) {
+      return;
+    }
+    const pending = pendingCaretRestoreRef.current;
+    pendingCaretRestoreRef.current = null;
+    const timer = setTimeout(() => {
+      const root = flowRef.current;
+      if (!root) {
+        return;
+      }
+      root.focus();
+      const chip = findChipByTokenId(root, pending.tokenId);
+      if (!chip) {
+        return; // the snippet vanished: host focus only
+      }
+      const textChildren = textChildrenOf(chip);
+      const target =
+        textChildren[pending.textChildIndex] ??
+        textChildren[textChildren.length - 1];
+      if (target) {
+        placeCaret(target, Math.min(pending.offset, target.data.length));
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [keyboardSortActive]);
 
   const announcements = useMemo<Announcements>(() => {
     // Positions-only announcements: 1-based over the snippet tokens

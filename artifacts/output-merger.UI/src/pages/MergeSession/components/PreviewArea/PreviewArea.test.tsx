@@ -120,9 +120,9 @@ const seedInterleaved = (): Array<[string, Snippet[]]> => [
 const SORTING_COPY = {
   instructions: {
     "en-US":
-      "To pick up a snippet, press Space or Enter. While dragging, use the arrow keys to move it. Press Space or Enter again to drop it, or Escape to cancel.",
+      "To pick up a snippet, press Space or Enter. While dragging, use the arrow keys to move it. Press Space or Enter again to drop it, or Escape to cancel. While text editing is on, place the caret inside a snippet and press Ctrl+Space to lift it; Enter drops it and Escape cancels.",
     "pt-BR":
-      "Para pegar um trecho, pressione Espaço ou Enter. Enquanto arrasta, use as setas para movê-lo. Pressione Espaço ou Enter novamente para soltá-lo, ou Escape para cancelar.",
+      "Para pegar um trecho, pressione Espaço ou Enter. Enquanto arrasta, use as setas para movê-lo. Pressione Espaço ou Enter novamente para soltá-lo, ou Escape para cancelar. Com a edição de texto ativada, posicione o cursor dentro de um trecho e pressione Ctrl+Espaço para levantá-lo; Enter o solta e Escape cancela.",
   },
   started: { "en-US": "Picked up snippet {{index}} of {{count}}.", "pt-BR": "Trecho {{index}} de {{count}} pego." },
   over: {
@@ -1699,10 +1699,41 @@ describe("PreviewArea editable surface", () => {
     );
     // The implicit textbox role comes from contentEditable itself.
     expect(flow.getAttribute("role")).toBeNull();
-    // Chips keep dnd-kit's sortable semantics inside the textbox.
+    // Round 6 (user decision 2026-10-18): while editing, chips are
+    // PLAIN SPANS of the editor — no focus/a11y attributes, no tab
+    // stop, no button role (the Ctrl+Space-from-caret entry replaces
+    // the focused-chip pickup; the keyboard activator listener stays
+    // attached as its mechanism). Edit OFF keeps the full semantics
+    // (asserted by the sorting-affordances suite).
     const chip = screen.getAllByTestId("preview-snippet")[0];
-    expect(chip).toHaveAttribute("role", "button");
-    expect(chip).toHaveAttribute("tabindex", "0");
+    expect(chip.getAttribute("role")).toBeNull();
+    expect(chip.getAttribute("tabindex")).toBeNull();
+    expect(chip.getAttribute("aria-roledescription")).toBeNull();
+    // The editor affordances: text cursor, text selection, no drag
+    // affordances (the pointer sensor is not mounted while editing).
+    expect(chip).toHaveStyle({ cursor: "text" });
+    expect(chip).toHaveStyle({ userSelect: "text" });
+    expect(chip).toHaveStyle({ touchAction: "auto" });
+    // Round-6 micro-fix (user decision 2026-10-18): the snippet
+    // highlight colors are NEVER removed while editing — hover keeps
+    // the BASE 0.3 tint (only the deepening is off), and the base
+    // rule is unchanged. The round-6 expression's false branch had
+    // compiled hover to transparent, stripping the tint.
+    const css = Array.from(document.querySelectorAll("style"))
+      .map((style) => style.textContent)
+      .join("");
+    const chipClass = (chip.getAttribute("class") ?? "")
+      .split(" ")
+      .find((cls) => css.includes(`.${cls}:hover{`));
+    expect(chipClass).toBeTruthy();
+    const hoverStart = css.indexOf(`.${chipClass}:hover{`);
+    const hoverRule = css.slice(hoverStart, css.indexOf("}", hoverStart));
+    expect(hoverRule).toContain("background-color:rgba(0, 128, 255, 0.3)");
+    expect(hoverRule).not.toContain("transparent");
+    // The resting rule keeps the base tint verbatim.
+    expect(chip).toHaveStyle({
+      backgroundColor: "rgba(0, 128, 255, 0.3)",
+    });
   });
 
   it("does not warn about contentEditable children (warning suppressed)", () => {
@@ -3568,6 +3599,347 @@ describe("PreviewArea editing workflows", () => {
     });
   });
 
+  // -----------------------------------------------------------------
+  // Keyboard sorting via Ctrl+Space while editing (round 6, user
+  // decision 2026-10-18): "Sorting with mouse should be disabled
+  // while edit text mode is on. … But sorting with keyboard should
+  // still be able, we just need to change the shortcut to enable
+  // it. The best way for me to do it is by hitting ctrl+space when
+  // the caret it is inside a snippet." Enter drops; Escape returns
+  // the snippet to its original place.
+  // -----------------------------------------------------------------
+
+  describe("keyboard sorting via Ctrl+Space (round 6)", () => {
+    beforeEach(() => {
+      installSegmentRects();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const pressCtrlSpace = (flow: HTMLElement) => {
+      const keydown = new KeyboardEvent("keydown", {
+        key: " ",
+        code: "Space",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(keydown);
+      });
+      return keydown;
+    };
+
+    // A keydown on the HOST during a raised sort — the honest user
+    // path (the host holds focus; the event bubbles to the sensor's
+    // document-level listeners).
+    const hostKey = (flow: HTMLElement, key: string, code: string) => {
+      const keydown = new KeyboardEvent("keydown", {
+        key,
+        code,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(keydown);
+      });
+      return keydown;
+    };
+
+    const flushSensor = async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+
+    it("lifts the snippet at the caret: pickup, announcements, raised overlay; a second Ctrl+Space is a no-op; typing is suspended", async () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The caret inside Alpha's text, offset 2.
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      setCaretInNode(alpha.firstChild as Text, 2);
+
+      const keydown = pressCtrlSpace(flow);
+      expect(keydown.defaultPrevented).toBe(true);
+      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Picked up snippet 1 of 3.",
+      );
+      await flushSensor();
+
+      // A second Ctrl+Space: no-op (still one raised snippet).
+      pressCtrlSpace(flow);
+      expect(screen.getAllByTestId("preview-snippet-overlay")).toHaveLength(1);
+
+      // Typing is suspended: a character keydown on the host is
+      // preventDefaulted, nothing enters the model.
+      const typed = hostKey(flow, "x", "KeyX");
+      expect(typed.defaultPrevented).toBe(true);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta Gamma",
+      );
+
+      // Escape cancels: the snippet returns, order unchanged.
+      const escape = hostKey(flow, "Escape", "Escape");
+      expect(escape.defaultPrevented).toBe(true);
+      await flushSensor();
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+      expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
+        "Alpha",
+        "Beta",
+        "Gamma",
+      ]);
+    });
+
+    it("Enter drops at the arrows' landing: order committed, needle behaves, and the caret returns inside the sorted snippet", async () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      setCaretInNode(alpha.firstChild as Text, 2);
+      pressCtrlSpace(flow);
+      await flushSensor();
+
+      // Arrows move the raised snippet (the needle follows).
+      const arrow = hostKey(flow, "ArrowRight", "ArrowRight");
+      expect(arrow.defaultPrevented).toBe(true);
+      expect(screen.getByTestId("preview-drop-indicator")).toBeInTheDocument();
+
+      const enter = hostKey(flow, "Enter", "Enter");
+      expect(enter.defaultPrevented).toBe(true);
+      await flushSensor();
+      // The restore effect's timer.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      // The drop committed through the moveToken path.
+      expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
+        "Beta",
+        "Alpha",
+        "Gamma",
+      ]);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Beta Alpha Gamma",
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Snippet dropped at position 2 of 3.",
+      );
+
+      // The host is focused again and the caret sits back INSIDE the
+      // sorted snippet, at the saved offset.
+      expect(document.activeElement).toBe(
+        screen.getByTestId("preview-segment-flow"),
+      );
+      const sortedAlpha = screen
+        .getAllByTestId("preview-snippet")
+        .find((chip) => chip.textContent === "Alpha") as HTMLElement;
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(sortedAlpha.firstChild as Text);
+      expect(range?.startOffset).toBe(2);
+    });
+
+    it("Escape returns the snippet to its original place (cancel) with the caret restored", async () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      setCaretInNode(alpha.firstChild as Text, 3);
+      pressCtrlSpace(flow);
+      await flushSensor();
+      hostKey(flow, "ArrowRight", "ArrowRight");
+      hostKey(flow, "Escape", "Escape");
+      await flushSensor();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      // Cancelled: NO moveToken — the order never changed.
+      expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
+        "Alpha",
+        "Beta",
+        "Gamma",
+      ]);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta Gamma",
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Snippet reorder cancelled.",
+      );
+      expect(document.activeElement).toBe(
+        screen.getByTestId("preview-segment-flow"),
+      );
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(alpha.firstChild as Text);
+      expect(range?.startOffset).toBe(3);
+    });
+
+    it("Ctrl+Space outside a snippet is a prevented no-op (own text, flow edges)", () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      // The caret in the gap between the first two snippets.
+      const separator = separatorNodeOf(flow);
+      setCaretInNode(separator, 0);
+      const keydown = pressCtrlSpace(flow);
+      expect(keydown.defaultPrevented).toBe(true);
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta Gamma",
+      );
+    });
+
+    it("single-snippet document: Ctrl+Space lifts it, arrows are inert, Enter puts it back", async () => {
+      renderWithProviders([["text-1", [makeSnippet("a1", "Only")]]]);
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const only = screen.getByTestId("preview-snippet");
+      setCaretInNode(only.firstChild as Text, 2);
+      pressCtrlSpace(flow);
+      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+      await flushSensor();
+
+      hostKey(flow, "ArrowRight", "ArrowRight");
+      hostKey(flow, "Enter", "Enter");
+      await flushSensor();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+      expect(screen.getAllByTestId("preview-snippet")).toHaveLength(1);
+      expect(screen.getByTestId("document-probe").textContent).toBe("Only");
+    });
+
+    it("a BARE Space mid-sort drops (the sensor's native end code — not a typed space)", async () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      setCaretInNode(alpha.firstChild as Text, 2);
+      pressCtrlSpace(flow);
+      await flushSensor();
+
+      // Move, then drop with a BARE Space on the host: the raised
+      // guard preventDefaults it (no typed space) but propagates it —
+      // the sensor reads Space as its native END code and commits.
+      hostKey(flow, "ArrowRight", "ArrowRight");
+      const space = hostKey(flow, " ", "Space");
+      expect(space.defaultPrevented).toBe(true);
+      await flushSensor();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
+        "Beta",
+        "Alpha",
+        "Gamma",
+      ]);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Beta Alpha Gamma",
+      );
+    });
+
+    it("a paste event mid-sort inserts nothing (suspended; the sort continues)", () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      setCaretInNode(alpha.firstChild as Text, 2);
+      pressCtrlSpace(flow);
+      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+
+      fireEvent.paste(flow, {
+        clipboardData: {
+          getData: (type: string) => (type === "text/plain" ? "pasted" : ""),
+        },
+      });
+
+      // The raised guard no-ops the paste: nothing inserted, the
+      // model untouched, and the sort is still raised.
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta Gamma",
+      );
+      expect(flow.textContent).toBe("Alpha Beta Gamma");
+      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+    });
+
+    it("toggling edit OFF mid-sort: Enter still drops, no crash, the restore no-ops harmlessly", async () => {
+      renderWithProviders(seedInterleaved());
+      enableEditing();
+      const flow = screen.getByTestId("preview-segment-flow");
+      act(() => {
+        flow.focus();
+      });
+
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      setCaretInNode(alpha.firstChild as Text, 2);
+      pressCtrlSpace(flow);
+      await flushSensor();
+      hostKey(flow, "ArrowRight", "ArrowRight");
+
+      // Toggle edit OFF while the sort is raised (the toggle's own
+      // commit + thaw run; the sensor's document listeners survive —
+      // the sort is still live).
+      enableEditing();
+      expect(screen.queryByTestId("preview-edit-toggle")).toBeInTheDocument();
+
+      // Enter on the now read-only host: no editor handler is
+      // attached while OFF, so the key reaches the sensor — the
+      // drop lands through the same moveToken path.
+      hostKey(screen.getByTestId("preview-segment-flow"), "Enter", "Enter");
+      await flushSensor();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
+        "Beta",
+        "Alpha",
+        "Gamma",
+      ]);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Beta Alpha Gamma",
+      );
+      // The read-only flow renders the committed order.
+      expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+        "Beta Alpha Gamma",
+      );
+    });
+  });
+
   it("keeps Enter on a focused chip as dnd-kit's pickup instead of a line break", async () => {
     renderWithProviders(seedInterleaved());
     enableEditing();
@@ -4080,7 +4452,10 @@ describe("PreviewArea click-vs-drag on the editable surface", () => {
       );
     });
 
-    it("starts the drag on a held press in edit mode (dragging is always live — F1)", async () => {
+    it("never starts a pointer drag while edit mode is ON — the mouse serves the editor (round 6)", async () => {
+      // Round 6 (user decision 2026-10-18): pointer sorting is
+      // disabled while editing — the PointerSensor is not mounted,
+      // so even a full hold-drag sequence never raises the snippet.
       renderWithProviders(seedInterleaved());
       enableEditing();
       const [alpha] = screen.getAllByTestId("preview-snippet");
@@ -4089,7 +4464,7 @@ describe("PreviewArea click-vs-drag on the editable surface", () => {
       act(() => {
         vi.advanceTimersByTime(50);
       });
-      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
 
       fireEvent.pointerMove(document, {
         pointerId: 1,
@@ -4099,10 +4474,16 @@ describe("PreviewArea click-vs-drag on the editable surface", () => {
       fireEvent.pointerUp(document, { pointerId: 1 });
       await act(async () => {});
 
+      // No drag, no reorder — the document is untouched.
       expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
-      expect(
-        screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Beta", "Alpha", "Gamma"]);
+      expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
+        "Alpha",
+        "Beta",
+        "Gamma",
+      ]);
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha Beta Gamma",
+      );
     });
   });
 

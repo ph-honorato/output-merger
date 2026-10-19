@@ -760,4 +760,124 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
     );
     expect(screen.getAllByTestId('preview-area')).toHaveLength(1);
   });
+
+  // -----------------------------------------------------------------
+  // Round 6 (user decision 2026-10-18): keyboard sorting via
+  // Ctrl+Space while editing — inside the modal it must compose with
+  // the Escape guard (Escape cancels ONLY the sort) and with the
+  // shared document (the inline twin reflects the drop).
+  // -----------------------------------------------------------------
+
+  describe('keyboard sorting via Ctrl+Space (round 6)', () => {
+    beforeEach(() => {
+      installSegmentRects();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const setCaretInNode = (node: Node, offset: number) => {
+      const range = document.createRange();
+      range.setStart(node, offset);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    };
+
+    const hostKey = (flow: HTMLElement, key: string, code: string) => {
+      const keydown = new KeyboardEvent('keydown', {
+        key,
+        code,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(keydown);
+      });
+      return keydown;
+    };
+
+    const flush = async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+
+    const liftAtCaret = (flow: HTMLElement, chip: HTMLElement, offset: number) => {
+      act(() => {
+        flow.focus();
+      });
+      setCaretInNode(chip.firstChild as Text, offset);
+      const keydown = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(keydown);
+      });
+    };
+
+    it('Escape during an in-modal Ctrl+Space sort cancels ONLY the sort (the guard)', async () => {
+      renderWithProviders(seedInterleaved());
+      const dialog = await openDialog();
+      fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+      const flow = within(dialog).getByTestId('preview-segment-flow');
+      const [alpha] = within(dialog).getAllByTestId('preview-snippet');
+      liftAtCaret(flow, alpha, 2);
+      expect(
+        within(dialog).getByTestId('preview-snippet-overlay'),
+      ).toBeInTheDocument();
+      await flush();
+
+      // Arrows move the raised snippet inside the dialog…
+      hostKey(flow, 'ArrowRight', 'ArrowRight');
+      // …Escape cancels ONLY the drag: the dialog stays open (the
+      // veto + re-dispatch guard) and the order is unchanged.
+      hostKey(flow, 'Escape', 'Escape');
+      await flush();
+
+      expect(
+        within(dialog).queryByTestId('preview-snippet-overlay'),
+      ).toBeNull();
+      expect(
+        within(dialog)
+          .getAllByTestId('preview-snippet')
+          .map((chip) => chip.textContent),
+      ).toEqual(['Alpha', 'Beta', 'Gamma']);
+      expect(screen.getByRole('dialog', { name: 'Preview' })).toBeInTheDocument();
+    });
+
+    it('Enter drops the raised snippet inside the modal and the inline twin reflects it', async () => {
+      renderWithProviders(seedInterleaved());
+      const dialog = await openDialog();
+      fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+      const flow = within(dialog).getByTestId('preview-segment-flow');
+      const [alpha] = within(dialog).getAllByTestId('preview-snippet');
+      liftAtCaret(flow, alpha, 2);
+      await flush();
+
+      hostKey(flow, 'ArrowRight', 'ArrowRight');
+      hostKey(flow, 'Enter', 'Enter');
+      await flush();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      // The dialog's flow shows the new order…
+      expect(
+        within(dialog)
+          .getAllByTestId('preview-snippet')
+          .map((chip) => chip.textContent),
+      ).toEqual(['Beta', 'Alpha', 'Gamma']);
+      // …and so does the INLINE twin (the shared document).
+      expect(inlineFlow(dialog).textContent).toBe('Beta Alpha Gamma');
+    });
+  });
 });
