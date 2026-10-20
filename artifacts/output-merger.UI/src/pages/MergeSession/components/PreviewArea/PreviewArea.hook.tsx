@@ -1071,6 +1071,57 @@ const chipBesideNode = (
   return sibling !== null && isChipElement(sibling) ? sibling : null;
 };
 
+/**
+ * Round 8 (user decision 2026-10-19): places the caret at the END of
+ * the preview text — "the last position of the text" — for the
+ * edit-OFF→ON toggle convenience (the equivalent of clicking at the
+ * end, ready to type). The walk targets the end of the last
+ * MEANINGFUL content: zero-footprint landing anchors, the
+ * drop-indicator needle, the bogus `<br>` line anchor, empty text,
+ * and comments are skipped. A trailing `"\n"` text node keeps the
+ * caret at ITS end — exactly between the newline and the planted
+ * `<br>`, the visible-new-line position; a document ending in a chip
+ * places the caret inside the chip's last text child at its end (the
+ * browser's click-at-end preference — chip territory for typing per
+ * round 5); an empty flow lands at position 0 (the F3 placeholder
+ * editor).
+ */
+export const placeCaretAtTextEnd = (root: HTMLElement): void => {
+  const children = root.childNodes;
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    const node = children[index];
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node as Text;
+      if (text.data === '') {
+        continue;
+      }
+      placeCaret(text, text.data.length);
+      return;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as HTMLElement;
+      if (isZeroFootprintNode(element) || element.tagName === 'BR') {
+        continue;
+      }
+      // A chip: inside its last text child at the end — the
+      // click-at-end browser behavior.
+      const texts = textChildrenOf(element);
+      if (texts.length > 0) {
+        const last = texts[texts.length - 1];
+        placeCaret(last, last.data.length);
+        return;
+      }
+      // A chip without text children (unreachable in practice —
+      // emptied chips are pruned): right after the chip.
+      placeCaret(root, index + 1);
+      return;
+    }
+    // Comments and other non-rendering nodes: keep walking.
+  }
+  // No meaningful content: the flow's start (the F3 empty editor).
+  placeCaret(root, 0);
+};
+
 /** The chip bounding a between-chips gap on one side. */
 const chipBoundingGapSide = (
   gap: CaretGap,
@@ -1353,7 +1404,24 @@ export function usePreviewArea(
     if (!root) {
       return;
     }
-    dispatchParsedSync(parsePreviewDom(root, modelRef.current));
+    const parsed = parsePreviewDom(root, modelRef.current);
+    // Round 8 (dev-server-safe commits): a content-identical parse
+    // dispatches NOTHING. The reducer's SYNC no-op check is
+    // id-sensitive (the parse regenerates own-text ids), so even a
+    // content-equal commit churns the document REFERENCE — and a
+    // reference change remounts any OTHER focused+editing surface
+    // (the ADR 0004 external-change contract). With the round-8
+    // toggle auto-focus, the sibling surfaces hand focus over on
+    // every OFF→ON transition (the visible one wins); the blurred
+    // surface's content-equal commit must not ripple a remount into
+    // the winner. Skipping the dispatch is semantically exact: the
+    // model already matches the DOM, the edited flags and tombstones
+    // are preserved either way, and the no-op-sync absorb mechanism
+    // only classifies dispatched parses.
+    if (tokensEqualIgnoringEdited(modelRef.current, parsed)) {
+      return;
+    }
+    dispatchParsedSync(parsed);
   }, [dispatchParsedSync]);
 
   // ---- gap collapse on caret exit (user decision 2026-10-17,
@@ -1506,6 +1574,28 @@ export function usePreviewArea(
       setFlowFocused(false);
       setFrozenTokens(null);
       setRenderEpoch((epoch) => epoch + 1);
+      return;
+    }
+    // Round 8 (user decision 2026-10-19): "auto position the caret on
+    // the last position of the text in preview area when enabling
+    // edit text mode" — the OFF→ON transition focuses this surface's
+    // host and places the caret at the text's end, ready to type (the
+    // convenience equivalent of clicking at the end). The focus runs
+    // the established onFocus machinery (the frozen-snapshot seeding,
+    // the round-1 trailing-line-anchor planting, gap tracking);
+    // EVERY mounted surface reacts, and the VISIBLE one wins
+    // deterministically: React runs this effect in tree order, so
+    // with the modal open the modal's portal-subtree effect (the
+    // later fiber) focuses last and its host ends up the active
+    // element — the pinned observable (rail toggle → the modal's
+    // editor focused; toolbar toggle → the inline editor focused).
+    // Scope: the transition only — surfaces mounting while already
+    // editing keep today's click-to-focus behavior (the ref
+    // initializes to the current flag, so no transition fires).
+    const root = flowRef.current;
+    if (root) {
+      root.focus();
+      placeCaretAtTextEnd(root);
     }
   }, [editEnabled, flowFocused, commitFlow, stopGapTracking]);
 

@@ -355,4 +355,69 @@ describe('MergeSessionPage', () => {
       'beta beta gamma',
     );
   });
+
+  it('round 8: the toolbar edit toggle auto-positions the caret at the end of the inline preview', async () => {
+    // The same virtual monospace seeding as the modal-integration
+    // test (the preview's chips come from TextInput selections).
+    const text = 'alpha beta gamma delta';
+    vi.mocked(caretIndexFromPoint).mockImplementation((x: number) => {
+      const charIndex = Math.max(0, Math.min(text.length - 1, Math.floor(x / 10)));
+      const localX = x - charIndex * 10;
+      return localX < 5 ? charIndex : charIndex + 1;
+    });
+    vi.mocked(rectForRange).mockImplementation(
+      (_root: HTMLElement, range: CharRange) => ({
+        left: range.start * 10,
+        top: 0,
+        right: range.end * 10,
+        bottom: 19,
+        width: (range.end - range.start) * 10,
+        height: 19,
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getAllByTestId('text-input-textarea')[0], text);
+    await user.type(screen.getAllByTestId('text-input-textarea')[1], text);
+    await user.click(screen.getByTestId('merge-session-start-button'));
+
+    const views = screen.getAllByTestId('text-input-view');
+    const dragFromTo = (view: HTMLElement, from: number, to: number) => {
+      fireEvent.pointerMove(view, { clientX: from, clientY: 5 });
+      fireEvent.pointerDown(view, { clientX: from, clientY: 5 });
+      fireEvent.pointerMove(view, { clientX: to, clientY: 5 });
+      fireEvent.pointerUp(window);
+    };
+    dragFromTo(views[0], 41, 151); // 'beta gamma' (text-1)
+    dragFromTo(views[1], 41, 95); // 'beta' (text-2)
+    expect(screen.getByTestId('preview-segment-flow')).toHaveTextContent(
+      'beta gamma beta',
+    );
+
+    // The OFF->ON toggle: the inline editor ends up focused with the
+    // caret at the text's end (ready to type — no manual click).
+    fireEvent.click(screen.getByTestId('preview-edit-toggle'));
+    const flow = screen.getByTestId('preview-segment-flow');
+    expect(document.activeElement).toBe(flow);
+    const chips = screen.getAllByTestId('preview-snippet');
+    const range = window.getSelection()?.getRangeAt(0);
+    // The document ends with the 'beta' chip: the caret inside its
+    // text at the end (the click-at-end browser behavior).
+    expect(range?.startContainer).toBe(chips[1].firstChild);
+    expect(range?.startOffset).toBe(4);
+
+    // The first keystroke appends right there.
+    (chips[1].firstChild as Text).insertData(4, '!');
+    act(() => {
+      flow.dispatchEvent(
+        new window.InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertText',
+          data: '!',
+        }),
+      );
+    });
+    expect(flow.textContent).toBe('beta gamma beta!');
+  });
 });

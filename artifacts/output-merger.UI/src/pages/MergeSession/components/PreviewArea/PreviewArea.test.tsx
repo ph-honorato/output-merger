@@ -4690,6 +4690,219 @@ describe("PreviewArea word-boundary landings (round 7)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Round 8 (user decision 2026-10-19): "I want you to auto position the
+// caret on the last position of the text in preview area when enabling
+// edit text mode" — the OFF→ON toggle focuses the host and places the
+// caret at the text's end (the convenience equivalent of clicking at
+// the end, ready to type). Scope: the transition only; surfaces
+// mounting while already editing keep click-to-focus.
+// ---------------------------------------------------------------------------
+
+describe("edit-toggle caret auto-positioning (round 8)", () => {
+  const seedTwoChips = (): Array<[string, Snippet[]]> => [
+    ["text-1", [makeSnippet("a1", "Alpha")]],
+    ["text-2", [makeSnippet("b1", "Beta")]],
+  ];
+
+  const selectionShape = (): { container: Node; offset: number } | null => {
+    const range = window.getSelection()?.getRangeAt(0);
+    return range ? { container: range.startContainer, offset: range.startOffset } : null;
+  };
+
+  // The live flow's last non-empty text node (the thaw epoch remounts
+  // the flow on every OFF — always re-query, never hold node refs
+  // across a toggle).
+  const lastTextChildOf = (flow: HTMLElement): Text | null => {
+    for (let index = flow.childNodes.length - 1; index >= 0; index -= 1) {
+      const node = flow.childNodes[index];
+      if (node.nodeType === Node.TEXT_NODE && (node as Text).data !== "") {
+        return node as Text;
+      }
+    }
+    return null;
+  };
+
+  // Realistic typing at the caret's node — the browser's insertText
+  // (mirrors the editing-workflow suite's typeRealistic).
+  const typeAtCaret = (
+    flow: HTMLElement,
+    node: Text,
+    offset: number,
+    data: string,
+  ) => {
+    node.insertData(offset, data);
+    const range = document.createRange();
+    range.setStart(node, offset + data.length);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    act(() => {
+      flow.dispatchEvent(
+        new window.InputEvent("input", {
+          bubbles: true,
+          inputType: "insertText",
+          data,
+        }),
+      );
+    });
+  };
+
+  const appendFlowText = (flow: HTMLElement, text: string) => {
+    const typed = document.createTextNode(text);
+    flow.appendChild(typed);
+    fireEvent.input(flow);
+    return typed;
+  };
+
+  it("toggling edit ON focuses the host and places the caret at the text's end — typing immediately appends", () => {
+    renderWithProviders(seedTwoChips());
+    enableEditing();
+
+    const flow = screen.getByTestId("preview-segment-flow");
+    // The host is focused and the freeze window is open (the toggle
+    // routed through the established onFocus machinery).
+    expect(document.activeElement).toBe(flow);
+    const [, beta] = screen.getAllByTestId("preview-snippet");
+    // The document ends with the Beta chip: the caret sits INSIDE the
+    // chip's last text child at its end (the browser's click-at-end
+    // preference — chip territory for typing per round 5).
+    expect(selectionShape()).toEqual({
+      container: beta.firstChild,
+      offset: 4,
+    });
+
+    // End-to-end: the first keystroke appends right there.
+    typeAtCaret(flow, beta.firstChild as Text, 4, "!");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha Beta!",
+    );
+    expect(flow.textContent).toBe("Alpha Beta!");
+  });
+
+  it("places the caret at the end of a document that ends with own text", () => {
+    renderWithProviders(seedTwoChips());
+    enableEditing();
+    appendFlowText(screen.getByTestId("preview-segment-flow"), " tail");
+    enableEditing(); // OFF — commits "Alpha Beta tail"
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha Beta tail",
+    );
+
+    enableEditing(); // ON again
+    // The OFF toggle remounts the flow (the thaw epoch): re-query the
+    // live host and its live text nodes.
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(document.activeElement).toBe(flow);
+    const tail = lastTextChildOf(flow) as Text;
+    expect(tail.data).toBe(" tail");
+    // The last meaningful content is the own text " tail": the caret
+    // at its end, NOT inside the chip.
+    expect(selectionShape()).toEqual({ container: tail, offset: 5 });
+
+    typeAtCaret(flow, tail, 5, "X");
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha Beta tailX",
+    );
+  });
+
+  it("a document ending with a line break gets the anchor planted and the caret between the newline and the <br>", () => {
+    renderWithProviders(seedTwoChips());
+    enableEditing();
+    appendFlowText(screen.getByTestId("preview-segment-flow"), "\n");
+    enableEditing(); // OFF — commits "Alpha Beta\n"
+    enableEditing(); // ON
+
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(document.activeElement).toBe(flow);
+    // The round-1 focus machinery planted the bogus <br> line anchor.
+    const anchor = flow.querySelector("br");
+    expect(anchor).not.toBeNull();
+    // The caret sits at the END of the trailing "\n" text node —
+    // exactly between the newline and the anchor (the visible
+    // new-line position), NOT after the <br>.
+    const newline = lastTextChildOf(flow) as Text;
+    expect(newline.data).toBe("\n");
+    expect(selectionShape()).toEqual({ container: newline, offset: 1 });
+    expect(
+      newline.compareDocumentPosition(anchor as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("the empty document: focused, caret at position 0, the F3 placeholder editor intact", () => {
+    renderWithProviders([]);
+    enableEditing();
+
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(document.activeElement).toBe(flow);
+    expect(selectionShape()).toEqual({ container: flow, offset: 0 });
+    // The caret placement adds no nodes: the flow stays truly :empty
+    // and the placeholder keeps rendering.
+    expect(flow.childNodes).toHaveLength(0);
+    expect(flow).toHaveAttribute(
+      "data-placeholder",
+      "Type here to add your own text",
+    );
+    expect(screen.queryByTestId("preview-empty")).toBeNull();
+  });
+
+  it("OFF→ON→OFF→ON cycles keep every commit, re-land the caret at the new end, and never stack anchors", () => {
+    renderWithProviders(seedTwoChips());
+    enableEditing();
+    appendFlowText(screen.getByTestId("preview-segment-flow"), " one");
+    enableEditing(); // OFF — commits
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha Beta one",
+    );
+
+    enableEditing(); // ON — the caret at the NEW end
+    let flow = screen.getByTestId("preview-segment-flow");
+    expect(document.activeElement).toBe(flow);
+    const one = lastTextChildOf(flow) as Text;
+    expect(one.data).toBe(" one");
+    expect(selectionShape()).toEqual({ container: one, offset: 4 });
+    typeAtCaret(flow, one, 4, " two");
+    enableEditing(); // OFF — commits
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha Beta one two",
+    );
+
+    // The line-break cycle: the anchor plants exactly once per ON.
+    enableEditing(); // ON
+    appendFlowText(screen.getByTestId("preview-segment-flow"), "\n");
+    enableEditing(); // OFF
+    enableEditing(); // ON
+    flow = screen.getByTestId("preview-segment-flow");
+    const anchors = flow.querySelectorAll("br");
+    expect(anchors).toHaveLength(1);
+    const newline = lastTextChildOf(flow) as Text;
+    expect(newline.data).toBe("\n");
+    expect(selectionShape()).toEqual({ container: newline, offset: 1 });
+  });
+
+  it("does not fire on a mount while already editing (the modal-opening scope is pinned in the modal suite)", () => {
+    // A surface that mounts with edit ON must not grab the caret: the
+    // ref initializes to the current flag, so no OFF→ON transition is
+    // detected. Component-level proxy: unmounting and remounting the
+    // whole tree mid-edit leaves the focus where the user put it.
+    const { unmount } = renderWithProviders(seedTwoChips());
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(document.activeElement).toBe(flow);
+    unmount();
+
+    const second = renderWithProviders(seedTwoChips());
+    enableEditing(); // OFF (fresh context) -> ON
+    const flowTwo = screen.getByTestId("preview-segment-flow");
+    expect(document.activeElement).toBe(flowTwo);
+    // The transition semantics survive a full remount.
+    expect(selectionShape()?.offset).toBe(4);
+    second.unmount();
+  });
+});
+
 describe("classifyCaretRelativeChip + insertSplitPasteAtChipEnd (line-break escape helpers)", () => {
   // Pure-DOM units: the classifier takes a root and a range, no
   // React and no selection global needed.

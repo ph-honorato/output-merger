@@ -953,3 +953,60 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Round 8 (user decision 2026-10-19): "I want you to auto position the
+// caret on the last position of the text in preview area when enabling
+// edit text mode" — the modal composition: the rail toggle must leave
+// the MODAL's editor focused (the visible surface wins), and opening
+// the modal mid-edit keeps today's click-to-focus (the transition-only
+// scope).
+// ---------------------------------------------------------------------------
+
+describe('edit-toggle caret auto-positioning (round 8)', () => {
+  const inlineFlowOf = (dialog: HTMLElement) =>
+    screen
+      .getAllByTestId('preview-segment-flow')
+      .find((flow) => !dialog.contains(flow)) as HTMLElement;
+
+  it('the rail toggle focuses the MODAL editor with the caret at its end (the visible surface wins)', async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+    const modalFlow = within(dialog).getByTestId('preview-segment-flow');
+    expect(document.activeElement).toBe(modalFlow);
+    // The caret at the text's end: the document ends with the Gamma
+    // chip, so inside its last text child at the end (the
+    // click-at-end browser behavior).
+    const [, , gamma] = within(dialog).getAllByTestId('preview-snippet');
+    const range = window.getSelection()?.getRangeAt(0);
+    expect(range?.startContainer).toBe(gamma.firstChild);
+    expect(range?.startOffset).toBe(5);
+    // The inline twin flashed focus first (every surface reacts) but
+    // the modal's host is the one that ends up focused — React runs
+    // the toggle effect in tree order, so the modal's portal-subtree
+    // effect focuses last (the documented mechanism, pinned here).
+    expect(document.activeElement).not.toBe(inlineFlowOf(dialog));
+  });
+
+  it('opening the modal while already editing keeps click-to-focus (the transition-only scope)', async () => {
+    renderWithProviders(seedInterleaved());
+    // The toolbar toggle: the inline editor auto-focuses (round 8).
+    fireEvent.click(screen.getByTestId('preview-edit-toggle'));
+    expect(document.activeElement).toBe(
+      screen.getByTestId('preview-segment-flow'),
+    );
+
+    const dialog = await openDialog();
+    // The modal's editor mounted with edit already ON: NO transition,
+    // NO auto-focus — today's click-to-focus behavior.
+    const modalFlow = within(dialog).getByTestId('preview-segment-flow');
+    expect(document.activeElement).not.toBe(modalFlow);
+    // The manual path is unchanged: clicking into it focuses.
+    act(() => {
+      modalFlow.focus();
+    });
+    expect(document.activeElement).toBe(modalFlow);
+  });
+});
