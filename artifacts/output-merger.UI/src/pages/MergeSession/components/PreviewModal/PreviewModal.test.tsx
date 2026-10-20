@@ -173,13 +173,22 @@ const SEGMENT_RECTS: Record<string, SegmentRect> = {
 
 const ZERO_RECT: SegmentRect = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
 
-// Gap anchors sit at the insertion points of the seeded layout (same
-// convention as the PreviewArea suite).
-const GAP_SLOT_X: Record<string, number> = {
-  '0': -4,
-  '1': 110,
-  '2': 230,
-  '3': 344,
+// Landing anchors sit at the droppable word boundaries / token gaps of
+// the seeded layout (same convention as the PreviewArea suite —
+// round 7: keyed by the data-landing id).
+const LANDING_X: Record<string, number> = {
+  'preview-landing:g:0': -4,
+  'preview-landing:s:1:0': 104,
+  'preview-landing:s:1:1': 110,
+  'preview-landing:s:3:0': 224,
+  'preview-landing:s:3:1': 230,
+  // The round-7 words document (the second separator rewritten into
+  // " text entered_by_user "): the word anchors sit between Beta
+  // (ends 220) and Gamma (starts 240).
+  'preview-landing:s:3:5': 230,
+  'preview-landing:s:3:21': 232,
+  'preview-landing:s:3:22': 234,
+  'preview-landing:g:5': 344,
 };
 
 // jsdom computes no layout: give the segment chips deterministic
@@ -188,18 +197,22 @@ const installSegmentRects = () =>
   vi
     .spyOn(Element.prototype, 'getBoundingClientRect')
     .mockImplementation(function (this: Element) {
-      const gapSlot = (this as HTMLElement).dataset?.gapSlot;
-      if (gapSlot !== undefined) {
-        const x = GAP_SLOT_X[gapSlot] ?? 0;
+      const landingId = (this as HTMLElement).dataset?.landing;
+      if (landingId !== undefined) {
+        const x = LANDING_X[landingId] ?? 0;
+        // REAL-BROWSER GEOMETRY (dev-server correction, 2026-10-19):
+        // the landing anchors are zero-footprint spans — a true 0x0
+        // rect at the text baseline (top === bottom), matching the
+        // real browser exactly.
         return {
           left: x,
           right: x,
-          top: 0,
-          bottom: 24,
+          top: 18,
+          bottom: 18,
           width: 0,
-          height: 24,
+          height: 0,
           x,
-          y: 0,
+          y: 18,
         } as DOMRect;
       }
       const text = (this as HTMLElement).textContent ?? '';
@@ -863,6 +876,10 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
       liftAtCaret(flow, alpha, 2);
       await flush();
 
+      // Round 7 (Q16): reaching the Beta chip takes three hops — the
+      // arrows walk through the separator's edge anchors first.
+      hostKey(flow, 'ArrowRight', 'ArrowRight');
+      hostKey(flow, 'ArrowRight', 'ArrowRight');
       hostKey(flow, 'ArrowRight', 'ArrowRight');
       hostKey(flow, 'Enter', 'Enter');
       await flush();
@@ -878,6 +895,61 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
       ).toEqual(['Beta', 'Alpha', 'Gamma']);
       // …and so does the INLINE twin (the shared document).
       expect(inlineFlow(dialog).textContent).toBe('Beta Alpha Gamma');
+    });
+
+    it('drops the raised snippet at a word boundary inside the modal and the inline twin reflects it (round 7)', async () => {
+      renderWithProviders(seedInterleaved());
+      const dialog = await openDialog();
+      fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+      // Rewrite the second separator into the user's own words:
+      // [Alpha, " ", Beta, " text entered_by_user ", Gamma].
+      const flow = within(dialog).getByTestId('preview-segment-flow');
+      act(() => {
+        flow.focus();
+      });
+      const separators = Array.from(flow.childNodes).filter(
+        (node) => node.nodeType === Node.TEXT_NODE,
+      ) as Text[];
+      separators[1].data = ' text entered_by_user ';
+      fireEvent.input(flow);
+
+      // The focused surface is frozen with the seeded anchors (ADR
+      // 0004): thaw and re-focus so the words anchors render before
+      // lifting (the blur remounts the flow — re-query the live
+      // node).
+      act(() => {
+        fireEvent.blur(flow);
+      });
+      const liveFlow = within(dialog).getByTestId('preview-segment-flow');
+      act(() => {
+        liveFlow.focus();
+      });
+
+      // Lift Beta and walk into the words: right after Beta (the
+      // text's leading edge), then between the words.
+      const [, beta] = within(dialog).getAllByTestId('preview-snippet');
+      liftAtCaret(liveFlow, beta, 2);
+      await flush();
+
+      hostKey(liveFlow, 'ArrowRight', 'ArrowRight'); // s:3:0
+      hostKey(liveFlow, 'ArrowRight', 'ArrowRight'); // s:3:5 — the word gap
+      hostKey(liveFlow, 'Enter', 'Enter');
+      await flush();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      // The chip landed BETWEEN the words (the carried separator
+      // re-planted on the left, the boundary's own run on the right —
+      // zero characters added or removed)…
+      expect(inlineFlow(dialog).textContent).toBe(
+        'Alpha text Beta entered_by_user Gamma',
+      );
+      // …and the modal's own flow shows the same shared document.
+      expect(
+        within(dialog).getByTestId('preview-segment-flow').textContent,
+      ).toBe('Alpha text Beta entered_by_user Gamma');
     });
   });
 });

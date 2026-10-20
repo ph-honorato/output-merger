@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  KeyboardCode,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -8,20 +9,28 @@ import {
 } from '@dnd-kit/core';
 import type {
   Announcements,
+  ClientRect,
   DragCancelEvent,
   DragEndEvent,
   DragOverEvent,
   DragStartEvent,
+  KeyboardCoordinateGetter,
   ScreenReaderInstructions,
+  UniqueIdentifier,
 } from '@dnd-kit/core';
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useSnippets } from '../../../../context/SnippetsContext';
-import type { PreviewToken, SnippetToken } from '../../../../context/SnippetsContext';
+import type {
+  Landing,
+  PreviewToken,
+  SnippetToken,
+} from '../../../../context/SnippetsContext';
 import {
   isSnippetToken,
+  landingAfterToken,
+  landingBeforeToken,
+  parseLandingId,
   parsePreviewDom,
   serialize,
-  snippetSlotToTokenIndex,
   tokensEqualIgnoringEdited,
 } from '../../../../utils/previewDocument';
 
@@ -36,57 +45,152 @@ import {
 export const SNIPPET_DRAG_ACTIVATION = { delay: 50, tolerance: 5 } as const;
 
 /**
- * Landing slot of the dragged snippet, as a gap in the CURRENT render
- * order (0..n — the dragged chip still renders at its origin slot), or
- * null while the drop-indicator needle is hidden. Indexes are positions
- * among SNIPPET tokens (the sortable population). Moving forward lands
- * the needle AFTER the hovered snippet, moving backward BEFORE it, and
- * hovering the dragged snippet itself (including the pickup instant)
- * lands at the origin slot — the needle can never contradict the drop
- * outcome. A null target or an unresolved index (-1: the snippet
- * vanished mid-drag) hides the needle.
+ * Round 7 (user decision 2026-10-19): the needle's landing — which
+ * droppable anchor (word boundary or token gap) the drop-indicator
+ * needle marks. The droppable-id round-trip and the anchor
+ * enumeration live in utils/previewDocument (`buildLandingId`,
+ * `parseLandingId`, `enumerateLandingAnchors`); `sameLanding` compares
+ * two landings for the needle's render match.
  */
-export const computeNeedleIndex = (
+export const sameLanding = (a: unknown, b: unknown): boolean =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * The resulting 1-based position among the snippet tokens when the
+ * chip at `fromIndex` drops at `landing` (the announcement-side
+ * landing math): the number of snippet tokens that precede the
+ * landing spot, the moved chip excluded, plus one. Best-effort for
+ * inert drops (the chip's own neighborhood) — the announcement then
+ * reports the unchanged position.
+ */
+export const landingSnippetPosition = (
+  tokens: PreviewToken[],
   fromIndex: number,
-  overIndex: number | null
-): number | null => {
-  if (overIndex === null || fromIndex < 0 || overIndex < 0) {
-    return null;
+  landing: Landing
+): number => {
+  const target = landing.tokenIndex;
+  let seen = 0;
+  for (let index = 0; index < target && index < tokens.length; index += 1) {
+    if (tokens[index].kind === 'snippet' && index !== fromIndex) {
+      seen += 1;
+    }
   }
-  return fromIndex < overIndex ? overIndex + 1 : overIndex;
+  return seen + 1;
 };
 
 /**
- * Droppable id for the insertion gap at `slot` (0..n): the invisible
- * in-flow anchors rendered before/between/after the snippet chips. While
- * a pointer drag hovers a gap, dnd-kit reports it as `over`, so the
- * needle renders at that slot — the needle then never hides or
- * misplaces while the cursor sits in the space between two snippets.
+ * Round 7 keyboard coordinate getter (user decision 2026-10-19):
+ * Left/Right step the raised chip through EVERY droppable landing
+ * position in reading order — the snippet chips AND the
+ * word-boundary/token-gap anchors — so the user can walk a snippet
+ * word-by-word through their own text and drop it exactly where the
+ * needle marks. READING ORDER IS DOM ORDER (dev-server correction,
+ * 2026-10-19): the flow renders its children in reading order, and
+ * the geometric (top, left) sort this getter shipped with is WRONG in
+ * a real browser — the zero-footprint anchors are 0x0 boxes sitting
+ * at the text baseline while the chips span the line, so their tops
+ * differ and the sort put every chip before every anchor, scrambling
+ * the walk (the jsdom rect mocks all shared top 0, which masked it;
+ * the realistic-geometry harness reproduced the exact scramble).
+ * The droppable registry exposes each container's DOM node
+ * (RegisterDroppable carries `node`), so the walk sorts by
+ * compareDocumentPosition — geometry-independent, line breaks
+ * included — with a (top, left) fallback for transient missing
+ * nodes. Each step places the raised item's center exactly on the
+ * next droppable's center (both axes — the 0x0 anchor centers sit
+ * ~6px below the chip centers, and a multi-line walk must track the
+ * target's line), so closestCenter resolves `over` to the stepped
+ * position at distance 0 and the needle follows word-by-word. The
+ * current position resolves by 2D center distance (same metric as
+ * the collision). Up/Down are prevented but inert (the caret must
+ * never move while a chip is raised). The sensor's own end codes
+ * (Space/Enter/Tab) and cancel (Escape) are untouched, as are the
+ * round-6 caret-restore and raised-guard contracts.
  */
-export const buildGapId = (slot: number): string => `preview-gap:${slot}`;
-
-/**
- * Inverse of buildGapId: the encoded slot, or null for any other id
- * (sortable chips, unresolved targets).
- */
-export const parseGapId = (id: string): number | null => {
-  const match = /^preview-gap:(\d+)$/.exec(id);
-  return match ? Number(match[1]) : null;
+export const landingKeyboardCoordinates: KeyboardCoordinateGetter = (
+  event,
+  {
+    currentCoordinates,
+    context: { collisionRect, droppableRects, droppableContainers },
+  }
+) => {
+  const code = event.code;
+  if (
+    code !== KeyboardCode.Left &&
+    code !== KeyboardCode.Right &&
+    code !== KeyboardCode.Up &&
+    code !== KeyboardCode.Down
+  ) {
+    return undefined;
+  }
+  // The arrow keydown never reaches the editable host mid-sort: the
+  // caret must not move while the chip is raised.
+  event.preventDefault();
+  const direction =
+    code === KeyboardCode.Left ? -1 : code === KeyboardCode.Right ? 1 : 0;
+  if (direction === 0 || !collisionRect) {
+    return undefined;
+  }
+  const entries = droppableContainers
+    .getEnabled()
+    .map((entry) => ({
+      id: entry.id,
+      rect: droppableRects.get(entry.id),
+      node: entry.node?.current ?? null,
+    }))
+    .filter(
+      (
+        entry
+      ): entry is {
+        id: UniqueIdentifier;
+        rect: ClientRect;
+        node: HTMLElement | null;
+      } => entry.rect != null
+    )
+    .sort((a, b) => {
+      if (a.node && b.node) {
+        // DOM document order IS the flow's reading order (the
+        // droppables are all connected siblings of the flow).
+        const position = a.node.compareDocumentPosition(b.node);
+        if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
+          return -1;
+        }
+        if (position & Node.DOCUMENT_POSITION_PRECEDING) {
+          return 1;
+        }
+      }
+      // Fallback for transient missing/disconnected nodes
+      // (mid-unmount): the geometric order of the last resort.
+      return a.rect.top - b.rect.top || a.rect.left - b.rect.left;
+    });
+  if (entries.length === 0) {
+    return undefined;
+  }
+  const centerOf = (rect: ClientRect): { x: number; y: number } => ({
+    x: (rect.left + rect.right) / 2,
+    y: (rect.top + rect.bottom) / 2,
+  });
+  const currentCenter = centerOf(collisionRect);
+  let currentIndex = 0;
+  let bestDistance = Infinity;
+  entries.forEach((entry, index) => {
+    const center = centerOf(entry.rect);
+    const distance = Math.hypot(center.x - currentCenter.x, center.y - currentCenter.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      currentIndex = index;
+    }
+  });
+  const targetIndex = currentIndex + direction;
+  if (targetIndex < 0 || targetIndex >= entries.length) {
+    return undefined; // already at the first/last landing position
+  }
+  const targetCenter = centerOf(entries[targetIndex].rect);
+  return {
+    x: currentCoordinates.x + (targetCenter.x - currentCenter.x),
+    y: currentCoordinates.y + (targetCenter.y - currentCenter.y),
+  };
 };
-
-/**
- * Position among the snippet tokens where a drop at gap `slot` lands
- * the dragged chip (0-based). The reducer splices the chip out of
- * the document before re-inserting it, so slots past the removed chip
- * map one position lower. This is the announcement-side half of the
- * token-index gap math; the drop itself lands at
- * snippetSlotToTokenIndex and the reducer owns the removal
- * adjustment.
- */
-export const computeGapMoveIndex = (
-  fromIndex: number,
-  slot: number
-): number => (slot > fromIndex ? slot - 1 : slot);
 
 /**
  * The selection's current range, when it is usable and inside the
@@ -980,8 +1084,9 @@ const chipBoundingGapSide = (
 /**
  * True for nodes that contribute neither text nor a rendered line to
  * the flow's end: zero-length text nodes, comments, the zero-footprint
- * insertion-gap anchors, and the drop-indicator needle. Scans for the
- * block's meaningful end skip these.
+ * landing anchors (round 7's `data-landing` word-boundary anchors and
+ * the legacy gap anchors), and the drop-indicator needle. Scans for
+ * the block's meaningful end skip these.
  */
 const isZeroFootprintNode = (node: Node): boolean => {
   if (node.nodeType === Node.TEXT_NODE) {
@@ -993,6 +1098,7 @@ const isZeroFootprintNode = (node: Node): boolean => {
   const element = node as HTMLElement;
   return (
     element.dataset?.gapSlot !== undefined ||
+    element.dataset?.landing !== undefined ||
     element.getAttribute('data-testid') === 'preview-drop-indicator'
   );
 };
@@ -1064,6 +1170,7 @@ export const findTrailingNewlineNode = (root: HTMLElement): Text | null => {
       if (
         element.tagName === 'BR' ||
         element.dataset?.gapSlot !== undefined ||
+        element.dataset?.landing !== undefined ||
         element.getAttribute('data-testid') === 'preview-drop-indicator'
       ) {
         continue;
@@ -1117,7 +1224,7 @@ export function usePreviewArea(
     // reachable inside this module.
     document: previewDocument,
     editEnabled,
-    moveToken,
+    moveTokenToLanding,
     syncDocument,
     setEditEnabled,
   } = useSnippets();
@@ -1143,7 +1250,11 @@ export function usePreviewArea(
     })
   );
   const keyboardSensors = useSensors(
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    // Round 7: the arrows step through ALL droppable landing
+    // positions (chips + word-boundary anchors) in reading order.
+    useSensor(KeyboardSensor, {
+      coordinateGetter: landingKeyboardCoordinates,
+    })
   );
   const sensors = useMemo(
     () =>
@@ -1156,9 +1267,7 @@ export function usePreviewArea(
   const [activeSnippet, setActiveSnippet] = useState<SnippetToken | null>(null);
   // Insertion slot of the drop-indicator needle; null keeps it hidden
   // (no active drag, or no target resolves).
-  const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(
-    null
-  );
+  const [dropLanding, setDropLanding] = useState<Landing | null>(null);
 
   // ---- editable surface state (ADR 0004) ---------------------------
 
@@ -1935,43 +2044,78 @@ export function usePreviewArea(
       const index = indexOfSortableId(String(event.active.id));
       setActiveSnippet(index >= 0 ? snippetTokens[index] : null);
       // Pickup resolves to the dragged item itself: the needle starts
-      // at the origin slot.
-      setDropIndicatorIndex(index >= 0 ? index : null);
+      // at the origin spot (the anchor covering "before the chip").
+      setDropLanding(
+        index >= 0
+          ? landingBeforeToken(previewDocument, tokenIndexOf(String(event.active.id)))
+          : null
+      );
       // Round 6: a raised snippet suspends editing keydowns while
       // edit mode is on (the guard is inert while edit is off).
       keyboardSortActiveRef.current = true;
       setKeyboardSortActive(true);
     },
-    [indexOfSortableId, notifyActiveDragChange, snippetTokens]
+    [indexOfSortableId, notifyActiveDragChange, previewDocument, snippetTokens, tokenIndexOf]
   );
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
       const { active, over } = event;
-      const fromIndex = indexOfSortableId(String(active.id));
       const overId = over ? String(over.id) : null;
-      const gapSlot = overId === null ? null : parseGapId(overId);
-
-      if (gapSlot !== null) {
-        // Gap anchors exist for slots 0..snippetTokens.length; a stale
-        // slot (the list shrank mid-drag) hides the needle.
-        setDropIndicatorIndex(
-          gapSlot >= 0 && gapSlot <= snippetTokens.length ? gapSlot : null
-        );
+      if (overId === null) {
+        setDropLanding(null);
         return;
       }
 
-      const overIndex = overId === null ? null : indexOfSortableId(overId);
-      setDropIndicatorIndex(computeNeedleIndex(fromIndex, overIndex));
+      // Round 7: a landing anchor is hovered — the needle marks
+      // exactly that word boundary / token gap. A stale anchor (the
+      // document shrank mid-drag) hides the needle: the landing must
+      // resolve against the current document.
+      const landing = parseLandingId(overId);
+      if (landing) {
+        let valid = false;
+        if (landing.kind === 'token-gap') {
+          valid =
+            landing.tokenIndex >= 0 &&
+            landing.tokenIndex <= previewDocument.length;
+        } else {
+          const target = previewDocument[landing.tokenIndex];
+          valid =
+            landing.tokenIndex >= 0 &&
+            landing.tokenIndex < previewDocument.length &&
+            target?.kind === 'text' &&
+            landing.boundaryOffset >= 0 &&
+            landing.boundaryOffset <= target.text.length;
+        }
+        setDropLanding(valid ? landing : null);
+        return;
+      }
+
+      // A chip is hovered: the needle marks the insertion point the
+      // chip-over maps to (the anchor covering "after the over chip"
+      // forward / "before it" backward) — the same spot the old
+      // slot-based needle marked.
+      const fromSnippet = indexOfSortableId(String(active.id));
+      const overSnippet = indexOfSortableId(overId);
+      const overTokenIndex = tokenIndexOf(overId);
+      if (fromSnippet < 0 || overSnippet < 0 || overTokenIndex < 0) {
+        setDropLanding(null);
+        return;
+      }
+      setDropLanding(
+        fromSnippet < overSnippet
+          ? landingAfterToken(previewDocument, overTokenIndex)
+          : landingBeforeToken(previewDocument, overTokenIndex)
+      );
     },
-    [indexOfSortableId, snippetTokens.length]
+    [indexOfSortableId, previewDocument, tokenIndexOf]
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       notifyActiveDragChange(false);
       setActiveSnippet(null);
-      setDropIndicatorIndex(null);
+      setDropLanding(null);
       // Round 6: the sort ended — schedule the caret restoration
       // (after the drop's re-render; a no-op drop restores into the
       // unchanged chip).
@@ -1992,48 +2136,39 @@ export function usePreviewArea(
       const fromIndex = indexOfSortableId(activeId);
       const fromTokenIndex = tokenIndexOf(activeId);
       const overId = String(over.id);
-      const gapSlot = parseGapId(overId);
 
-      if (gapSlot !== null) {
-        // Released over an insertion gap: the chip lands exactly at
-        // the slot the needle marked (a stale slot after a mid-drag
-        // shrink discards the reorder).
-        if (
-          fromIndex < 0 ||
-          fromTokenIndex < 0 ||
-          gapSlot < 0 ||
-          gapSlot > snippetTokens.length
-        ) {
-          return;
-        }
-        moveToken(
-          fromTokenIndex,
-          snippetSlotToTokenIndex(previewDocument, gapSlot)
-        );
-        return;
-      }
-
-      const overIndex = indexOfSortableId(overId);
-      const overTokenIndex = tokenIndexOf(overId);
-
-      if (fromIndex < 0 || overIndex < 0 || fromTokenIndex < 0 || overTokenIndex < 0) {
+      if (fromIndex < 0 || fromTokenIndex < 0) {
         // The dragged snippet vanished mid-drag: discard the reorder.
         return;
       }
 
-      // Forward drops land right AFTER the hovered chip, backward
-      // drops right BEFORE it — exactly where the needle marked.
-      moveToken(
+      // Round 7: a landing anchor — the word-boundary landing model.
+      const landing = parseLandingId(overId);
+      if (landing) {
+        moveTokenToLanding(fromTokenIndex, landing);
+        return;
+      }
+
+      // A chip-over: map to the insertion landing (before/after the
+      // over chip) — the same serialization the old token-gap
+      // insertion produced.
+      const overTokenIndex = tokenIndexOf(overId);
+      const overSnippet = indexOfSortableId(overId);
+      if (overTokenIndex < 0 || overSnippet < 0) {
+        return;
+      }
+      moveTokenToLanding(
         fromTokenIndex,
-        fromIndex < overIndex ? overTokenIndex + 1 : overTokenIndex
+        fromIndex < overSnippet
+          ? landingAfterToken(previewDocument, overTokenIndex)
+          : landingBeforeToken(previewDocument, overTokenIndex)
       );
     },
     [
-      previewDocument,
       indexOfSortableId,
-      moveToken,
+      moveTokenToLanding,
       notifyActiveDragChange,
-      snippetTokens.length,
+      previewDocument,
       tokenIndexOf,
     ]
   );
@@ -2042,7 +2177,7 @@ export function usePreviewArea(
     (_event: DragCancelEvent) => {
       notifyActiveDragChange(false);
       setActiveSnippet(null);
-      setDropIndicatorIndex(null);
+      setDropLanding(null);
       // Round 6: cancelled — the snippet never moved; restore the
       // caret right away (the document is unchanged).
       if (keyboardSortActiveRef.current) {
@@ -2108,14 +2243,20 @@ export function usePreviewArea(
           return t(SORTING_KEYS.cancelled);
         }
         const overId = String(over.id);
-        const gapSlot = parseGapId(overId);
-        if (gapSlot !== null) {
-          // Gap drop: announce the landing position — the same
-          // position identity chip drops use, no new strings.
-          const fromIndex = indexOfSortableId(String(active.id));
-          return fromIndex >= 0 && gapSlot <= snippetTokens.length
+        // Round 7: a landing drop (word boundary or token gap)
+        // announces the moved chip's resulting position among the
+        // snippet tokens — the same position identity chip drops
+        // use, no new strings.
+        const landing = parseLandingId(overId);
+        if (landing) {
+          const fromTokenIndex = tokenIndexOf(String(active.id));
+          return fromTokenIndex >= 0
             ? t(SORTING_KEYS.ended, {
-                index: computeGapMoveIndex(fromIndex, gapSlot) + 1,
+                index: landingSnippetPosition(
+                  previewDocument,
+                  fromTokenIndex,
+                  landing
+                ),
                 count: snippetTokens.length,
               })
             : undefined;
@@ -2124,7 +2265,7 @@ export function usePreviewArea(
       },
       onDragCancel: () => t(SORTING_KEYS.cancelled),
     };
-  }, [t, indexOfSortableId, snippetTokens]);
+  }, [t, indexOfSortableId, previewDocument, snippetTokens, tokenIndexOf]);
 
   const screenReaderInstructions = useMemo<ScreenReaderInstructions>(
     () => ({ draggable: t(SORTING_KEYS.instructions) }),
@@ -2154,7 +2295,7 @@ export function usePreviewArea(
     announcements,
     screenReaderInstructions,
     activeSnippet,
-    dropIndicatorIndex,
+    dropLanding,
     handleFlowFocus,
     handleFlowBlur,
     handleFlowInput,

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { ThemeProvider as MuiThemeProvider } from "@mui/material/styles";
 import { ThemeProvider as StyledThemeProvider } from "styled-components";
@@ -17,22 +17,26 @@ import type {
 } from "@dnd-kit/core";
 import { TextEditingToggle } from "../";
 import {
+  abuttingChipFromCaret,
+  classifyCaretRelativeChip,
+  collapseGapSpaces,
+  findCaretGap,
+  insertSplitPasteAtChipEnd,
+  landingSnippetPosition,
+  sameLanding,
+  SNIPPET_DRAG_ACTIVATION,
+  usePreviewArea,
+} from "./PreviewArea.hook";
+import {
+  enumerateLandingAnchors,
   isSnippetToken,
   serialize,
 } from "../../../../utils/previewDocument";
 import {
-  abuttingChipFromCaret,
-  buildGapId,
-  classifyCaretRelativeChip,
-  collapseGapSpaces,
-  computeGapMoveIndex,
-  computeNeedleIndex,
-  findCaretGap,
-  insertSplitPasteAtChipEnd,
-  parseGapId,
-  SNIPPET_DRAG_ACTIVATION,
-  usePreviewArea,
-} from "./PreviewArea.hook";
+  initialSnippetsState,
+  snippetsReducer,
+} from "../../../../context/SnippetsContext/SnippetsContext.reducer";
+import type { PreviewToken } from "../../../../context/SnippetsContext";
 import PreviewArea from "./PreviewArea";
 import { withAlpha } from "../../../../utils/color";
 
@@ -155,40 +159,66 @@ const SEGMENT_RECTS: Record<string, SegmentRect> = {
 
 const ZERO_RECT: SegmentRect = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
 
-// Gap anchors sit at the insertion points of the seeded layout:
-// before Alpha (-4), between Alpha|Beta (110), between Beta|Gamma
-// (230), and after Gamma (344). Keyed by the data-gap-slot attribute.
-const GAP_SLOT_X: Record<string, number> = {
-  "0": -4,
-  "1": 110,
-  "2": 230,
-  "3": 344,
+// Landing anchors sit at the droppable word boundaries / token gaps
+// of the seeded layouts, keyed by their data-landing id. The 3-chip
+// seed [Alpha, " ", Beta, " ", Gamma]: before Alpha (g:0, -4), right
+// after Alpha (s:1:0, 104), before Beta (s:1:1, 110 — the old gap-1
+// spot), right after Beta (s:3:0, 224), before Gamma (s:3:1, 230 —
+// the old gap-2 spot), trailing (g:5, 344). The 2-chip seed's
+// trailing anchor (g:3) sits 4px after Beta; the 1-chip seed's
+// (g:1) 4px after Alpha.
+const LANDING_X: Record<string, number> = {
+  "preview-landing:g:0": -4,
+  "preview-landing:s:1:0": 104,
+  "preview-landing:s:1:1": 110,
+  "preview-landing:s:3:0": 224,
+  "preview-landing:s:3:1": 230,
+  "preview-landing:g:3": 224,
+  "preview-landing:g:1": 104,
+  "preview-landing:g:5": 344,
 };
 
 // jsdom does not compute layout: give the segment chips deterministic
 // rects so dnd-kit's rect-based collision detection works in tests.
-// Gap anchors resolve by their slot attribute to the insertion-point
-// x; everything else falls back to the textContent-keyed chip rects.
-const installSegmentRects = () =>
+// Landing anchors resolve by their data-landing id to the
+// insertion-point x; everything else falls back to the
+// textContent-keyed chip rects. Per-suite overrides (round 7's
+// word-document layouts push the trailing chips right of the own
+// text) merge over the defaults.
+const installSegmentRects = (
+  overrides: {
+    chips?: Record<string, SegmentRect>;
+    landings?: Record<string, number>;
+  } = {}
+) =>
   vi
     .spyOn(Element.prototype, "getBoundingClientRect")
     .mockImplementation(function (this: Element) {
-      const gapSlot = (this as HTMLElement).dataset?.gapSlot;
-      if (gapSlot !== undefined) {
-        const x = GAP_SLOT_X[gapSlot] ?? 0;
+      const landingId = (this as HTMLElement).dataset?.landing;
+      if (landingId !== undefined) {
+        const x = overrides.landings?.[landingId] ?? LANDING_X[landingId] ?? 0;
+        // REAL-BROWSER GEOMETRY (dev-server correction, 2026-10-19):
+        // the landing anchors are zero-footprint spans (`width: 0;
+        // height: 0`) — a real browser returns a TRUE 0x0 rect with
+        // top === bottom at the text baseline, NOT a 24px-tall box.
+        // The keyboard walk's reading order sorts by DOM order (not
+        // geometry), but the collision distances depend on this
+        // shape — these mocks must stay faithful to the real thing.
         return {
           left: x,
           right: x,
-          top: 0,
-          bottom: 24,
+          top: 18,
+          bottom: 18,
           width: 0,
-          height: 24,
+          height: 0,
           x,
-          y: 0,
+          y: 18,
         } as DOMRect;
       }
       const text = (this as HTMLElement).textContent ?? "";
-      return { ...(SEGMENT_RECTS[text] ?? ZERO_RECT) } as DOMRect;
+      return {
+        ...(overrides.chips?.[text] ?? SEGMENT_RECTS[text] ?? ZERO_RECT),
+      } as DOMRect;
     });
 
 const KEY_FOR_CODE: Record<string, string> = {
@@ -524,6 +554,11 @@ describe("PreviewArea keyboard sorting", () => {
     expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
     expect(alpha).toHaveStyle({ opacity: "0.4" });
 
+    // Round 7 (Q16): the arrows step through EVERY landing position —
+    // from Alpha: the separator's two edge anchors, then the Beta
+    // chip itself (the drop target of the old one-arrow test).
+    await pressKey(document, "ArrowRight");
+    await pressKey(document, "ArrowRight");
     await pressKey(document, "ArrowRight");
     await pressKey(document, "Space");
 
@@ -582,6 +617,10 @@ describe("PreviewArea keyboard sorting", () => {
       "Picked up snippet 1 of 3.",
     );
 
+    // Round 7 (Q16): stepping onto the Beta chip takes three hops —
+    // the arrows walk through the separator's edge anchors first.
+    await pressKey(document, "ArrowRight");
+    await pressKey(document, "ArrowRight");
     await pressKey(document, "ArrowRight");
     expect(screen.getByRole("status")).toHaveTextContent(
       "Snippet is now over position 2 of 3.",
@@ -785,89 +824,101 @@ describe("PreviewArea pointer sorting", () => {
 });
 
 describe("PreviewArea drop indicator", () => {
-  // ---- pure placement helper ---------------------------------------------
+  // ---- pure landing helpers (round 7) -------------------------------------
 
-  it("computes the needle slot for every placement branch", () => {
-    // Moving forward: the needle lands AFTER the hovered snippet.
-    expect(computeNeedleIndex(0, 1)).toBe(2);
-    expect(computeNeedleIndex(1, 2)).toBe(3);
-    // Moving backward: the needle lands BEFORE the hovered snippet.
-    expect(computeNeedleIndex(2, 1)).toBe(1);
-    expect(computeNeedleIndex(3, 0)).toBe(0);
-    // Hovering the dragged snippet itself (including the pickup
-    // instant): the origin slot.
-    expect(computeNeedleIndex(0, 0)).toBe(0);
-    expect(computeNeedleIndex(1, 1)).toBe(1);
-    // Edges: forward over the last snippet → the trailing slot;
-    // backward onto the first snippet → the leading slot.
-    expect(computeNeedleIndex(0, 2)).toBe(3);
-    expect(computeNeedleIndex(2, 0)).toBe(0);
+  it("compares landings structurally for the needle match", () => {
+    expect(
+      sameLanding(
+        { kind: "token-gap", tokenIndex: 2 },
+        { kind: "token-gap", tokenIndex: 2 },
+      ),
+    ).toBe(true);
+    expect(
+      sameLanding(
+        { kind: "text-split", tokenIndex: 2, boundaryOffset: 4 },
+        { kind: "text-split", tokenIndex: 2, boundaryOffset: 4 },
+      ),
+    ).toBe(true);
+    expect(
+      sameLanding(
+        { kind: "token-gap", tokenIndex: 2 },
+        { kind: "text-split", tokenIndex: 2, boundaryOffset: 0 },
+      ),
+    ).toBe(false);
+    expect(
+      sameLanding(
+        { kind: "token-gap", tokenIndex: 2 },
+        { kind: "token-gap", tokenIndex: 3 },
+      ),
+    ).toBe(false);
+    expect(
+      sameLanding(
+        { kind: "text-split", tokenIndex: 2, boundaryOffset: 4 },
+        { kind: "text-split", tokenIndex: 2, boundaryOffset: 5 },
+      ),
+    ).toBe(false);
+    expect(sameLanding(null, null)).toBe(true);
+    expect(
+      sameLanding({ kind: "token-gap", tokenIndex: 1 }, null),
+    ).toBe(false);
   });
 
-  it("hides the needle when there is no target or an index is unresolved", () => {
-    // over resolves to nothing (a no-target drop is a cancel today).
-    expect(computeNeedleIndex(0, null)).toBeNull();
-    // The dragged snippet vanished mid-drag.
-    expect(computeNeedleIndex(-1, 1)).toBeNull();
-    // The hovered snippet vanished mid-drag.
-    expect(computeNeedleIndex(0, -1)).toBeNull();
-  });
-
-  it("always agrees with the gap moveSnippet drops the snippet into", () => {
-    for (let from = 0; from < 3; from += 1) {
-      for (let over = 0; over < 3; over += 1) {
-        const current = ["a", "b", "c"];
-        const final = [...current];
-        const [moved] = final.splice(from, 1);
-        final.splice(over, 0, moved);
-
-        // The needle slot is a gap in the CURRENT render order (the
-        // dragged chip still renders at its origin): right before the
-        // current item that follows the dropped chip in the final
-        // order, or at the end of the flow when nothing follows it.
-        // Hovering the dragged snippet itself keeps the chip home.
-        const follows = final[final.indexOf(moved) + 1];
-        const expected =
-          from === over
-            ? from
-            : follows === undefined
-              ? current.length
-              : current.indexOf(follows);
-
-        expect(computeNeedleIndex(from, over)).toBe(expected);
-      }
-    }
-  });
-
-  it("round-trips gap ids and rejects non-gap ids", () => {
-    expect(buildGapId(0)).toBe("preview-gap:0");
-    expect(buildGapId(3)).toBe("preview-gap:3");
-    expect(parseGapId("preview-gap:0")).toBe(0);
-    expect(parseGapId("preview-gap:3")).toBe(3);
-    expect(parseGapId("text-1:a1")).toBeNull();
-    expect(parseGapId("preview-gap:x")).toBeNull();
-    expect(parseGapId("")).toBeNull();
-  });
-
-  it("drops the chip at the gap slot the needle marks, for every (from, gap) pair", () => {
-    // The needle renders AT slot g; the drop must land the chip
-    // exactly there. Model the reducer's splice semantics: splice out
-    // at from, re-insert at computeGapMoveIndex.
-    for (let from = 0; from < 3; from += 1) {
-      for (let gap = 0; gap <= 3; gap += 1) {
-        const rendered = ["a", "b", "c"];
-        const final = [...rendered];
-        const [moved] = final.splice(from, 1);
-        final.splice(computeGapMoveIndex(from, gap), 0, moved);
-
-        // "Lands at slot g": the elements preceding the moved chip in
-        // the final order are exactly the rendered prefix before slot
-        // g, dragged chip excluded.
-        const prefix = final.slice(0, final.indexOf(moved));
-        const expectedPrefix = rendered
-          .slice(0, gap)
-          .filter((item) => item !== moved);
-        expect(prefix).toEqual(expectedPrefix);
+  it("announces the position the landing move actually produces (reducer agreement)", () => {
+    const handChip = (tokenId: string, text: string): PreviewToken => ({
+      kind: "snippet",
+      tokenId,
+      sourceSnippetId: tokenId.split(":")[1] ?? tokenId,
+      sourceId: tokenId.split(":")[0] ?? tokenId,
+      color: "#0080FF",
+      text,
+      edited: true,
+    });
+    const handText = (tokenId: string, text: string): PreviewToken => ({
+      kind: "text",
+      tokenId,
+      text,
+    });
+    let unedited = initialSnippetsState;
+    unedited = snippetsReducer(unedited, {
+      type: "SET_SOURCE_SNIPPETS",
+      sourceId: "text-1",
+      snippets: [
+        makeSnippet("a1", "Alpha"),
+        makeSnippet("a2", "Beta"),
+        makeSnippet("a3", "Gamma"),
+      ],
+    });
+    const edited: typeof initialSnippetsState = {
+      ...initialSnippetsState,
+      tokens: [
+        handChip("text-1:a1", "Alpha"),
+        handText("t1", " "),
+        handText("t2", "one two"),
+        handText("t3", " "),
+        handChip("text-2:b1", "Beta"),
+      ],
+    };
+    for (const [label, state] of [
+      ["unedited", unedited],
+      ["edited", edited],
+    ] as const) {
+      for (let from = 0; from < state.tokens.length; from += 1) {
+        if (!isSnippetToken(state.tokens[from])) continue;
+        const movedId = state.tokens[from].tokenId;
+        for (const { landing } of enumerateLandingAnchors(state.tokens)) {
+          const tag = `${label} from=${from} landing=${JSON.stringify(landing)}`;
+          const next = snippetsReducer(state, {
+            type: "MOVE_TOKEN_TO_LANDING",
+            fromIndex: from,
+            landing,
+          });
+          const order = next.tokens
+            .filter(isSnippetToken)
+            .map((token) => token.tokenId);
+          expect(landingSnippetPosition(state.tokens, from, landing), tag).toBe(
+            order.indexOf(movedId) + 1,
+          );
+        }
       }
     }
   });
@@ -914,41 +965,43 @@ describe("PreviewArea drop indicator", () => {
       vi.restoreAllMocks();
     });
 
-    it("shows the needle at the origin slot on pickup and hops with the arrow keys", async () => {
+    it("shows the needle at the origin landing on pickup and hops through every landing position with the arrow keys", async () => {
       renderWithProviders(seedInterleaved());
-      const [alpha, beta, gamma] = screen.getAllByTestId("preview-snippet");
+      const [alpha] = screen.getAllByTestId("preview-snippet");
       alpha.focus();
 
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
 
+      // The needle renders right after its landing anchor — the
+      // anchor's data-landing identifies the marked position.
+      const needleLanding = () =>
+        (screen.getByTestId("preview-drop-indicator")
+          .previousSibling as HTMLElement).dataset.landing;
+
       await pressKey(alpha, "Space");
-      const needle = screen.getByTestId("preview-drop-indicator");
-      // Pickup: the origin slot sits between the preceding neighbor and
-      // the dragged chip (Alpha is first, so the flow start).
-      expect(
-        needle.compareDocumentPosition(alpha) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      // Pickup: the origin spot — the anchor before Alpha (the flow
+      // start).
+      expect(needleLanding()).toBe("preview-landing:g:0");
 
+      // Round 7: the arrows walk EVERY landing position in reading
+      // order — the separator's two edge anchors, then the Beta chip.
       await pressKey(document, "ArrowRight");
-      // Over Beta moving forward: the needle lands after it, before Gamma.
-      const hopped = screen.getByTestId("preview-drop-indicator");
-      expect(
-        beta.compareDocumentPosition(hopped) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-      expect(
-        hopped.compareDocumentPosition(gamma) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      expect(needleLanding()).toBe("preview-landing:s:1:0");
+      await pressKey(document, "ArrowRight");
+      expect(needleLanding()).toBe("preview-landing:s:1:1");
+      await pressKey(document, "ArrowRight");
+      // Over Beta: the needle marks the insertion after it (the
+      // anchor right after Beta, before the separator that precedes
+      // Gamma).
+      expect(needleLanding()).toBe("preview-landing:s:3:0");
 
+      // Back through the same positions to the origin.
       await pressKey(document, "ArrowLeft");
-      // Back over the dragged snippet itself: the needle returns to the
-      // origin slot.
-      const home = screen.getByTestId("preview-drop-indicator");
-      expect(
-        home.compareDocumentPosition(alpha) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      expect(needleLanding()).toBe("preview-landing:s:1:1");
+      await pressKey(document, "ArrowLeft");
+      expect(needleLanding()).toBe("preview-landing:s:1:0");
+      await pressKey(document, "ArrowLeft");
+      expect(needleLanding()).toBe("preview-landing:g:0");
 
       await pressKey(document, "Escape");
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
@@ -972,9 +1025,13 @@ describe("PreviewArea drop indicator", () => {
           ),
         ].join(":");
 
-      // Keyboard: Alpha picked up, moved over Beta → after Beta, before Gamma.
+      // Keyboard: Alpha picked up, moved over Beta → after Beta, before
+      // Gamma. Round 7 (Q16): reaching the Beta chip takes three hops —
+      // the arrows walk through the separator's edge anchors first.
       alpha.focus();
       await pressKey(alpha, "Space");
+      await pressKey(document, "ArrowRight");
+      await pressKey(document, "ArrowRight");
       await pressKey(document, "ArrowRight");
       expect(
         slotSignature(screen.getByTestId("preview-drop-indicator")),
@@ -1541,32 +1598,46 @@ describe("PreviewArea drop indicator", () => {
         active: { id: "text-1:ghost" },
       } as unknown as DragStartEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBeNull();
+    expect(result.current.dropLanding).toBeNull();
 
-    // Pickup: the needle starts at the origin slot.
+    // Pickup: the needle starts at the origin spot — the anchor
+    // covering "before Alpha" (the document start).
     act(() => {
       result.current.handleDragStart({
         active: { id: "text-1:a1" },
       } as unknown as DragStartEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBe(0);
+    expect(result.current.dropLanding).toEqual({
+      kind: "token-gap",
+      tokenIndex: 0,
+    });
     expect(result.current.activeSnippet?.tokenId).toBe("text-1:a1");
 
-    // Over Beta moving forward: after it — stable across repeated events.
+    // Over Beta moving forward: the needle marks the anchor covering
+    // "right after Beta" — the following separator's leading edge —
+    // stable across repeated events.
     act(() => {
       result.current.handleDragOver({
         active: { id: "text-1:a1" },
         over: { id: "text-2:b1" },
       } as unknown as DragOverEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBe(2);
+    expect(result.current.dropLanding).toEqual({
+      kind: "text-split",
+      tokenIndex: 3,
+      boundaryOffset: 0,
+    });
     act(() => {
       result.current.handleDragOver({
         active: { id: "text-1:a1" },
         over: { id: "text-2:b1" },
       } as unknown as DragOverEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBe(2);
+    expect(result.current.dropLanding).toEqual({
+      kind: "text-split",
+      tokenIndex: 3,
+      boundaryOffset: 0,
+    });
 
     // The hovered snippet vanished mid-drag: hide, no crash.
     act(() => {
@@ -1575,7 +1646,7 @@ describe("PreviewArea drop indicator", () => {
         over: { id: "text-2:ghost" },
       } as unknown as DragOverEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBeNull();
+    expect(result.current.dropLanding).toBeNull();
 
     // No target resolves: hidden (a no-target drop is a cancel today).
     act(() => {
@@ -1584,34 +1655,39 @@ describe("PreviewArea drop indicator", () => {
         over: null,
       } as unknown as DragOverEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBeNull();
+    expect(result.current.dropLanding).toBeNull();
 
-    // Over an insertion gap: the needle marks that slot directly.
+    // Over a landing anchor: the needle marks exactly that word
+    // boundary / token gap.
     act(() => {
       result.current.handleDragOver({
         active: { id: "text-1:a1" },
-        over: { id: buildGapId(1) },
+        over: { id: "preview-landing:s:1:1" },
       } as unknown as DragOverEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBe(1);
+    expect(result.current.dropLanding).toEqual({
+      kind: "text-split",
+      tokenIndex: 1,
+      boundaryOffset: 1,
+    });
 
-    // A stale gap slot (the list shrank mid-drag) hides the needle…
+    // A stale landing id (the list shrank mid-drag) hides the needle…
     act(() => {
       result.current.handleDragOver({
         active: { id: "text-1:a1" },
-        over: { id: buildGapId(5) },
+        over: { id: "preview-landing:s:9:9" },
       } as unknown as DragOverEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBeNull();
+    expect(result.current.dropLanding).toBeNull();
 
     // …and its drop is discarded without crashing.
     act(() => {
       result.current.handleDragEnd({
         active: { id: "text-1:a1" },
-        over: { id: buildGapId(5) },
+        over: { id: "preview-landing:s:9:9" },
       } as unknown as DragEndEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBeNull();
+    expect(result.current.dropLanding).toBeNull();
     expect(
       result.current.document.filter(isSnippetToken).map((token) => token.tokenId),
     ).toEqual(["text-1:a1", "text-2:b1", "text-1:a2"]);
@@ -1624,7 +1700,7 @@ describe("PreviewArea drop indicator", () => {
         over: null,
       } as unknown as DragEndEvent);
     });
-    expect(result.current.dropIndicatorIndex).toBeNull();
+    expect(result.current.dropLanding).toBeNull();
     expect(result.current.activeSnippet).toBeNull();
     expect(
       result.current.document.filter(isSnippetToken).map((token) => token.tokenId),
@@ -2859,14 +2935,26 @@ describe("PreviewArea editing workflows", () => {
 
       // The caret is right after the typed text, BEFORE the trailing
       // space — the leading space precedes the run (it sits after the
-      // zero-footprint gap anchor).
+      // zero-footprint landing anchors).
       const range = window.getSelection()?.getRangeAt(0);
       expect(range?.startContainer).toBe(typed);
       expect(range?.startOffset).toBe(1);
       expect((typed.previousSibling as Text).data).toBe(" ");
-      expect(
-        ((typed.nextElementSibling as HTMLElement).nextSibling as Text).data,
-      ).toBe(" ");
+      // Round 7: the removed separator's landing anchors (its two
+      // edge anchors) are zero-footprint elements that may sit between
+      // the run and the trailing planted space — walk to the next TEXT
+      // sibling instead of assuming one element hop.
+      const nextTextSibling = (node: Node): Text | null => {
+        let current = node.nextSibling;
+        while (current) {
+          if (current.nodeType === Node.TEXT_NODE) {
+            return current as Text;
+          }
+          current = current.nextSibling;
+        }
+        return null;
+      };
+      expect(nextTextSibling(typed)?.data).toBe(" ");
 
       // Continued typing flows into the run; the planted spaces block
       // re-firing (no double spacing).
@@ -3711,9 +3799,13 @@ describe("PreviewArea editing workflows", () => {
       pressCtrlSpace(flow);
       await flushSensor();
 
-      // Arrows move the raised snippet (the needle follows).
+      // Arrows move the raised snippet (the needle follows). Round 7
+      // (Q16): reaching the Beta chip takes three hops — the arrows
+      // walk through the separator's edge anchors first.
       const arrow = hostKey(flow, "ArrowRight", "ArrowRight");
       expect(arrow.defaultPrevented).toBe(true);
+      hostKey(flow, "ArrowRight", "ArrowRight");
+      hostKey(flow, "ArrowRight", "ArrowRight");
       expect(screen.getByTestId("preview-drop-indicator")).toBeInTheDocument();
 
       const enter = hostKey(flow, "Enter", "Enter");
@@ -3850,6 +3942,9 @@ describe("PreviewArea editing workflows", () => {
       // Move, then drop with a BARE Space on the host: the raised
       // guard preventDefaults it (no typed space) but propagates it —
       // the sensor reads Space as its native END code and commits.
+      // Round 7 (Q16): three hops reach the Beta chip.
+      hostKey(flow, "ArrowRight", "ArrowRight");
+      hostKey(flow, "ArrowRight", "ArrowRight");
       hostKey(flow, "ArrowRight", "ArrowRight");
       const space = hostKey(flow, " ", "Space");
       expect(space.defaultPrevented).toBe(true);
@@ -3908,6 +4003,9 @@ describe("PreviewArea editing workflows", () => {
       setCaretInNode(alpha.firstChild as Text, 2);
       pressCtrlSpace(flow);
       await flushSensor();
+      // Round 7 (Q16): three hops reach the Beta chip.
+      hostKey(flow, "ArrowRight", "ArrowRight");
+      hostKey(flow, "ArrowRight", "ArrowRight");
       hostKey(flow, "ArrowRight", "ArrowRight");
 
       // Toggle edit OFF while the sort is raised (the toggle's own
@@ -4207,6 +4305,10 @@ describe("PreviewArea editing workflows", () => {
 
       const [alpha] = screen.getAllByTestId("preview-snippet");
       await pressKey(alpha, "Space");
+      // Round 7 (Q16): three hops reach the Beta chip (the arrows
+      // walk through the separator's edge anchors first).
+      await pressKey(document, "ArrowRight");
+      await pressKey(document, "ArrowRight");
       await pressKey(document, "ArrowRight");
       await pressKey(document, "Space");
 
@@ -4224,6 +4326,367 @@ describe("PreviewArea editing workflows", () => {
     } finally {
       restoreRects.mockRestore();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round 7 (user decision 2026-10-19): "a dragged snippet must be
+// droppable at every word boundary of the document" —
+// |snippet 1| text entered_by_user |snippet 2| — the five marked
+// positions (before snippet 1, after it/before the text, between the
+// words, after the text/before snippet 2, after snippet 2) plus the
+// word anchors. The reducer oracle (SnippetsContext.reducer.test.ts)
+// pins the landing semantics exhaustively; here the surface must
+// resolve the anchors, mark them with the needle, and land exactly
+// where the needle marks — in both drag modes.
+// ---------------------------------------------------------------------------
+
+describe("PreviewArea word-boundary landings (round 7)", () => {
+  const seedTwoChips = (): Array<[string, Snippet[]]> => [
+    ["text-1", [makeSnippet("a1", "Alpha")]],
+    ["text-2", [makeSnippet("b1", "Beta")]],
+  ];
+
+  // The user's example layout: own text between two chips —
+  // [Alpha, " text entered_by_user ", Beta] — single-space word
+  // boundary, edge pads. Beta's rect is pushed right of the text so
+  // the reading order (the keyboard walk) is geometric.
+  const WORDS_TEXT = " text entered_by_user ";
+  const betaRect = (left: number): SegmentRect => ({
+    left,
+    top: 0,
+    right: left + 100,
+    bottom: 24,
+    width: 100,
+    height: 24,
+    x: left,
+    y: 0,
+  });
+  const wordsLayout = () =>
+    installSegmentRects({
+      chips: { Beta: betaRect(220) },
+      landings: {
+        "preview-landing:s:1:0": 104,
+        "preview-landing:s:1:5": 150,
+        "preview-landing:s:1:21": 196,
+        "preview-landing:s:1:22": 204,
+        "preview-landing:g:3": 324,
+      },
+    });
+
+  const separatorNodeOf = (flow: HTMLElement) =>
+    Array.from(flow.childNodes).find(
+      (node) => node.nodeType === Node.TEXT_NODE,
+    ) as Text;
+
+  // Rewrites the seeded separator into the user's own text, syncs
+  // the model, and (optionally) thaws to the read-only surface.
+  const seedWordsDoc = ({ editOff = true } = {}) => {
+    renderWithProviders(seedTwoChips());
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    const separator = separatorNodeOf(flow);
+    separator.data = WORDS_TEXT;
+    fireEvent.input(flow);
+    if (editOff) {
+      enableEditing();
+    }
+    return flow;
+  };
+
+  const anchorIdsOf = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll('[data-testid="preview-drop-gap"]')).map(
+      (element) => (element as HTMLElement).dataset.landing,
+    );
+
+  const needleLandingOf = () =>
+    (screen.getByTestId("preview-drop-indicator")
+      .previousSibling as HTMLElement).dataset.landing;
+
+  // ---- anchor enumeration + dedupe + transparency --------------------------
+
+  it("renders exactly the deduped landing anchors: the text's edges and word boundary, no before-chip duplicate", () => {
+    seedWordsDoc();
+
+    const flow = screen.getByTestId("preview-segment-flow");
+    expect(anchorIdsOf(flow)).toEqual([
+      "preview-landing:g:0", // before Alpha (doc start)
+      "preview-landing:s:1:0", // right after Alpha — the text's leading edge
+      "preview-landing:s:1:5", // between "text" and "entered_by_user"
+      "preview-landing:s:1:21", // the trailing run's start (after the last word)
+      "preview-landing:s:1:22", // the text's trailing edge — before Beta
+      "preview-landing:g:3", // after Beta — the trailing anchor
+    ]);
+    // The dedupe: Beta's own before-anchor is omitted (the preceding
+    // text token's trailing edge covers that spot) — exactly one
+    // anchor marks each before-chip position.
+    expect(
+      anchorIdsOf(flow).filter((id) => id?.startsWith("preview-landing:g:2")),
+    ).toEqual([]);
+  });
+
+  it("keeps the anchors parser-transparent: no text, WYSIWYG, one own-text token in the model", () => {
+    seedWordsDoc();
+
+    const flow = screen.getByTestId("preview-segment-flow");
+    // Zero-footprint: the anchors contribute no text and no chips.
+    Array.from(flow.querySelectorAll('[data-testid="preview-drop-gap"]')).forEach(
+      (anchor) => {
+        expect(anchor.textContent).toBe("");
+      },
+    );
+    expect(flow.textContent).toBe("Alpha text entered_by_user Beta");
+    // WYSIWYG: the flow text is exactly the serialized document.
+    expect(flow.textContent).toBe(
+      screen.getByTestId("document-probe").textContent,
+    );
+  });
+
+  // ---- pointer drops -------------------------------------------------------
+
+  describe("pointer drops", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      wordsLayout();
+    });
+
+    afterEach(() => {
+      // Drain dnd-kit's delayed document click-listener removal.
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    const pointerDownOn = (element: Element, x = 40, y = 10) =>
+      fireEvent.pointerDown(element, {
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        clientX: x,
+        clientY: y,
+      });
+
+    // Hold past the 50ms activation, move, release.
+    const dragAlphaTo = async (x: number) => {
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      pointerDownOn(alpha);
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      fireEvent.pointerMove(document, {
+        pointerId: 1,
+        clientX: x,
+        clientY: 10,
+      });
+    };
+
+    it("marks the word gap with the needle while hovering mid-text and lands the chip between the words", async () => {
+      seedWordsDoc();
+
+      await dragAlphaTo(150);
+      // The needle renders at the word-boundary anchor (snaps to the
+      // closest anchor while hovering mid-text).
+      expect(screen.getByTestId("preview-drop-indicator")).toBeInTheDocument();
+      expect(needleLandingOf()).toBe("preview-landing:s:1:5");
+
+      fireEvent.pointerUp(document, { pointerId: 1, clientX: 150, clientY: 10 });
+
+      // The text token split around the chip: one space each side
+      // (the boundary's own run pads the right side, the planted
+      // space — no separator was carried — the left; the documented
+      // multiset exception). Alpha lands between the words.
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        " text Alpha entered_by_user Beta",
+      );
+      expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+        " text Alpha entered_by_user Beta",
+      );
+      expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
+    });
+
+    it("lands the chip before Beta (the text's trailing edge) and at the document's trailing anchor", async () => {
+      seedWordsDoc();
+
+      // After the text, before Beta.
+      await dragAlphaTo(204);
+      expect(needleLandingOf()).toBe("preview-landing:s:1:22");
+      fireEvent.pointerUp(document, { pointerId: 1, clientX: 204, clientY: 10 });
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        " text entered_by_user Alpha Beta",
+      );
+
+      // Reset: drain dnd-kit's delayed click-suppression removal
+      // (the known fake-timer landmine — without the drain the
+      // reseed's toggle click is silently swallowed), then a fresh
+      // document.
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      cleanup();
+      seedWordsDoc();
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha text entered_by_user Beta",
+      );
+      await dragAlphaTo(324);
+      expect(needleLandingOf()).toBe("preview-landing:g:3");
+      fireEvent.pointerUp(document, { pointerId: 1, clientX: 324, clientY: 10 });
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        " text entered_by_user BetaAlpha",
+      );
+    });
+
+    it("announces the landed position among the snippet tokens for a mid-text drop", async () => {
+      seedWordsDoc();
+
+      await dragAlphaTo(150);
+      fireEvent.pointerUp(document, { pointerId: 1, clientX: 150, clientY: 10 });
+
+      // Alpha lands between the words: still the FIRST of the two
+      // snippet tokens.
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Snippet dropped at position 1 of 2.",
+      );
+    });
+  });
+
+  // ---- keyboard word walk (edit ON, Ctrl+Space) -----------------------------
+
+  describe("keyboard word walk", () => {
+    beforeEach(() => {
+      wordsLayout();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const hostKey = (flow: HTMLElement, key: string, code: string) => {
+      const keydown = new KeyboardEvent("keydown", {
+        key,
+        code,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(keydown);
+      });
+      return keydown;
+    };
+
+    const pressCtrlSpace = (flow: HTMLElement) => {
+      const keydown = new KeyboardEvent("keydown", {
+        key: " ",
+        code: "Space",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(keydown);
+      });
+      return keydown;
+    };
+
+    const flushSensor = async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+
+    it("steps the raised chip word-by-word through the own text and Enter drops it between the words", async () => {
+      const flow = seedWordsDoc({ editOff: false });
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        "Alpha text entered_by_user Beta",
+      );
+
+      // The focused surface is FROZEN with the seeded snapshot's
+      // anchors (ADR 0004): thaw and re-focus so the frozen surface
+      // (and its landing anchors) re-render from the synced words
+      // model before lifting. The blur REMOUNTS the flow (the
+      // round-1 thaw epoch) — re-query the live node.
+      const staleFlow = flow;
+      act(() => {
+        fireEvent.blur(staleFlow);
+      });
+      const liveFlow = screen.getByTestId("preview-segment-flow");
+      expect(liveFlow).not.toBe(staleFlow);
+      act(() => {
+        liveFlow.focus();
+      });
+
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      const setCaretInNode = (node: Node, offset: number) => {
+        const range = document.createRange();
+        range.setStart(node, offset);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      };
+      setCaretInNode(alpha.firstChild as Text, 2);
+      const lift = pressCtrlSpace(liveFlow);
+      expect(lift.defaultPrevented).toBe(true);
+      await flushSensor();
+
+      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+
+      // Pickup: the needle at the origin spot (before Alpha).
+      expect(needleLandingOf()).toBe("preview-landing:g:0");
+
+      // The arrows walk EVERY landing position in reading order —
+      // word-by-word through the own text.
+      hostKey(liveFlow, "ArrowRight", "ArrowRight");
+      expect(needleLandingOf()).toBe("preview-landing:s:1:0");
+      hostKey(liveFlow, "ArrowRight", "ArrowRight");
+      expect(needleLandingOf()).toBe("preview-landing:s:1:5");
+      hostKey(liveFlow, "ArrowRight", "ArrowRight");
+      expect(needleLandingOf()).toBe("preview-landing:s:1:21");
+      hostKey(liveFlow, "ArrowRight", "ArrowRight");
+      expect(needleLandingOf()).toBe("preview-landing:s:1:22");
+      hostKey(liveFlow, "ArrowRight", "ArrowRight");
+      // Onto the Beta chip: the needle marks the insertion after it.
+      expect(needleLandingOf()).toBe("preview-landing:g:3");
+      hostKey(liveFlow, "ArrowRight", "ArrowRight");
+      // One more hop: past the chip onto the trailing anchor itself.
+      expect(needleLandingOf()).toBe("preview-landing:g:3");
+
+      // Walk back to the word gap and drop there.
+      hostKey(liveFlow, "ArrowLeft", "ArrowLeft");
+      hostKey(liveFlow, "ArrowLeft", "ArrowLeft");
+      hostKey(liveFlow, "ArrowLeft", "ArrowLeft");
+      hostKey(liveFlow, "ArrowLeft", "ArrowLeft");
+      expect(needleLandingOf()).toBe("preview-landing:s:1:5");
+      const enter = hostKey(liveFlow, "Enter", "Enter");
+      expect(enter.defaultPrevented).toBe(true);
+      await flushSensor();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(screen.getByTestId("document-probe").textContent).toBe(
+        " text Alpha entered_by_user Beta",
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Snippet dropped at position 1 of 2.",
+      );
+      // The caret returns inside the sorted snippet. The drop is a
+      // non-text change: the flow remounts (epoch) — query the live
+      // node.
+      expect(document.activeElement).toBe(
+        screen.getByTestId("preview-segment-flow"),
+      );
+      const sortedAlpha = screen
+        .getAllByTestId("preview-snippet")
+        .find((chip) => chip.textContent === "Alpha") as HTMLElement;
+      const range = window.getSelection()?.getRangeAt(0);
+      expect(range?.startContainer).toBe(sortedAlpha.firstChild as Text);
+      expect(range?.startOffset).toBe(2);
+    });
   });
 });
 

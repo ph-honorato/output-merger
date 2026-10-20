@@ -21,6 +21,12 @@ export function SnippetsProvider({ children }: { children?: ReactNode }) {
     []
   );
 
+  const moveTokenToLanding = useCallback<
+    SnippetsContextValue['moveTokenToLanding']
+  >((fromIndex, landing) => {
+    dispatch({ type: 'MOVE_TOKEN_TO_LANDING', fromIndex, landing });
+  }, []);
+
   const syncDocument = useCallback<SnippetsContextValue['syncDocument']>(
     (tokens) => {
       dispatch({ type: 'SYNC_DOCUMENT', tokens });
@@ -41,10 +47,11 @@ export function SnippetsProvider({ children }: { children?: ReactNode }) {
       editEnabled: state.editEnabled,
       setSourceSnippets,
       moveToken,
+      moveTokenToLanding,
       syncDocument,
       setEditEnabled,
     }),
-    [state, setSourceSnippets, moveToken, syncDocument, setEditEnabled]
+    [state, setSourceSnippets, moveToken, moveTokenToLanding, syncDocument, setEditEnabled]
   );
 
   return (

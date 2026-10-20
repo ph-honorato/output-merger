@@ -73,6 +73,18 @@ export interface LineBreakToken {
 export type PreviewToken = SnippetToken | OwnTextToken | LineBreakToken;
 
 /**
+ * Round 7 (user decision 2026-10-19): a drag landing — every word
+ * boundary of the document is a droppable position. A token-gap
+ * landing inserts the chip right before the token at `tokenIndex`
+ * (=== tokens.length appends); a text-split landing splits the own
+ * text token at `tokenIndex` at `boundaryOffset` and drops the chip
+ * inside, with >=1 space on each side.
+ */
+export type Landing =
+  | { kind: 'token-gap'; tokenIndex: number }
+  | { kind: 'text-split'; tokenIndex: number; boundaryOffset: number };
+
+/**
  * The preview document: a single ordered token array where position
  * is the merge order.
  */
@@ -122,6 +134,18 @@ export interface MoveTokenAction {
   toIndex: number;
 }
 
+export interface MoveTokenToLandingAction {
+  type: 'MOVE_TOKEN_TO_LANDING';
+  fromIndex: number;
+  /**
+   * Round 7 landing: a token-gap (the legacy MOVE_TOKEN semantics,
+   * used for the positions before chips that no text edge covers) or
+   * a text-split (a word boundary inside/beside an own text token —
+   * the token splits around the chip with >=1 space each side)
+   */
+  landing: Landing;
+}
+
 export interface SyncDocumentAction {
   type: 'SYNC_DOCUMENT';
   /**
@@ -139,6 +163,7 @@ export interface SetEditEnabledAction {
 export type SnippetsAction =
   | SetSourceSnippetsAction
   | MoveTokenAction
+  | MoveTokenToLandingAction
   | SyncDocumentAction
   | SetEditEnabledAction;
 
@@ -161,6 +186,12 @@ export interface SnippetsContextValue {
    * with no-op guards; ADR 0004 / ADR 0001 amendment)
    */
   moveToken: (fromIndex: number, toIndex: number) => void;
+  /**
+   * Round 7: moves a snippet token to a drag LANDING — a word
+   * boundary of the document (token-gap or text-split with the
+   * >=1-space-each-side accounting); no-op guards as moveToken
+   */
+  moveTokenToLanding: (fromIndex: number, landing: Landing) => void;
   /**
    * Whole-document sync of a parsed edit (one action per input
    * event; computes "edited" flags and snippet tombstones)

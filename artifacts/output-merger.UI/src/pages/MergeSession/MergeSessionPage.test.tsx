@@ -288,14 +288,23 @@ describe('MergeSessionPage', () => {
     expect(screen.getAllByTestId('preview-area')).toHaveLength(2);
 
     // jsdom computes no layout: give the two segment chips
-    // deterministic rects so the keyboard drag reorders.
+    // deterministic rects so the keyboard drag reorders. Round 7
+    // (Q16): the landing anchors resolve by their data-landing id.
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
       function (this: Element) {
-        const gapSlot = (this as HTMLElement).dataset?.gapSlot;
-        if (gapSlot !== undefined) {
-          const gapX: Record<string, number> = { '0': -4, '1': 110, '2': 230 };
-          const x = gapX[gapSlot] ?? 0;
-          return { left: x, right: x, top: 0, bottom: 24, width: 0, height: 24, x, y: 0 } as DOMRect;
+        const landingId = (this as HTMLElement).dataset?.landing;
+        if (landingId !== undefined) {
+          const landingX: Record<string, number> = {
+            'preview-landing:g:0': -4,
+            'preview-landing:s:1:0': 104,
+            'preview-landing:s:1:1': 110,
+            'preview-landing:g:3': 224,
+          };
+          const x = landingX[landingId] ?? 0;
+          // REAL-BROWSER GEOMETRY (dev-server correction, 2026-10-19):
+          // the landing anchors are zero-footprint spans — a true 0x0
+          // rect at the text baseline (top === bottom).
+          return { left: x, right: x, top: 18, bottom: 18, width: 0, height: 0, x, y: 18 } as DOMRect;
         }
         const rects: Record<string, object> = {
           'beta gamma': { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
@@ -312,11 +321,15 @@ describe('MergeSessionPage', () => {
       });
     };
 
-    // Keyboard-sort the first snippet inside the modal.
+    // Keyboard-sort the first snippet inside the modal. Round 7
+    // (Q16): reaching the second chip takes three hops — the arrows
+    // walk through the separator's edge anchors first.
     const [first] = within(dialog).getAllByTestId('preview-snippet');
     expect(first).toHaveTextContent('beta gamma');
     first.focus();
     await pressKey(first, 'Space');
+    await pressKey(document, 'ArrowRight');
+    await pressKey(document, 'ArrowRight');
     await pressKey(document, 'ArrowRight');
     await pressKey(document, 'Space');
 

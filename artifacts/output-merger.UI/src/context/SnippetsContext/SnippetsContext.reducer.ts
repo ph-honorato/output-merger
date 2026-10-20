@@ -3,9 +3,12 @@ import {
   isSeparatorToken,
   isSnippetToken,
   makeSeparatorToken,
+  normalizeTextTokens,
+  serialize,
   tokensEqual,
 } from '../../utils/previewDocument';
 import type {
+  Landing,
   PreviewToken,
   SetSourceSnippetsAction,
   SnippetsAction,
@@ -129,6 +132,248 @@ function reconcileSourceSnippets(
   return { ...state, tokens, tombstones };
 }
 
+interface ChipExtraction {
+  token: SnippetToken;
+  reduced: PreviewToken[];
+  removedOriginalIndexes: number[];
+  carriedSeparator: PreviewToken | null;
+}
+
+/**
+ * Round-0 extraction, shared by MOVE_TOKEN and the round-7 landing
+ * move: the chip leaves with ONE adjacent " " separator (the
+ * preceding when present, else the following — the same object, id
+ * and identity) and the removals are recorded for landing-index
+ * adjustment.
+ */
+function extractChipWithSeparator(
+  tokens: PreviewToken[],
+  fromIndex: number,
+): ChipExtraction | null {
+  const token = tokens[fromIndex];
+  if (!isSnippetToken(token)) {
+    return null;
+  }
+  const before = fromIndex > 0 ? tokens[fromIndex - 1] : undefined;
+  const after = fromIndex + 1 < tokens.length ? tokens[fromIndex + 1] : undefined;
+  const carriedPreceding = before !== undefined && isSeparatorToken(before);
+  const carriedFollowing =
+    !carriedPreceding && after !== undefined && isSeparatorToken(after);
+  const carriedSeparator: PreviewToken | null = carriedPreceding
+    ? (before ?? null)
+    : carriedFollowing
+      ? (after ?? null)
+      : null;
+
+  const reduced = [...tokens];
+  const removedOriginalIndexes = [fromIndex];
+  if (carriedPreceding) {
+    reduced.splice(fromIndex - 1, 2);
+    removedOriginalIndexes.push(fromIndex - 1);
+  } else if (carriedFollowing) {
+    reduced.splice(fromIndex, 2);
+    removedOriginalIndexes.push(fromIndex + 1);
+  } else {
+    reduced.splice(fromIndex, 1);
+  }
+  return { token, reduced, removedOriginalIndexes, carriedSeparator };
+}
+
+/** The chip's 0-based position among the snippet tokens (-1 absent). */
+const snippetPositionOf = (arr: PreviewToken[], tokenId: string): number => {
+  let seen = 0;
+  for (const candidate of arr) {
+    if (isSnippetToken(candidate)) {
+      if (candidate.tokenId === tokenId) {
+        return seen;
+      }
+      seen += 1;
+    }
+  }
+  return -1;
+};
+
+/** Splits raw text into its trailing/leading whitespace runs. */
+const whitespacePads = (raw: string): { pad: string; core: string } => {
+  const padMatch = /\s*$/.exec(raw);
+  const pad = padMatch ? padMatch[0] : '';
+  return { pad, core: raw.slice(0, raw.length - pad.length) };
+};
+const whitespacePadsReversed = (raw: string): { pad: string; core: string } => {
+  const padMatch = /^\s*/.exec(raw);
+  const pad = padMatch ? padMatch[0] : '';
+  return { pad, core: raw.slice(pad.length) };
+};
+
+/**
+ * Round 7 — MOVE_TOKEN_TO_LANDING, the text-split half (user
+ * decision 2026-10-19: a dragged snippet drops at every word
+ * boundary). The chip leaves with its round-0 carried separator and
+ * lands INSIDE the target text token, splitting it at the boundary:
+ * the boundary's own whitespace runs pad the sides that have them,
+ * the carried separator plants the side that lacks one, and a side
+ * with neither pad nor carried separator gets one planted (the
+ * documented multiset exception — the global >=1-space rule
+ * justifies adding; never-steal holds everywhere). A landing on a
+ * token the carry removed (the chip's own separator) is the chip's
+ * own neighborhood: the move no-ops. Space accounting against the
+ * neighbors: a side needs a space only when it abuts non-whitespace
+ * TEXT content (a chip-adjacent or line-break-adjacent side glues
+ * like today's seams — no invented spaces beyond the pads, the
+ * carried, and the text-abutting plants).
+ */
+function moveTokenToTextSplit(
+  state: SnippetsState,
+  fromIndex: number,
+  landing: { tokenIndex: number; boundaryOffset: number },
+): SnippetsState {
+  const tokens = state.tokens;
+  if (fromIndex < 0 || fromIndex >= tokens.length) {
+    return state;
+  }
+  const target = tokens[landing.tokenIndex];
+  if (
+    landing.tokenIndex < 0 ||
+    landing.tokenIndex >= tokens.length ||
+    !target ||
+    target.kind !== 'text'
+  ) {
+    return state;
+  }
+  if (landing.boundaryOffset < 0 || landing.boundaryOffset > target.text.length) {
+    return state;
+  }
+  const extraction = extractChipWithSeparator(tokens, fromIndex);
+  if (!extraction) {
+    return state;
+  }
+  const { token, reduced, removedOriginalIndexes, carriedSeparator } = extraction;
+  if (removedOriginalIndexes.includes(landing.tokenIndex)) {
+    // The landing token was the chip's own carried separator: its
+    // anchors ceased to exist with the removal — the chip returns to
+    // its neighborhood (inert).
+    return state;
+  }
+  // Own-adjacent spot: the chip is GLUED to the landing text token's
+  // facing edge (its own seam, separator-free) — the chip already
+  // sits exactly at the marked spot, so the drop is inert and must
+  // not even plant the missing seam spaces.
+  if (
+    (landing.tokenIndex === fromIndex - 1 &&
+      landing.boundaryOffset === target.text.length) ||
+    (landing.tokenIndex === fromIndex + 1 && landing.boundaryOffset === 0)
+  ) {
+    return state;
+  }
+  const adjusted =
+    landing.tokenIndex -
+    removedOriginalIndexes.filter((index) => index < landing.tokenIndex).length;
+  const textToken = reduced[adjusted];
+  if (!textToken || textToken.kind !== 'text') {
+    return state;
+  }
+
+  const raw = textToken.text;
+  const left = raw.slice(0, landing.boundaryOffset);
+  const right = raw.slice(landing.boundaryOffset);
+  const { pad: padL, core: coreL } = whitespacePads(left);
+  const { pad: padR, core: coreR } = whitespacePadsReversed(right);
+
+  // A side needs a separating space iff the chip would abut
+  // non-whitespace content on it: the split's own core, or — when
+  // the core is empty — the adjacent token being a text token whose
+  // edge character is not whitespace, or a chip (round 0 plants
+  // between chips too; a line-break or document edge separates by
+  // itself and never triggers a plant).
+  const beforeNeighbor = adjusted > 0 ? reduced[adjusted - 1] : undefined;
+  const beforeAbutsContent =
+    coreL.length > 0 ||
+    (beforeNeighbor !== undefined &&
+      ((beforeNeighbor.kind === 'text' &&
+        !/\s/.test(beforeNeighbor.text.slice(-1))) ||
+        beforeNeighbor.kind === 'snippet'));
+  const afterNeighbor =
+    adjusted + 1 < reduced.length ? reduced[adjusted + 1] : undefined;
+  const afterAbutsContent =
+    coreR.length > 0 ||
+    (afterNeighbor !== undefined &&
+      ((afterNeighbor.kind === 'text' &&
+        !/\s/.test(afterNeighbor.text.slice(0, 1))) ||
+        afterNeighbor.kind === 'snippet'));
+
+  let beforePad = padL;
+  let afterPad = padR;
+  // The carried separator always lands (round 0 never drops it): a
+  // needing side first, else the before side keeps it (a multiset-
+  // preserving append for exotic mid-run offsets).
+  if (carriedSeparator !== null && carriedSeparator.kind === 'text') {
+    if (beforePad === '' && beforeAbutsContent) {
+      beforePad = carriedSeparator.text;
+    } else if (afterPad === '' && afterAbutsContent) {
+      afterPad = carriedSeparator.text;
+    } else {
+      beforePad += carriedSeparator.text;
+    }
+  }
+  // Round 7's documented multiset exception: a side abutting content
+  // with no pad and no carried separator gets one planted — the
+  // global >=1-space rule justifies adding; never-steal holds.
+  if (beforePad === '' && beforeAbutsContent) {
+    beforePad = ' ';
+  }
+  if (afterPad === '' && afterAbutsContent) {
+    afterPad = ' ';
+  }
+
+  // Minted split ids: unique per document state (a chip may move into
+  // text splits repeatedly; the counter scans the surviving
+  // `${tokenId}:split-`-prefixed ids so no two tokens ever share an
+  // id — the React keys and the EDIT-03 uniqueness stay safe).
+  const splitPrefix = `${token.tokenId}:split-`;
+  let splitCounter = 0;
+  for (const candidate of reduced) {
+    if (candidate.kind === 'text' && candidate.tokenId.startsWith(splitPrefix)) {
+      const suffix = Number(candidate.tokenId.slice(splitPrefix.length));
+      if (Number.isFinite(suffix) && suffix > splitCounter) {
+        splitCounter = suffix;
+      }
+    }
+  }
+  const mintId = (label: string) => `${splitPrefix}${(splitCounter += 1)}-${label}`;
+  const group: PreviewToken[] = [];
+  if (coreL.length > 0) {
+    group.push({ kind: 'text', tokenId: mintId('left'), text: coreL });
+  }
+  if (beforePad.length > 0) {
+    group.push({ kind: 'text', tokenId: mintId('pad-left'), text: beforePad });
+  }
+  group.push(token);
+  if (afterPad.length > 0) {
+    group.push({ kind: 'text', tokenId: mintId('pad-right'), text: afterPad });
+  }
+  if (coreR.length > 0) {
+    group.push({ kind: 'text', tokenId: mintId('right'), text: coreR });
+  }
+  reduced.splice(adjusted, 1, ...group);
+
+  // Inert: the chip's content arrangement did not change (it only
+  // crossed its own separator material, or landed back on its own
+  // spot) — the serialization and the snippet order are both
+  // unchanged, so the state stays reference-identical. The snippet
+  // order ALONE is not the test: a real round-7 move crosses own
+  // text with the chip order intact ("A B text..."), and the
+  // serialization ALONE is not either — a plant at a glued seam
+  // changes it without a real move.
+  if (
+    serialize(reduced) === serialize(tokens) &&
+    snippetPositionOf(tokens, token.tokenId) ===
+      snippetPositionOf(reduced, token.tokenId)
+  ) {
+    return state;
+  }
+  return { ...state, tokens: reduced };
+}
+
 /**
  * MOVE_TOKEN — the Task 1 reorder migrated onto the document
  * (ADR 0004 / ADR 0001 amendment): a token-index move with NO
@@ -162,36 +407,11 @@ function moveTokenInDocument(
   if (fromIndex < 0 || fromIndex >= tokens.length || toIndex < 0 || toIndex > tokens.length) {
     return state;
   }
-  const token = tokens[fromIndex];
-  if (!isSnippetToken(token)) {
+  const extraction = extractChipWithSeparator(tokens, fromIndex);
+  if (!extraction) {
     return state;
   }
-
-  const before = fromIndex > 0 ? tokens[fromIndex - 1] : undefined;
-  const after = fromIndex + 1 < tokens.length ? tokens[fromIndex + 1] : undefined;
-  const carriedPreceding = before !== undefined && isSeparatorToken(before);
-  const carriedFollowing =
-    !carriedPreceding && after !== undefined && isSeparatorToken(after);
-  // The actual adjacent separator token that travels with the chip:
-  // the very same object (and id) is re-inserted at the landing
-  // point — nothing is minted, nothing is dropped.
-  const carriedSeparator: PreviewToken | null = carriedPreceding
-    ? (before ?? null)
-    : carriedFollowing
-      ? (after ?? null)
-      : null;
-
-  const reduced = [...tokens];
-  const removedOriginalIndexes = [fromIndex];
-  if (carriedPreceding) {
-    reduced.splice(fromIndex - 1, 2);
-    removedOriginalIndexes.push(fromIndex - 1);
-  } else if (carriedFollowing) {
-    reduced.splice(fromIndex, 2);
-    removedOriginalIndexes.push(fromIndex + 1);
-  } else {
-    reduced.splice(fromIndex, 1);
-  }
+  const { token, reduced, removedOriginalIndexes, carriedSeparator } = extraction;
 
   // The insertion point shifts by every removal that happened
   // before it (the reducer owns what computeGapMoveIndex used to
@@ -219,19 +439,10 @@ function moveTokenInDocument(
   // Inert move: the chip's position among the snippet tokens did
   // not change (its own gap, a drop back onto itself) — the state
   // stays reference-identical.
-  const snippetPositionOf = (arr: PreviewToken[]): number => {
-    let seen = 0;
-    for (const candidate of arr) {
-      if (isSnippetToken(candidate)) {
-        if (candidate.tokenId === token.tokenId) {
-          return seen;
-        }
-        seen += 1;
-      }
-    }
-    return -1;
-  };
-  if (snippetPositionOf(tokens) === snippetPositionOf(reduced)) {
+  if (
+    snippetPositionOf(tokens, token.tokenId) ===
+    snippetPositionOf(reduced, token.tokenId)
+  ) {
     return state;
   }
 
@@ -296,7 +507,7 @@ function syncParsedDocument(
   return { ...state, tokens, tombstones };
 }
 
-export const snippetsReducer = (
+const snippetsReducerTransition = (
   state: SnippetsState,
   action: SnippetsAction,
 ): SnippetsState => {
@@ -306,6 +517,13 @@ export const snippetsReducer = (
     }
     case 'MOVE_TOKEN': {
       return moveTokenInDocument(state, action.fromIndex, action.toIndex);
+    }
+    case 'MOVE_TOKEN_TO_LANDING': {
+      const { fromIndex, landing }: { fromIndex: number; landing: Landing } = action;
+      if (landing.kind === 'token-gap') {
+        return moveTokenInDocument(state, fromIndex, landing.tokenIndex);
+      }
+      return moveTokenToTextSplit(state, fromIndex, landing);
     }
     case 'SYNC_DOCUMENT': {
       return syncParsedDocument(state, action.tokens);
@@ -318,4 +536,21 @@ export const snippetsReducer = (
     default:
       return state;
   }
+};
+
+export const snippetsReducer = (
+  state: SnippetsState,
+  action: SnippetsAction,
+): SnippetsState => {
+  const next = snippetsReducerTransition(state, action);
+  if (next === state) {
+    return state;
+  }
+  // Round 7 tester cycle 1 (finding 1): eager normalization — the
+  // model's shape is canonical (one own-text token per contiguous
+  // run), so the model and every parse agree and no behavior can
+  // depend on merge history. Serialization never changes; the
+  // reference-identity guard keeps no-op transitions churn-free.
+  const tokens = normalizeTextTokens(next.tokens);
+  return tokens === next.tokens ? next : { ...next, tokens };
 };

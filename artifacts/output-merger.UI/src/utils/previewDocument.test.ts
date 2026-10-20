@@ -1,14 +1,21 @@
 import type { PreviewToken, SnippetToken } from '../context/SnippetsContext';
 import {
+  buildLandingId,
   buildSnippetTokenId,
+  enumerateLandingAnchors,
   isSeparatorToken,
   isSnippetToken,
+  landingAfterToken,
+  landingBeforeToken,
   makeSeparatorToken,
+  normalizeTextTokens,
+  parseLandingId,
   parsePreviewDom,
   serialize,
   snippetSlotToTokenIndex,
   tokensEqual,
   tokensEqualIgnoringEdited,
+  wordBoundaryOffsets,
 } from './previewDocument';
 
 const snippetToken = (
@@ -237,11 +244,102 @@ describe('parsePreviewDom', () => {
 
     const tokens = parsePreviewDom(root, [snippetToken('text-1:a1', 'Alpha')]);
 
+    // Round 7 (Q16): adjacent text nodes MERGE across transparent
+    // boundaries into one own-text token — the landing anchors render
+    // INSIDE text tokens (splitting them into multiple DOM text
+    // nodes), so without merging every render/parse cycle would
+    // fragment the model's text tokens. The wrapper still flattens
+    // and the chip still lifts out.
     expect(
       tokens.map((token) =>
         token.kind === 'line-break' ? '\n' : token.kind === 'snippet' ? token.text : token.text,
       ),
-    ).toEqual(['pre ', 'Alpha', ' post', ' end']);
+    ).toEqual(['pre ', 'Alpha', ' post end']);
+  });
+
+  it('merges text pieces split by landing anchors into one token (round 7)', () => {
+    // The round-7 word anchors sit INSIDE a text token, splitting it
+    // into DOM text pieces; the parse merges them back so the model
+    // keeps one token per text run (WYSIWYG and the anchor indexes
+    // stay stable).
+    const gap = document.createElement('span');
+    gap.setAttribute('data-landing', 'preview-landing:s:0:3');
+    const root = buildFlow([
+      textNode('one'),
+      gap,
+      textNode(' two'),
+      textNode(' three'),
+    ]);
+
+    const tokens = parsePreviewDom(root);
+
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]).toEqual(
+      expect.objectContaining({ kind: 'text', text: 'one two three' })
+    );
+  });
+
+  it('parse(render(model)) matches the normalized shape for adjacent-text models (round 7 cycle 1)', () => {
+    // The Tester's finding 1: the parser merge is
+    // serialization-preserving, not shape-preserving — adjacent
+    // DISTINCT text tokens collapsed after one render/parse cycle.
+    // The reducer now normalizes eagerly, so the normalizer's shape
+    // and every parse's shape must agree: one own-text token per
+    // contiguous run, chips and line breaks as boundaries.
+    const adjacent = [
+      snippetToken('text-1:a1', 'A'),
+      ownText('t1', ' '),
+      ownText('t2', 'hello'),
+      ownText('t3', ' '),
+      snippetToken('text-2:b1', 'B'),
+    ];
+    const normalized = normalizeTextTokens(adjacent);
+    expect(
+      normalized.map((token) => (token.kind === 'text' ? token.text : token.kind)),
+    ).toEqual(['snippet', ' hello ', 'snippet']);
+
+    // parse∘render of the same visible document yields the same
+    // shape (kind + boundaries; parse ids are regenerated).
+    const root = buildFlow([
+      chip('text-1:a1', 'A'),
+      textNode(' hello '),
+      chip('text-2:b1', 'B'),
+    ]);
+    const parsed = parsePreviewDom(root);
+    expect(
+      parsed.map((token) => (token.kind === 'text' ? token.text : token.kind)),
+    ).toEqual(
+      normalized.map((token) => (token.kind === 'text' ? token.text : token.kind))
+    );
+  });
+
+  it('merges adjacent text runs keeping the first id, never across chips or line breaks', () => {
+    const a = ownText('t1', 'x ');
+    const b = ownText('t2', 'y');
+    const c = ownText('t3', ' z');
+    const chipA = snippetToken('text-1:a1', 'A');
+    const br = lineBreak('br1');
+    const merged = normalizeTextTokens([chipA, a, b, br, c]);
+    expect(merged).toHaveLength(4);
+    expect(merged[1]).toEqual({ kind: 'text', tokenId: 't1', text: 'x y' });
+    // The line break blocks the merge; the trailing run stands alone.
+    expect(merged[2]).toEqual(br);
+    expect(merged[3]).toEqual(c);
+    // Untouched tokens keep their object references.
+    expect(merged[0]).toBe(chipA);
+    expect(merged[2]).toBe(br);
+    expect(merged[3]).toBe(c);
+  });
+
+  it('returns the SAME reference for already-normalized arrays (the no-op guard)', () => {
+    const tokens = [
+      snippetToken('text-1:a1', 'A'),
+      ownText('t1', ' one two '),
+      lineBreak('br1'),
+      snippetToken('text-2:b1', 'B'),
+    ];
+    expect(normalizeTextTokens(tokens)).toBe(tokens);
+    expect(normalizeTextTokens([])).toEqual([]);
   });
 
   it('treats zero-footprint anchors (gap spans, needle) as transparent', () => {
@@ -351,5 +449,191 @@ describe('parsePreviewDom', () => {
     const tokens = parsePreviewDom(root);
     const ids = tokens.map((token) => token.tokenId);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round 7 (user decision 2026-10-19): "a dragged snippet must be
+// droppable at every word boundary of the document" — the landing
+// model's pure helpers.
+// ---------------------------------------------------------------------------
+
+describe('landing ids', () => {
+  it('round-trips token-gap and text-split landings', () => {
+    expect(buildLandingId({ kind: 'token-gap', tokenIndex: 0 })).toBe(
+      'preview-landing:g:0'
+    );
+    expect(buildLandingId({ kind: 'token-gap', tokenIndex: 5 })).toBe(
+      'preview-landing:g:5'
+    );
+    expect(
+      buildLandingId({ kind: 'text-split', tokenIndex: 2, boundaryOffset: 5 })
+    ).toBe('preview-landing:s:2:5');
+
+    expect(parseLandingId('preview-landing:g:0')).toEqual({
+      kind: 'token-gap',
+      tokenIndex: 0,
+    });
+    expect(parseLandingId('preview-landing:s:2:5')).toEqual({
+      kind: 'text-split',
+      tokenIndex: 2,
+      boundaryOffset: 5,
+    });
+  });
+
+  it('rejects foreign ids (chips, corrupt strings)', () => {
+    expect(parseLandingId('text-1:a1')).toBeNull();
+    expect(parseLandingId('preview-gap:0')).toBeNull();
+    expect(parseLandingId('preview-landing:x')).toBeNull();
+    expect(parseLandingId('preview-landing:s:x:5')).toBeNull();
+    expect(parseLandingId('')).toBeNull();
+  });
+});
+
+describe('wordBoundaryOffsets', () => {
+  it('anchors at the start of each whitespace run between words', () => {
+    expect(wordBoundaryOffsets('text entered_by_user')).toEqual([4]);
+    expect(wordBoundaryOffsets('a b c')).toEqual([1, 3]);
+    expect(wordBoundaryOffsets('a  double  gap')).toEqual([1, 9]);
+  });
+
+  it('contributes no boundaries for single words and pure runs', () => {
+    expect(wordBoundaryOffsets('word')).toEqual([]);
+    expect(wordBoundaryOffsets('  ')).toEqual([]);
+    expect(wordBoundaryOffsets('')).toEqual([]);
+  });
+});
+
+describe('enumerateLandingAnchors', () => {
+  // The user's example verbatim (2026-10-19):
+  // |snippet 1| text entered_by_user |snippet 2|
+  // The five marked positions are all droppable — plus the word
+  // anchors between the text's words and the two separator-edges the
+  // user's coarse diagram folds into the spot after each chip.
+  const example = (): PreviewToken[] => [
+    snippetToken('s1:alpha', 'Alpha'),
+    ownText('t1', ' '),
+    ownText('t2', 'text entered_by_user'),
+    ownText('t3', ' '),
+    snippetToken('s2:beta', 'Beta'),
+  ];
+
+  const landingsOf = (tokens: PreviewToken[]): string[] =>
+    enumerateLandingAnchors(tokens).map((anchor) =>
+      JSON.stringify(anchor.landing)
+    );
+
+  it('marks the five user positions and the word boundary', () => {
+    const ids = landingsOf(example());
+    expect(ids).toContain(JSON.stringify({ kind: 'token-gap', tokenIndex: 0 }));
+    expect(ids).toContain(
+      JSON.stringify({
+        kind: 'text-split',
+        tokenIndex: 2,
+        boundaryOffset: 4,
+      })
+    );
+    expect(ids).toContain(
+      JSON.stringify({ kind: 'token-gap', tokenIndex: 5 })
+    );
+  });
+
+  it('dedupes: a text-adjacent chip keeps no before-anchor (the text edge covers it)', () => {
+    const anchors = enumerateLandingAnchors(example());
+    // Beta (token 4) is preceded by the " " text token: no chip
+    // before-anchor at index 4 — the separator's trailing edge
+    // (s:3:1) IS the before-chip position.
+    expect(
+      anchors.find((a) => a.landing.kind === 'token-gap' && a.landing.tokenIndex === 4)
+    ).toBeUndefined();
+    expect(anchors.find((a) => a.id === 'preview-landing:s:3:1')).toBeDefined();
+  });
+
+  it('dedupes: adjacent text tokens share one anchor (the predecessor keeps the spot)', () => {
+    // [chip, " ", "text"] — the " " and "text" are adjacent: the
+    // text's leading edge is omitted, the separator's trailing edge
+    // covers the spot.
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:alpha', 'Alpha'),
+      ownText('t1', ' '),
+      ownText('t2', 'text'),
+    ];
+    const ids = landingsOf(tokens);
+    expect(ids).not.toContain(
+      JSON.stringify({ kind: 'text-split', tokenIndex: 2, boundaryOffset: 0 })
+    );
+    expect(ids).toContain(
+      JSON.stringify({ kind: 'text-split', tokenIndex: 1, boundaryOffset: 1 })
+    );
+  });
+
+  it('omits the last text token trailing edge (the trailing anchor covers the document end)', () => {
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:alpha', 'Alpha'),
+      ownText('t1', ' tail'),
+    ];
+    const ids = landingsOf(tokens);
+    expect(ids).not.toContain(
+      JSON.stringify({ kind: 'text-split', tokenIndex: 1, boundaryOffset: 5 })
+    );
+    expect(ids).toContain(JSON.stringify({ kind: 'token-gap', tokenIndex: 2 }));
+  });
+
+  it('keeps chip before-anchors at the doc start, after chips, and after line breaks', () => {
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:alpha', 'Alpha'),
+      lineBreak('br1'),
+      snippetToken('s2:beta', 'Beta'),
+    ];
+    const ids = landingsOf(tokens);
+    expect(ids).toContain(JSON.stringify({ kind: 'token-gap', tokenIndex: 0 }));
+    expect(ids).toContain(JSON.stringify({ kind: 'token-gap', tokenIndex: 2 }));
+  });
+
+  it('contributes no anchors for line breaks, and one trailing anchor for an all-chip doc', () => {
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:alpha', 'Alpha'),
+      ownText('t1', ' '),
+      snippetToken('s2:beta', 'Beta'),
+    ];
+    const anchors = enumerateLandingAnchors(tokens);
+    expect(anchors.map((a) => a.id)).toEqual([
+      'preview-landing:g:0',
+      'preview-landing:s:1:0',
+      'preview-landing:s:1:1',
+      'preview-landing:g:3',
+    ]);
+  });
+});
+
+describe('chip-over insertion mapping', () => {
+  const tokens = (): PreviewToken[] => [
+    snippetToken('s1:alpha', 'Alpha'),
+    ownText('t1', ' '),
+    snippetToken('s2:beta', 'Beta'),
+  ];
+
+  it('maps "after a chip" to the next text token leading edge, else the token gap', () => {
+    expect(landingAfterToken(tokens(), 0)).toEqual({
+      kind: 'text-split',
+      tokenIndex: 1,
+      boundaryOffset: 0,
+    });
+    expect(landingAfterToken(tokens(), 2)).toEqual({
+      kind: 'token-gap',
+      tokenIndex: 3,
+    });
+  });
+
+  it('maps "before a chip" to the preceding text token trailing edge, else the token gap', () => {
+    expect(landingBeforeToken(tokens(), 2)).toEqual({
+      kind: 'text-split',
+      tokenIndex: 1,
+      boundaryOffset: 1,
+    });
+    expect(landingBeforeToken(tokens(), 0)).toEqual({
+      kind: 'token-gap',
+      tokenIndex: 0,
+    });
   });
 });
