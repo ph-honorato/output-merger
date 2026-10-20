@@ -8,15 +8,13 @@ import type { PreviewModalProps } from "./PreviewModal.types";
 import * as S from "./PreviewModal.styles";
 
 /**
- * Self-contained bigger view of the same preview (roadmap Feature 3
- * Task 2): renders the toolbar trigger (icon-only, hidden below md,
+ * Self-contained bigger view of the same preview: renders the toolbar trigger (icon-only, hidden below md,
  * disabled while the preview is empty) and, when open, an MUI Dialog
  * that renders the SAME unmodified PreviewArea from SnippetsContext
- * (zero duplicated snippet state — ADR 0003) plus the existing
+ * (zero duplicated snippet state) plus the existing
  * CopyMergedTextButton, a close button, and the edit-text toggle in a
- * bare right-side tools rail (user decision 2026-10-17: rail order
- * copy → close → toggle, supersedes the F2 order "copy → toggle →
- * close"). No visible title: a visually hidden DialogTitle names the
+ * bare right-side tools rail (rail order copy → close → toggle).
+ * No visible title: a visually hidden DialogTitle names the
  * dialog for assistive tech.
  */
 function PreviewModal(props: PreviewModalProps) {

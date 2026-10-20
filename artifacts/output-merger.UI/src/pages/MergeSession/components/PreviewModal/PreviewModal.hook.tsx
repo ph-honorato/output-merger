@@ -16,7 +16,7 @@ import { serialize } from '../../../../utils/previewDocument';
 export function usePreviewModal() {
   const { t } = useTranslation();
   const theme = useTheme();
-  // User decision (2026-10-15): the trigger is hidden below md, so
+  // the trigger is hidden below md, so
   // the closed modal is unreachable on mobile; an open dialog
   // survives a viewport shrink by switching to fullScreen.
   const isBelowMd = useMediaQuery(theme.breakpoints.down('md'));
@@ -79,7 +79,7 @@ export function usePreviewModal() {
     t,
     isBelowMd,
     // Gating matrix: edit ON → the trigger is always enabled (the
-    // empty document is editable, F3); edit OFF → enabled iff the
+    // empty document is editable); edit OFF → enabled iff the
     // document serializes to something (today's behavior).
     canOpen: editEnabled || serialize(previewDocument).length > 0,
     open,

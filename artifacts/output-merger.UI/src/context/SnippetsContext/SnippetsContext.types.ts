@@ -4,7 +4,7 @@ import type { Snippet } from '@components';
  * A snippet lifted into the preview document: the source snippet's
  * identity and color plus the text the document currently holds for
  * it (which may include text the user typed inside the chip — the
- * in-snippet integration, deviation b).
+ * in-snippet integration instead of splitting).
  */
 export interface SnippetToken {
   kind: 'snippet';
@@ -68,12 +68,12 @@ export interface LineBreakToken {
 
 /**
  * One token of the preview document. Array position IS the merge
- * order — there is no separate order integer (ADR 0004).
+ * order — there is no separate order integer.
  */
 export type PreviewToken = SnippetToken | OwnTextToken | LineBreakToken;
 
 /**
- * Round 7 (user decision 2026-10-19): a drag landing — every word
+ * a drag landing — every word
  * boundary of the document is a droppable position. A token-gap
  * landing inserts the chip right before the token at `tokenIndex`
  * (=== tokens.length appends); a text-split landing splits the own
@@ -138,7 +138,7 @@ export interface MoveTokenToLandingAction {
   type: 'MOVE_TOKEN_TO_LANDING';
   fromIndex: number;
   /**
-   * Round 7 landing: a token-gap (the legacy MOVE_TOKEN semantics,
+   * A drag landing: a token-gap (the MOVE_TOKEN semantics,
    * used for the positions before chips that no text edge covers) or
    * a text-split (a word boundary inside/beside an own text token —
    * the token splits around the chip with >=1 space each side)
@@ -178,16 +178,16 @@ export interface SnippetsContextValue {
   editEnabled: boolean;
   /**
    * Replaces the snippets recorded for one source (diff-by-id
-   * reconciliation over the snippet tokens in the document — ADR 0001)
+   * reconciliation over the snippet tokens in the document)
    */
   setSourceSnippets: (sourceId: string, snippets: Snippet[]) => void;
   /**
    * Moves a snippet token within the document (token-index splice
-   * with no-op guards; ADR 0004 / ADR 0001 amendment)
+   * with no-op guards)
    */
   moveToken: (fromIndex: number, toIndex: number) => void;
   /**
-   * Round 7: moves a snippet token to a drag LANDING — a word
+   * moves a snippet token to a drag LANDING — a word
    * boundary of the document (token-gap or text-split with the
    * >=1-space-each-side accounting); no-op guards as moveToken
    */

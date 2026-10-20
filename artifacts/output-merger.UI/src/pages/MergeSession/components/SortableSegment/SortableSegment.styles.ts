@@ -8,7 +8,7 @@ type StyledTheme = DefaultTheme & Theme;
 interface SegmentChipProps {
   // Snippet color used for the chip tint and its hover deepening
   $color?: string;
-  // Round 6: while true (edit mode ON) the chip is a plain span of
+  // while true (edit mode ON) the chip is a plain span of
   // the editor — text cursor, text selection, no drag affordances.
   $editing?: boolean;
 }

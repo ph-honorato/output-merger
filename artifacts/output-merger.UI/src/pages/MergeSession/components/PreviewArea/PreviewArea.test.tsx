@@ -182,7 +182,7 @@ const LANDING_X: Record<string, number> = {
 // rects so dnd-kit's rect-based collision detection works in tests.
 // Landing anchors resolve by their data-landing id to the
 // insertion-point x; everything else falls back to the
-// textContent-keyed chip rects. Per-suite overrides (round 7's
+// textContent-keyed chip rects. Per-suite overrides (the
 // word-document layouts push the trailing chips right of the own
 // text) merge over the defaults.
 const installSegmentRects = (
@@ -197,7 +197,7 @@ const installSegmentRects = (
       const landingId = (this as HTMLElement).dataset?.landing;
       if (landingId !== undefined) {
         const x = overrides.landings?.[landingId] ?? LANDING_X[landingId] ?? 0;
-        // REAL-BROWSER GEOMETRY (dev-server correction, 2026-10-19):
+        // REAL-BROWSER GEOMETRY:
         // the landing anchors are zero-footprint spans (`width: 0;
         // height: 0`) — a real browser returns a TRUE 0x0 rect with
         // top === bottom at the text baseline, NOT a 24px-tall box.
@@ -554,7 +554,7 @@ describe("PreviewArea keyboard sorting", () => {
     expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
     expect(alpha).toHaveStyle({ opacity: "0.4" });
 
-    // Round 7 (Q16): the arrows step through EVERY landing position —
+    // the arrows step through EVERY landing position —
     // from Alpha: the separator's two edge anchors, then the Beta
     // chip itself (the drop target of the old one-arrow test).
     await pressKey(document, "ArrowRight");
@@ -617,7 +617,7 @@ describe("PreviewArea keyboard sorting", () => {
       "Picked up snippet 1 of 3.",
     );
 
-    // Round 7 (Q16): stepping onto the Beta chip takes three hops —
+    // stepping onto the Beta chip takes three hops —
     // the arrows walk through the separator's edge anchors first.
     await pressKey(document, "ArrowRight");
     await pressKey(document, "ArrowRight");
@@ -824,7 +824,7 @@ describe("PreviewArea pointer sorting", () => {
 });
 
 describe("PreviewArea drop indicator", () => {
-  // ---- pure landing helpers (round 7) -------------------------------------
+  // ---- pure landing helpers -------------------------------------
 
   it("compares landings structurally for the needle match", () => {
     expect(
@@ -925,7 +925,7 @@ describe("PreviewArea drop indicator", () => {
 
   // ---- resources / empty state -------------------------------------------
 
-  it("ships zero new i18n keys: the sorting copy stays exactly the five Task 1 keys", () => {
+  it("ships zero new i18n keys: the sorting copy stays exactly the five sorting keys", () => {
     const sortingKeys = (resource: object) =>
       Object.keys(resource)
         .filter((key) =>
@@ -983,7 +983,7 @@ describe("PreviewArea drop indicator", () => {
       // start).
       expect(needleLanding()).toBe("preview-landing:g:0");
 
-      // Round 7: the arrows walk EVERY landing position in reading
+      // the arrows walk EVERY landing position in reading
       // order — the separator's two edge anchors, then the Beta chip.
       await pressKey(document, "ArrowRight");
       expect(needleLanding()).toBe("preview-landing:s:1:0");
@@ -1026,7 +1026,7 @@ describe("PreviewArea drop indicator", () => {
         ].join(":");
 
       // Keyboard: Alpha picked up, moved over Beta → after Beta, before
-      // Gamma. Round 7 (Q16): reaching the Beta chip takes three hops —
+      // Gamma. reaching the Beta chip takes three hops —
       // the arrows walk through the separator's edge anchors first.
       alpha.focus();
       await pressKey(alpha, "Space");
@@ -1290,7 +1290,7 @@ describe("PreviewArea drop indicator", () => {
         needle.compareDocumentPosition(alpha) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      // The needle complements the Task 1 feedback: the overlay chip
+      // The needle complements the drag feedback: the overlay chip
       // still renders and the origin still dims.
       expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
       expect(alpha).toHaveStyle({ opacity: "0.4" });
@@ -1693,7 +1693,7 @@ describe("PreviewArea drop indicator", () => {
     ).toEqual(["text-1:a1", "text-2:b1", "text-1:a2"]);
 
     // Drag end clears the needle together with the overlay state and
-    // keeps the Task 1 discard path (order unchanged).
+    // keeps the discard path (order unchanged).
     act(() => {
       result.current.handleDragEnd({
         active: { id: "text-1:a1" },
@@ -1709,7 +1709,7 @@ describe("PreviewArea drop indicator", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Editable preview text (Feature 3 Task 3): the editable surface, the
+// Editable preview text: the editable surface, the
 // gating matrix, editing workflows, and the click-vs-drag contract on
 // the editable surface. Typing is simulated the way jsdom allows
 // (direct DOM mutation + a dispatched input event) — the parser,
@@ -1775,7 +1775,7 @@ describe("PreviewArea editable surface", () => {
     );
     // The implicit textbox role comes from contentEditable itself.
     expect(flow.getAttribute("role")).toBeNull();
-    // Round 6 (user decision 2026-10-18): while editing, chips are
+    // while editing, chips are
     // PLAIN SPANS of the editor — no focus/a11y attributes, no tab
     // stop, no button role (the Ctrl+Space-from-caret entry replaces
     // the focused-chip pickup; the keyboard activator listener stays
@@ -1790,11 +1790,11 @@ describe("PreviewArea editable surface", () => {
     expect(chip).toHaveStyle({ cursor: "text" });
     expect(chip).toHaveStyle({ userSelect: "text" });
     expect(chip).toHaveStyle({ touchAction: "auto" });
-    // Round-6 micro-fix (user decision 2026-10-18): the snippet
+    // micro-fix: the snippet
     // highlight colors are NEVER removed while editing — hover keeps
     // the BASE 0.3 tint (only the deepening is off), and the base
-    // rule is unchanged. The round-6 expression's false branch had
-    // compiled hover to transparent, stripping the tint.
+    // rule is unchanged (the :hover rule must never compile to
+    // transparent, which would strip the tint).
     const css = Array.from(document.querySelectorAll("style"))
       .map((style) => style.textContent)
       .join("");
@@ -1846,7 +1846,7 @@ describe("PreviewArea editable surface", () => {
     });
     // The UA's default focus outline (a black box around the flow on
     // click) is removed for the editing host only — the caret is its
-    // own focus indicator (user decision 2026-10-17).
+    // own focus indicator.
     expect(flow).toHaveStyle({
       outlineStyle: "none",
     });
@@ -1898,7 +1898,7 @@ describe("PreviewArea gating matrix (edit OFF/ON × empty/non-empty)", () => {
       editable: false,
     },
     {
-      name: "edit ON + empty renders the editable root (F3)",
+      name: "edit ON + empty renders the editable root",
       edit: true,
       updates: [],
       emptyState: false,
@@ -1981,7 +1981,7 @@ describe("PreviewArea editing workflows", () => {
     );
   });
 
-  it("types inside a snippet without splitting it: the text integrates into the token (deviation b)", () => {
+  it("types inside a snippet without splitting it: the text integrates into the token", () => {
     renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
     enableEditing();
     const flow = screen.getByTestId("preview-segment-flow");
@@ -2031,7 +2031,7 @@ describe("PreviewArea editing workflows", () => {
     expect(flow.textContent).toContain("\n");
     expect(screen.getByTestId("document-probe").textContent).toBe("Alpha\n");
 
-    // The invisible-line fix (user report 2026-10-17): a trailing
+    // The invisible-line fix: a trailing
     // "\n" renders no empty last line in pre-wrap, so the handler
     // plants exactly one bogus <br> line anchor right after the
     // newline (Chrome's own contentEditable technique) and leaves the
@@ -2172,7 +2172,7 @@ describe("PreviewArea editing workflows", () => {
   });
 
   // -----------------------------------------------------------------
-  // "A line break never enters a snippet" (user decision 2026-10-17):
+  // "A line break never enters a snippet":
   // clicking right at the end of a snippet's text places the caret
   // INSIDE the chip span; Enter must plant the "\n" OUTSIDE the chip
   // so the next line's typing is own text, never snippet content.
@@ -2330,9 +2330,9 @@ describe("PreviewArea editing workflows", () => {
   });
 
   // -----------------------------------------------------------------
-  // "A line break never enters a snippet" — the paste extension (user
-  // decision 2026-10-17, round 3): pasted text integrates into the
-  // snippet only up to its first newline; the newline and everything
+  // "A line break never enters a snippet" — the paste extension:
+  // pasted text integrates into the snippet only up to its first
+  // newline; the newline and everything
   // after it land outside the chip. Single-line pastes behave exactly
   // like typed characters (full integration).
   // -----------------------------------------------------------------
@@ -2389,7 +2389,7 @@ describe("PreviewArea editing workflows", () => {
     pasteIntoFlow(flow, "\nnext");
 
     // Empty prefix: nothing integrates — the whole paste lands after
-    // the chip, exactly like the round-2 Enter escape.
+    // the chip, exactly like the Enter escape.
     expect(chip.textContent).toBe("Alpha");
     expect(screen.getByTestId("edited-probe").textContent).toBe("false");
     expect((chip.nextSibling as Text).data).toBe("\nnext");
@@ -2482,14 +2482,14 @@ describe("PreviewArea editing workflows", () => {
     pasteIntoFlow(flow, "x\ny");
 
     // An order-preserving escape is impossible without splitting the
-    // chip (the rejected deviation b): the paste embeds entirely.
+    // chip (the rejected chip split): the paste embeds entirely.
     expect(chip.textContent).toBe("Alx\nypha");
     expect(screen.getByTestId("document-probe").textContent).toBe(
       "Alx\nypha",
     );
   });
 
-  it("plants the bogus <br> when an at-end split paste leaves the tail ending the block with a newline (round-1 rule through the new path)", () => {
+  it("plants the bogus <br> when an at-end split paste leaves the tail ending the block with a newline (the trailing-anchor rule through the new path)", () => {
     renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
     enableEditing();
     const flow = screen.getByTestId("preview-segment-flow");
@@ -2514,7 +2514,7 @@ describe("PreviewArea editing workflows", () => {
   });
 
   // -----------------------------------------------------------------
-  // Round 4 (user decision 2026-10-17): "we always have at least one
+  // "we always have at least one
   // white space between snippets and texts" — typing auto-separation
   // (Rule 1) and gap collapse on caret exit (Rule 2).
   // -----------------------------------------------------------------
@@ -2595,7 +2595,7 @@ describe("PreviewArea editing workflows", () => {
       (node) => node.nodeType === Node.TEXT_NODE,
     ) as Text;
 
-  describe("chip-territory redirect (round 5, user decision 2026-10-18)", () => {
+  describe("chip-territory redirect", () => {
     it("redirects text typed at the gap's LEFT edge into the left snippet (append, caret inside, edited)", () => {
       renderWithProviders(seedTwoChips());
       enableEditing();
@@ -2670,7 +2670,7 @@ describe("PreviewArea editing workflows", () => {
       );
     });
 
-    it("keeps the round-4 seam behavior: typing between GLUED snippets plants spaces on both sides (agent default)", () => {
+    it("keeps the seam behavior: typing between GLUED snippets plants spaces on both sides", () => {
       renderWithProviders(seedTwoChips());
       enableEditing();
       const flow = screen.getByTestId("preview-segment-flow");
@@ -2940,7 +2940,7 @@ describe("PreviewArea editing workflows", () => {
       expect(range?.startContainer).toBe(typed);
       expect(range?.startOffset).toBe(1);
       expect((typed.previousSibling as Text).data).toBe(" ");
-      // Round 7: the removed separator's landing anchors (its two
+      // the removed separator's landing anchors (its two
       // edge anchors) are zero-footprint elements that may sit between
       // the run and the trailing planted space — walk to the next TEXT
       // sibling instead of assuming one element hop.
@@ -2966,11 +2966,11 @@ describe("PreviewArea editing workflows", () => {
     });
 
     // -----------------------------------------------------------------
-    // Realistic InputEvent regression (tester round-4 cycle-1 finding):
+    // Realistic InputEvent regression:
     // real browsers label EVERY input event via InputEvent.inputType —
     // deletions (deleteContentBackward, deleteByCut, historyUndo, …)
     // and whitespace keystrokes included. The per-input contract
-    // (EDIT-33) holds for all of them: the auto-separation gates gate
+    // holds for all of them: the auto-separation gates gate
     // ONLY the space planting, never the model sync.
     // -----------------------------------------------------------------
 
@@ -2990,7 +2990,7 @@ describe("PreviewArea editing workflows", () => {
       setCaretInNode(chipText, "Hell".length);
       realisticInput(flow, { inputType: "deleteContentBackward", data: null });
 
-      // EDIT-33: every input event parses and syncs — the model holds
+      // Every input event parses and syncs — the model holds
       // the deletion, not the pre-edit text.
       expect(screen.getByTestId("document-probe").textContent).toBe("Hell");
       expect(flow.textContent).toBe("Hell");
@@ -3066,7 +3066,7 @@ describe("PreviewArea editing workflows", () => {
     });
   });
 
-  describe("gap collapse on caret exit (round 4, rule 2)", () => {
+  describe("gap collapse on caret exit", () => {
     it("leaves the visited one-space gap unchanged when no text is typed (case 2 verbatim)", () => {
       renderWithProviders(seedTwoChips());
       enableEditing();
@@ -3092,7 +3092,7 @@ describe("PreviewArea editing workflows", () => {
       expect(flow.textContent).toBe("Alpha Beta");
     });
 
-    it("keeps the scaffold's two spaces while the caret stays, collapses them to one on exit (round-5 interplay)", () => {
+    it("keeps the scaffold's two spaces while the caret stays, collapses them to one on exit (scaffold interplay)", () => {
       renderWithProviders(seedTwoChips());
       enableEditing();
       const flow = screen.getByTestId("preview-segment-flow");
@@ -3332,7 +3332,7 @@ describe("PreviewArea editing workflows", () => {
     });
   });
 
-  describe("arrow scaffolds (round 5, rule B — user decision 2026-10-18)", () => {
+  describe("arrow scaffolds", () => {
     it("scaffolds the between-chips gap from both chip boundaries and both gap edges", () => {
       // From chip2's start (inside the chip at offset 0), ArrowLeft.
       {
@@ -3688,16 +3688,14 @@ describe("PreviewArea editing workflows", () => {
   });
 
   // -----------------------------------------------------------------
-  // Keyboard sorting via Ctrl+Space while editing (round 6, user
-  // decision 2026-10-18): "Sorting with mouse should be disabled
-  // while edit text mode is on. … But sorting with keyboard should
-  // still be able, we just need to change the shortcut to enable
-  // it. The best way for me to do it is by hitting ctrl+space when
-  // the caret it is inside a snippet." Enter drops; Escape returns
-  // the snippet to its original place.
+  // Keyboard sorting via Ctrl+Space while editing: the pointer
+  // sensor is unmounted in edit mode and the chips cannot take
+  // focus, so the keyboard sort is entered by Ctrl+Space with the
+  // caret inside a snippet — the snippet lifts, arrows move it,
+  // Enter drops, Escape returns it to its original place.
   // -----------------------------------------------------------------
 
-  describe("keyboard sorting via Ctrl+Space (round 6)", () => {
+  describe("keyboard sorting via Ctrl+Space", () => {
     beforeEach(() => {
       installSegmentRects();
     });
@@ -3799,8 +3797,8 @@ describe("PreviewArea editing workflows", () => {
       pressCtrlSpace(flow);
       await flushSensor();
 
-      // Arrows move the raised snippet (the needle follows). Round 7
-      // (Q16): reaching the Beta chip takes three hops — the arrows
+      // Arrows move the raised snippet (the needle follows):
+      // reaching the Beta chip takes three hops — the arrows
       // walk through the separator's edge anchors first.
       const arrow = hostKey(flow, "ArrowRight", "ArrowRight");
       expect(arrow.defaultPrevented).toBe(true);
@@ -3942,7 +3940,7 @@ describe("PreviewArea editing workflows", () => {
       // Move, then drop with a BARE Space on the host: the raised
       // guard preventDefaults it (no typed space) but propagates it —
       // the sensor reads Space as its native END code and commits.
-      // Round 7 (Q16): three hops reach the Beta chip.
+      // three hops reach the Beta chip.
       hostKey(flow, "ArrowRight", "ArrowRight");
       hostKey(flow, "ArrowRight", "ArrowRight");
       hostKey(flow, "ArrowRight", "ArrowRight");
@@ -4003,7 +4001,7 @@ describe("PreviewArea editing workflows", () => {
       setCaretInNode(alpha.firstChild as Text, 2);
       pressCtrlSpace(flow);
       await flushSensor();
-      // Round 7 (Q16): three hops reach the Beta chip.
+      // three hops reach the Beta chip.
       hostKey(flow, "ArrowRight", "ArrowRight");
       hostKey(flow, "ArrowRight", "ArrowRight");
       hostKey(flow, "ArrowRight", "ArrowRight");
@@ -4099,7 +4097,7 @@ describe("PreviewArea editing workflows", () => {
   });
 
   it("still re-renders the focused surface from the model when a source change follows a NO-OP sync", () => {
-    // Regression (tester finding 3): a one-shot self-edit flag would
+    // Regression: a one-shot self-edit flag would
     // stick on a no-op sync (the reducer returns reference-identical
     // state, so no re-render drains it) and wrongly absorb the NEXT
     // external change. The classification must drain by comparing the
@@ -4305,7 +4303,7 @@ describe("PreviewArea editing workflows", () => {
 
       const [alpha] = screen.getAllByTestId("preview-snippet");
       await pressKey(alpha, "Space");
-      // Round 7 (Q16): three hops reach the Beta chip (the arrows
+      // three hops reach the Beta chip (the arrows
       // walk through the separator's edge anchors first).
       await pressKey(document, "ArrowRight");
       await pressKey(document, "ArrowRight");
@@ -4330,7 +4328,7 @@ describe("PreviewArea editing workflows", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Round 7 (user decision 2026-10-19): "a dragged snippet must be
+// "a dragged snippet must be
 // droppable at every word boundary of the document" —
 // |snippet 1| text entered_by_user |snippet 2| — the five marked
 // positions (before snippet 1, after it/before the text, between the
@@ -4341,7 +4339,7 @@ describe("PreviewArea editing workflows", () => {
 // where the needle marks — in both drag modes.
 // ---------------------------------------------------------------------------
 
-describe("PreviewArea word-boundary landings (round 7)", () => {
+describe("PreviewArea word-boundary landings", () => {
   const seedTwoChips = (): Array<[string, Snippet[]]> => [
     ["text-1", [makeSnippet("a1", "Alpha")]],
     ["text-2", [makeSnippet("b1", "Beta")]],
@@ -4605,10 +4603,10 @@ describe("PreviewArea word-boundary landings (round 7)", () => {
       );
 
       // The focused surface is FROZEN with the seeded snapshot's
-      // anchors (ADR 0004): thaw and re-focus so the frozen surface
+      // anchors: thaw and re-focus so the frozen surface
       // (and its landing anchors) re-render from the synced words
-      // model before lifting. The blur REMOUNTS the flow (the
-      // round-1 thaw epoch) — re-query the live node.
+      // model before lifting. The blur REMOUNTS the flow (the thaw
+      // epoch) — re-query the live node.
       const staleFlow = flow;
       act(() => {
         fireEvent.blur(staleFlow);
@@ -4691,7 +4689,7 @@ describe("PreviewArea word-boundary landings (round 7)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Round 8 (user decision 2026-10-19): "I want you to auto position the
+// "I want you to auto position the
 // caret on the last position of the text in preview area when enabling
 // edit text mode" — the OFF→ON toggle focuses the host and places the
 // caret at the text's end (the convenience equivalent of clicking at
@@ -4699,7 +4697,7 @@ describe("PreviewArea word-boundary landings (round 7)", () => {
 // mounting while already editing keep click-to-focus.
 // ---------------------------------------------------------------------------
 
-describe("edit-toggle caret auto-positioning (round 8)", () => {
+describe("edit-toggle caret auto-positioning", () => {
   const seedTwoChips = (): Array<[string, Snippet[]]> => [
     ["text-1", [makeSnippet("a1", "Alpha")]],
     ["text-2", [makeSnippet("b1", "Beta")]],
@@ -4767,7 +4765,7 @@ describe("edit-toggle caret auto-positioning (round 8)", () => {
     const [, beta] = screen.getAllByTestId("preview-snippet");
     // The document ends with the Beta chip: the caret sits INSIDE the
     // chip's last text child at its end (the browser's click-at-end
-    // preference — chip territory for typing per round 5).
+    // preference — chip territory for typing).
     expect(selectionShape()).toEqual({
       container: beta.firstChild,
       offset: 4,
@@ -4816,7 +4814,7 @@ describe("edit-toggle caret auto-positioning (round 8)", () => {
 
     const flow = screen.getByTestId("preview-segment-flow");
     expect(document.activeElement).toBe(flow);
-    // The round-1 focus machinery planted the bogus <br> line anchor.
+    // The focus machinery planted the bogus <br> line anchor.
     const anchor = flow.querySelector("br");
     expect(anchor).not.toBeNull();
     // The caret sits at the END of the trailing "\n" text node —
@@ -4831,7 +4829,7 @@ describe("edit-toggle caret auto-positioning (round 8)", () => {
     ).toBeTruthy();
   });
 
-  it("the empty document: focused, caret at position 0, the F3 placeholder editor intact", () => {
+  it("the empty document: focused, caret at position 0, the placeholder editor intact", () => {
     renderWithProviders([]);
     enableEditing();
 
@@ -5031,7 +5029,7 @@ describe("classifyCaretRelativeChip + insertSplitPasteAtChipEnd (line-break esca
     expect(root2.textContent).toBe("Beta\nnext");
   });
 
-  it("walks caret boundaries to abutting chips and computes caret gaps (round-4 units)", () => {
+  it("walks caret boundaries to abutting chips and computes caret gaps (pure units)", () => {
     const root = document.createElement("div");
     const chipA = document.createElement("span");
     chipA.dataset.tokenId = "text-1:a1";
@@ -5128,8 +5126,8 @@ describe("PreviewArea click-vs-drag on the editable surface", () => {
       );
     });
 
-    it("never starts a pointer drag while edit mode is ON — the mouse serves the editor (round 6)", async () => {
-      // Round 6 (user decision 2026-10-18): pointer sorting is
+    it("never starts a pointer drag while edit mode is ON — the mouse serves the editor", async () => {
+      // pointer sorting is
       // disabled while editing — the PointerSensor is not mounted,
       // so even a full hold-drag sequence never raises the snippet.
       renderWithProviders(seedInterleaved());

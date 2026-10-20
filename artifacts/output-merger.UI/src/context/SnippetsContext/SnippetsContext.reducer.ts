@@ -30,8 +30,8 @@ const sameStringSets = (a: string[], b: string[]): boolean =>
   a.length === b.length && a.every((value) => b.includes(value));
 
 /**
- * SET_SOURCE_SNIPPETS — diff-by-id reconciliation (ADR 0001), now
- * over snippet tokens inside the document (ADR 0004):
+ * SET_SOURCE_SNIPPETS — diff-by-id reconciliation over the
+ * document's snippet tokens:
  * - known ids update in place (a resize rewrites an unedited
  *   token's text; edited tokens are text-frozen; position, color,
  *   and identity never change);
@@ -140,7 +140,7 @@ interface ChipExtraction {
 }
 
 /**
- * Round-0 extraction, shared by MOVE_TOKEN and the round-7 landing
+ * extraction, shared by MOVE_TOKEN and the landing move
  * move: the chip leaves with ONE adjacent " " separator (the
  * preceding when present, else the following — the same object, id
  * and identity) and the removals are recorded for landing-index
@@ -206,9 +206,9 @@ const whitespacePadsReversed = (raw: string): { pad: string; core: string } => {
 };
 
 /**
- * Round 7 — MOVE_TOKEN_TO_LANDING, the text-split half (user
- * decision 2026-10-19: a dragged snippet drops at every word
- * boundary). The chip leaves with its round-0 carried separator and
+ * MOVE_TOKEN_TO_LANDING, the text-split half — a dragged snippet
+ * drops at every word boundary. The chip leaves with its carried
+ * separator and
  * lands INSIDE the target text token, splitting it at the boundary:
  * the boundary's own whitespace runs pad the sides that have them,
  * the carried separator plants the side that lacks one, and a side
@@ -282,8 +282,8 @@ function moveTokenToTextSplit(
   // A side needs a separating space iff the chip would abut
   // non-whitespace content on it: the split's own core, or — when
   // the core is empty — the adjacent token being a text token whose
-  // edge character is not whitespace, or a chip (round 0 plants
-  // between chips too; a line-break or document edge separates by
+  // edge character is not whitespace, or a chip (the plain move
+  // plants between chips too; a line-break or document edge separates by
   // itself and never triggers a plant).
   const beforeNeighbor = adjusted > 0 ? reduced[adjusted - 1] : undefined;
   const beforeAbutsContent =
@@ -303,7 +303,7 @@ function moveTokenToTextSplit(
 
   let beforePad = padL;
   let afterPad = padR;
-  // The carried separator always lands (round 0 never drops it): a
+  // The carried separator always lands (it is never dropped): a
   // needing side first, else the before side keeps it (a multiset-
   // preserving append for exotic mid-run offsets).
   if (carriedSeparator !== null && carriedSeparator.kind === 'text') {
@@ -315,7 +315,7 @@ function moveTokenToTextSplit(
       beforePad += carriedSeparator.text;
     }
   }
-  // Round 7's documented multiset exception: a side abutting content
+  // The documented multiset exception: a side abutting content
   // with no pad and no carried separator gets one planted — the
   // global >=1-space rule justifies adding; never-steal holds.
   if (beforePad === '' && beforeAbutsContent) {
@@ -328,7 +328,7 @@ function moveTokenToTextSplit(
   // Minted split ids: unique per document state (a chip may move into
   // text splits repeatedly; the counter scans the surviving
   // `${tokenId}:split-`-prefixed ids so no two tokens ever share an
-  // id — the React keys and the EDIT-03 uniqueness stay safe).
+  // id — the React keys and the token-id uniqueness stay safe).
   const splitPrefix = `${token.tokenId}:split-`;
   let splitCounter = 0;
   for (const candidate of reduced) {
@@ -360,7 +360,7 @@ function moveTokenToTextSplit(
   // crossed its own separator material, or landed back on its own
   // spot) — the serialization and the snippet order are both
   // unchanged, so the state stays reference-identical. The snippet
-  // order ALONE is not the test: a real round-7 move crosses own
+  // order ALONE is not the test: a real text-split move crosses own
   // text with the chip order intact ("A B text..."), and the
   // serialization ALONE is not either — a plant at a glued seam
   // changes it without a real move.
@@ -375,8 +375,7 @@ function moveTokenToTextSplit(
 }
 
 /**
- * MOVE_TOKEN — the Task 1 reorder migrated onto the document
- * (ADR 0004 / ADR 0001 amendment): a token-index move with NO
+ * MOVE_TOKEN — a token-index move with NO
  * renumbering (array position IS the order). `toIndex` is an
  * insertion point into the current array (insert before the token
  * at that index; === length appends).
@@ -546,8 +545,7 @@ export const snippetsReducer = (
   if (next === state) {
     return state;
   }
-  // Round 7 tester cycle 1 (finding 1): eager normalization — the
-  // model's shape is canonical (one own-text token per contiguous
+  // Eager normalization — the model's shape is canonical (one own-text token per contiguous
   // run), so the model and every parse agree and no behavior can
   // depend on merge history. Serialization never changes; the
   // reference-identity guard keeps no-op transitions churn-free.

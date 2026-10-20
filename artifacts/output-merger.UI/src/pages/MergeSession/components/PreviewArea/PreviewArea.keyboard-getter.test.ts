@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { landingKeyboardCoordinates } from "./PreviewArea.hook";
 
 // ---------------------------------------------------------------------------
-// Round 7 (user decision 2026-10-19): the keyboard coordinate getter —
+// the keyboard coordinate getter —
 // Left/Right step the raised chip through EVERY droppable landing
 // position in reading order (chips AND word-boundary anchors).
 //
-// REAL-BROWSER GEOMETRY (dev-server correction, 2026-10-19): the
+// REAL-BROWSER GEOMETRY: the
 // landing anchors are zero-footprint spans — a real browser returns a
 // TRUE 0x0 rect with top === bottom at the text baseline, while the
 // chips span the line (top 0, bottom 24). The reading order is DOM
@@ -24,7 +24,7 @@ interface Rect {
   bottom: number;
 }
 
-// The round-7 words layout: [Alpha, " text entered_by_user ", Beta]
+// The words layout: [Alpha, " text entered_by_user ", Beta]
 // with the anchors at their inline positions — 0x0 boxes at the
 // baseline (top === bottom === 18), chips at the line top.
 const ANCHOR_Y = 18;

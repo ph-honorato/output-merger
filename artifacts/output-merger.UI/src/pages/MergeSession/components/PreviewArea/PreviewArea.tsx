@@ -22,9 +22,9 @@ import type { PreviewAreaProps } from './PreviewArea.types';
 import * as S from './PreviewArea.styles';
 
 /**
- * Invisible zero-footprint droppable for one drag LANDING (round 7,
- * user decision 2026-10-19: a dragged snippet drops at every word
- * boundary of the document). The pure enumeration in
+ * Invisible zero-footprint droppable for one drag LANDING — one of
+ * the word-boundary positions a dragged snippet can drop at. The pure
+ * enumeration in
  * utils/previewDocument (`enumerateLandingAnchors`) yields one
  * anchor per position — word boundaries inside/beside own text and
  * the token gaps no text edge covers, dedupe included. While a drag
@@ -80,7 +80,7 @@ function PreviewArea(props: PreviewAreaProps) {
   // focused and edit is ON these memos do not recompute (the frozen
   // snapshot is unchanged): React then sees identical element
   // references and never reconciles the token children — the focused
-  // DOM owns itself (ADR 0004). The anchors and the needle are
+  // DOM owns itself. The anchors and the needle are
   // zero-text transparent elements for the parser (text pieces merge
   // back across them); the anchors exist only while there is at
   // least one chip to drag, so a tokenless flow stays truly :empty
@@ -193,7 +193,7 @@ function PreviewArea(props: PreviewAreaProps) {
 
   // Gating matrix (edit OFF/ON × empty/non-empty): edit OFF + empty
   // keeps today's empty state; edit ON renders the editable root even
-  // while empty (F3).
+  // while empty.
   const showEmptyState = !editEnabled && isDocumentEmpty;
 
   return (

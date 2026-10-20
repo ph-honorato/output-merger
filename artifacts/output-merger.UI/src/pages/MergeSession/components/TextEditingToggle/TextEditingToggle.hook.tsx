@@ -8,13 +8,13 @@ const TOGGLE_KEYS = {
 } as const;
 
 /**
- * Self-contained edit-text toggle (roadmap 3.3, deviation a): reads
+ * Self-contained edit-text toggle: reads
  * and writes the ONE session-level `editEnabled` flag in
  * SnippetsContext — no props, exactly like CopyMergedTextButton, so
  * every instance (the PreviewToolbar button and the modal's tools
  * rail button) reflects and controls the same state. The toggle
  * gates text editing only; dragging stays always live in both
- * modes (F1).
+ * modes.
  */
 export function useTextEditingToggle() {
   const { t } = useTranslation();

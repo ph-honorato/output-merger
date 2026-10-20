@@ -244,7 +244,7 @@ describe('parsePreviewDom', () => {
 
     const tokens = parsePreviewDom(root, [snippetToken('text-1:a1', 'Alpha')]);
 
-    // Round 7 (Q16): adjacent text nodes MERGE across transparent
+    // adjacent text nodes MERGE across transparent
     // boundaries into one own-text token — the landing anchors render
     // INSIDE text tokens (splitting them into multiple DOM text
     // nodes), so without merging every render/parse cycle would
@@ -257,8 +257,8 @@ describe('parsePreviewDom', () => {
     ).toEqual(['pre ', 'Alpha', ' post end']);
   });
 
-  it('merges text pieces split by landing anchors into one token (round 7)', () => {
-    // The round-7 word anchors sit INSIDE a text token, splitting it
+  it('merges text pieces split by landing anchors into one token', () => {
+    // The word anchors sit INSIDE a text token, splitting it
     // into DOM text pieces; the parse merges them back so the model
     // keeps one token per text run (WYSIWYG and the anchor indexes
     // stay stable).
@@ -279,10 +279,10 @@ describe('parsePreviewDom', () => {
     );
   });
 
-  it('parse(render(model)) matches the normalized shape for adjacent-text models (round 7 cycle 1)', () => {
-    // The Tester's finding 1: the parser merge is
-    // serialization-preserving, not shape-preserving — adjacent
-    // DISTINCT text tokens collapsed after one render/parse cycle.
+  it('parse(render(model)) matches the normalized shape for adjacent-text models', () => {
+    // The parser merge is serialization-preserving, not
+    // shape-preserving: without eager reducer normalization, adjacent
+    // DISTINCT text tokens collapse after one render/parse cycle.
     // The reducer now normalizes eagerly, so the normalizer's shape
     // and every parse's shape must agree: one own-text token per
     // contiguous run, chips and line breaks as boundaries.
@@ -366,7 +366,7 @@ describe('parsePreviewDom', () => {
   });
 
   it('treats a bogus <br> line anchor as parser-neutral (no token, no text)', () => {
-    // The invisible-line fix (user report 2026-10-17) plants a <br>
+    // The invisible-line fix plants a <br>
     // after a trailing "\n" so the caret gets a visible line box. The
     // parser must never see it: it flattens unknown elements to their
     // textContent, and a <br> has none — no token, no serialization
@@ -453,7 +453,7 @@ describe('parsePreviewDom', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Round 7 (user decision 2026-10-19): "a dragged snippet must be
+// "a dragged snippet must be
 // droppable at every word boundary of the document" — the landing
 // model's pure helpers.
 // ---------------------------------------------------------------------------
@@ -505,7 +505,7 @@ describe('wordBoundaryOffsets', () => {
 });
 
 describe('enumerateLandingAnchors', () => {
-  // The user's example verbatim (2026-10-19):
+  // The canonical five-position example:
   // |snippet 1| text entered_by_user |snippet 2|
   // The five marked positions are all droppable — plus the word
   // anchors between the text's words and the two separator-edges the

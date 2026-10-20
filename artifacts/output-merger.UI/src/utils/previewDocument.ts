@@ -44,7 +44,7 @@ export const makeSeparatorToken = (tokenId: string): OwnTextToken => ({
  * Serializes the document: pure concatenation of token texts
  * (line-break tokens → "\n"). No trimming, no implicit separators —
  * every character of the merged output belongs to exactly one token
- * (ADR 0004). `buildMergedText`'s successor.
+ *. `buildMergedText`'s successor.
  */
 export function serialize(tokens: PreviewToken[]): string {
   let text = '';
@@ -115,7 +115,7 @@ export function snippetSlotToTokenIndex(
 }
 
 // ---------------------------------------------------------------------------
-// Round 7 (user decision 2026-10-19): "a dragged snippet must be
+// "a dragged snippet must be
 // droppable at every word boundary of the document" — the landing
 // model's pure helpers: droppable ids, the anchor enumeration (one
 // anchor per position, dedupe included), and the chip-over insertion
@@ -255,7 +255,7 @@ export const landingBeforeToken = (
 };
 
 /**
- * Round 7 tester cycle 1 (finding 1): merges every run of ADJACENT
+ * Merges every run of ADJACENT
  * own-text tokens into one token (the first token's id kept, texts
  * concatenated; never across line-break or snippet tokens). The
  * reducer runs this over every action's result so the model and every
@@ -265,7 +265,7 @@ export const landingBeforeToken = (
  * appends next to typed text, move replants, text-split pads) can
  * produce adjacency; without normalization the same visible document
  * could behave differently depending on its merge history (the
- * round-0 carry and the source-delete cleanup both read
+ * the move carry and the source-delete cleanup both read
  * `isSeparatorToken`). Serialization is never changed — merging only
  * concatenates. REFERENCE-IDENTITY GUARD: an array with no adjacent
  * text run is returned as the SAME reference (the no-op-sync absorb
@@ -336,7 +336,7 @@ export function tokensEqualIgnoringEdited(
  * DOM→tokens half of the per-input sync). Rules:
  * - element with a `data-token-id` → a snippet token keyed by that
  *   id; its `textContent` is the token text (typed-inside text
- *   integrates into the token — deviation b). An emptied chip is
+ *   integrates into the token instead of splitting). An emptied chip is
  *   pruned (a fully-deleted snippet token vanishes). A duplicate
  *   token id degrades to plain text — the document never carries
  *   corrupt tokens.
@@ -374,7 +374,7 @@ export function parsePreviewDom(
     return `${prefix}:${generatedId}`;
   };
 
-  // Round 7: consecutive text-node contributions MERGE across
+  // consecutive text-node contributions MERGE across
   // transparent elements (the landing anchors render INSIDE text
   // tokens, splitting them into multiple DOM text nodes — without
   // merging, every render/parse cycle would fragment the model's

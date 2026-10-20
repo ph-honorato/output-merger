@@ -39,7 +39,7 @@ export const SegmentFlow = styled.div<{ $editing?: boolean }>`
     $editing
       ? css`
           /* The caret is the editing host's own focus indicator
-           * (user decision 2026-10-17): the UA's default focus
+           *: the UA's default focus
            * outline — a black box around the whole flow on click —
            * is removed for the editing state only. Chips, buttons,
            * and every other focus ring are untouched. */
@@ -47,7 +47,7 @@ export const SegmentFlow = styled.div<{ $editing?: boolean }>`
           cursor: text;
           min-height: 1.75em;
 
-          /* Empty-document editing (F3): the placeholder hint is a
+          /* Empty-document editing: the placeholder hint is a
            * pseudo-element — no DOM, no parse/serialization
            * footprint, so the WYSIWYG invariant never sees it. Known
            * caveat: a stray zero-length text node left by the browser

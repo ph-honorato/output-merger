@@ -12,11 +12,11 @@ import {
 import type { Snippet } from '@components';
 
 // ---------------------------------------------------------------------------
-// Permanent regression suite for MOVE_TOKEN, ported from the tester's
-// review harnesses (oracle.mjs / fuzz.mjs / repro.mjs / repro2.mjs):
-// an exhaustive old-join-parity oracle over every (from, to) pair on
-// unedited documents, a randomized character-multiset/id-uniqueness
-// fuzz over edited documents, and the two minimized repro seams.
+// Permanent regression suite for MOVE_TOKEN: an exhaustive
+// old-join-parity oracle over every (from, to) pair on unedited
+// documents, a randomized character-multiset/id-uniqueness sweep over
+// edited documents, and the two minimized regression seams (the
+// suites' provenance is documented in the implementation record).
 // ---------------------------------------------------------------------------
 
 const mkSnippet = (i: number): Snippet => ({
@@ -139,7 +139,7 @@ describe('MOVE_TOKEN exhaustive oracle (unedited documents)', () => {
 });
 
 describe('MOVE_TOKEN randomized edited-document sweep (multiset + uniqueness)', () => {
-  // The tester's fuzz, ported verbatim (seeded LCG — deterministic).
+  // A randomized sweep (seeded LCG — deterministic).
   let seed = 20261016;
   const rand = () => {
     seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -247,8 +247,8 @@ describe('MOVE_TOKEN randomized edited-document sweep (multiset + uniqueness)', 
   });
 });
 
-describe('MOVE_TOKEN review regression seams', () => {
-  it('preserves the character multiset when a chip is dragged to the trailing gap of an edited document (tester repro 2)', () => {
+describe('MOVE_TOKEN regression seams', () => {
+  it('preserves the character multiset when a chip is dragged to the trailing gap of an edited document (trailing-gap multiset)', () => {
     // The user typed a line break before the first chip and a trailing
     // space after the second chip, then drags the first chip to the
     // trailing gap: the carried " " must be re-inserted, never dropped.
@@ -271,7 +271,7 @@ describe('MOVE_TOKEN review regression seams', () => {
     expect(after).toBe('\nA Bee ');
   });
 
-  it('keeps token ids unique through the two-move sequence (tester repro 1) with full join parity', () => {
+  it('keeps token ids unique through the two-move sequence (two-move id uniqueness) with full join parity', () => {
     let state = buildDoc(3); // [A, " ", B, " ", C]
 
     state = snippetsReducer(state, { type: 'MOVE_TOKEN', fromIndex: 0, toIndex: 4 });
@@ -286,8 +286,8 @@ describe('MOVE_TOKEN review regression seams', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Round 7 (user decision 2026-10-19): "a dragged snippet must be
-// droppable at every word boundary of the document" — the
+// The word-boundary landing contract ("a dragged snippet must be
+// droppable at every word boundary of the document") — the
 // MOVE_TOKEN_TO_LANDING oracle. Two independent specifications:
 //
 // 1. A STRING-LEVEL reference implementation (expectedLanding): it
@@ -300,7 +300,7 @@ describe('MOVE_TOKEN review regression seams', () => {
 //
 // 2. The OLD-SLOT join parity for unedited documents: every landing
 //    anchor (including the new separator-edge anchors) serializes
-//    byte-identically to the round-0 gap-slot semantics for the slot
+//    byte-identically to the gap-slot join semantics for the slot
 //    it sits in.
 // ---------------------------------------------------------------------------
 
@@ -630,8 +630,8 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
   });
 
   it('keeps the old slot join parity for every landing anchor on unedited documents', () => {
-    // The round-0 exhaustive oracle (above) pins MOVE_TOKEN on
-    // unedited documents; round 7's anchors — including the new
+    // The exhaustive oracle (above) pins MOVE_TOKEN on
+    // unedited documents; the anchors — including the new
     // separator-edge anchors — must serialize byte-identically to
     // the old gap-slot semantics for the slot they sit in.
     let checks = 0;
@@ -737,7 +737,7 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
   });
 
   it('moves a chip through words even when the snippet order is unchanged', () => {
-    // The whole point of round 7: B crosses the own text while A and
+    // The point: B crosses the own text while A and
     // B keep their relative chip order.
     const state = stateOf([
       chipTok(0),
@@ -755,13 +755,13 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
     expect(next).not.toBe(state);
   });
 
-  it('normalizes adjacent text runs eagerly — the model and every parse agree on shape (round 7 cycle 1, finding 1)', () => {
-    // The Tester's finding 1: the round-7 parser merge was
-    // serialization-preserving, not shape-preserving — adjacent
-    // DISTINCT text tokens collapsed after one render/parse cycle
-    // (e.g. [A][" "]["hello"][" "][B] → [A][" hello "][B]), and the
-    // same visible document behaved differently depending on the
-    // model's merge history. The reducer now normalizes every
+  it('normalizes adjacent text runs eagerly — the model and every parse agree on shape', () => {
+    // The parser merge is serialization-preserving, not
+    // shape-preserving: without eager reducer normalization,
+    // adjacent DISTINCT text tokens collapse after one render/parse
+    // cycle (e.g. [A][" "]["hello"][" "][B] → [A][" hello "][B]), and
+    // the same visible document would behave differently depending
+    // on the model's merge history. The reducer normalizes every
     // action's result, so adjacency handed to the reducer disappears
     // in one transition and NO behavior can depend on merge history.
     // (A content-equal SYNC is reference-identical by the no-op
@@ -789,8 +789,8 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
     expect(normalizeTextTokens(normalized.tokens)).toBe(normalized.tokens);
   });
 
-  it('the round-0 carry is deterministic on the normalized model (the former merge-history divergence, pinned)', () => {
-    // The Tester's reproduced divergence (a): the visual document
+  it('the plain-move carry is deterministic on the normalized model (the former merge-history divergence, pinned)', () => {
+    // The former merge-history divergence (a): the visual document
     // "A hello" + a glued chip B used to move differently depending
     // on whether the model kept the standalone separator:
     // [A][" "]["hello"][B] carried the separator ("helloB A"), while
@@ -798,7 +798,7 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
     // makes the merged shape THE shape, so the drag has ONE result:
     // A's adjacent token is the merged own text (not a separator), no
     // separator is carried, and A lands at the end glued after B —
-    // round-0's never-invent no-carry rule, now shape-independent.
+    // the never-invent no-carry rule, now shape-independent.
     const state = stateOf([chipTok(0), textTok('t1', ' hello'), chipTok(1)]);
     const next = move(state, 0, 3);
     expect(serialize(next.tokens)).toBe(' helloBA');
@@ -818,7 +818,7 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
   });
 
   it('source deletion keeps the space the user saw inside a merged text token (the former divergence, pinned)', () => {
-    // The Tester's reproduced divergence (b): deleting chip B from
+    // The former merge-history divergence (b): deleting chip B from
     // ["x"][" "][B] popped the separator ("x"), while the merged
     // ["x "][B] kept it ("x "). Normalization makes the merged shape
     // THE shape — WYSIWYG-honest: the chip vanishes, the space the

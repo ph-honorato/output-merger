@@ -203,7 +203,7 @@ describe('MergeSessionPage', () => {
     expect(screen.getByTestId('preview-copy-button')).toBeDisabled();
 
     // Toggle editing on: the empty preview becomes the editable
-    // editor with the placeholder hint (F3) and the gates open.
+    // editor with the placeholder hint and the gates open.
     fireEvent.click(screen.getByTestId('preview-edit-toggle'));
     const flow = screen.getByTestId('preview-segment-flow');
     expect(flow).toHaveAttribute('contenteditable', 'true');
@@ -283,13 +283,13 @@ describe('MergeSessionPage', () => {
     await user.click(trigger);
     const dialog = screen.getByRole('dialog', { name: 'Preview' });
 
-    // Duplicate data-testids by design while open (ADR 0003): the
+    // Duplicate data-testids by design while open: the
     // inline preview stays mounted alongside the modal's instance.
     expect(screen.getAllByTestId('preview-area')).toHaveLength(2);
 
     // jsdom computes no layout: give the two segment chips
-    // deterministic rects so the keyboard drag reorders. Round 7
-    // (Q16): the landing anchors resolve by their data-landing id.
+    // deterministic rects so the keyboard drag reorders — the
+    // landing anchors resolve by their data-landing id.
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
       function (this: Element) {
         const landingId = (this as HTMLElement).dataset?.landing;
@@ -301,7 +301,7 @@ describe('MergeSessionPage', () => {
             'preview-landing:g:3': 224,
           };
           const x = landingX[landingId] ?? 0;
-          // REAL-BROWSER GEOMETRY (dev-server correction, 2026-10-19):
+          // REAL-BROWSER GEOMETRY:
           // the landing anchors are zero-footprint spans — a true 0x0
           // rect at the text baseline (top === bottom).
           return { left: x, right: x, top: 18, bottom: 18, width: 0, height: 0, x, y: 18 } as DOMRect;
@@ -321,8 +321,8 @@ describe('MergeSessionPage', () => {
       });
     };
 
-    // Keyboard-sort the first snippet inside the modal. Round 7
-    // (Q16): reaching the second chip takes three hops — the arrows
+    // Keyboard-sort the first snippet inside the modal: reaching
+    // the second chip takes three hops — the arrows
     // walk through the separator's edge anchors first.
     const [first] = within(dialog).getAllByTestId('preview-snippet');
     expect(first).toHaveTextContent('beta gamma');
@@ -356,7 +356,7 @@ describe('MergeSessionPage', () => {
     );
   });
 
-  it('round 8: the toolbar edit toggle auto-positions the caret at the end of the inline preview', async () => {
+  it('the toolbar edit toggle auto-positions the caret at the end of the inline preview', async () => {
     // The same virtual monospace seeding as the modal-integration
     // test (the preview's chips come from TextInput selections).
     const text = 'alpha beta gamma delta';

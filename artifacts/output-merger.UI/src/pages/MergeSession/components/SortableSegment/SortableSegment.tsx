@@ -8,7 +8,7 @@ function SortableSegment(props: SortableSegmentProps) {
   const { attributes, isDragging, listeners, setNodeRef, transform, transition } =
     useSortableSegment(token.tokenId);
 
-  // Round 6 (user decision 2026-10-18): while edit mode is ON the
+  // while edit mode is ON the
   // chips are plain spans of the editor — no focus/a11y attributes
   // (no tab stop, no button role), text cursor, text selection —
   // while the node ref, the measuring, and the KEYBOARD activator

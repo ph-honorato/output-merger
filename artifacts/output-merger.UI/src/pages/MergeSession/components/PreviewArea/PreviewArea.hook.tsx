@@ -35,17 +35,19 @@ import {
 } from '../../../../utils/previewDocument';
 
 /**
- * PointerSensor hold-to-drag activation (ADR 0002): the drag starts only
- * when the pointer is held for the delay while moving at most the
- * tolerance — a plain click never starts a drag. Tuning these values is a
- * feel change, not a contract change. While edit mode is ON a quick click
- * therefore falls through as a caret placement (dragging is always live
- * in both modes — F1).
+ * PointerSensor hold-to-drag activation (edit mode OFF — the
+ * sensor is not mounted while editing): the drag starts only when
+ * the pointer is held for the delay while moving at most the
+ * tolerance — a plain click never starts a drag. Tuning these values
+ * is a feel change, not a contract change. While edit mode is ON the
+ * surface has no pointer sensor at all: the mouse serves the editor
+ * (a quick click places the caret), and keyboard sorting enters via
+ * Ctrl+Space with the caret inside a snippet.
  */
 export const SNIPPET_DRAG_ACTIVATION = { delay: 50, tolerance: 5 } as const;
 
 /**
- * Round 7 (user decision 2026-10-19): the needle's landing — which
+ * the needle's landing — which
  * droppable anchor (word boundary or token gap) the drop-indicator
  * needle marks. The droppable-id round-trip and the anchor
  * enumeration live in utils/previewDocument (`buildLandingId`,
@@ -79,19 +81,20 @@ export const landingSnippetPosition = (
 };
 
 /**
- * Round 7 keyboard coordinate getter (user decision 2026-10-19):
+ * The keyboard coordinate getter:
  * Left/Right step the raised chip through EVERY droppable landing
  * position in reading order — the snippet chips AND the
  * word-boundary/token-gap anchors — so the user can walk a snippet
  * word-by-word through their own text and drop it exactly where the
- * needle marks. READING ORDER IS DOM ORDER (dev-server correction,
- * 2026-10-19): the flow renders its children in reading order, and
+ * needle marks. READING ORDER IS DOM ORDER: the flow renders its
+ * children in reading order, and
  * the geometric (top, left) sort this getter shipped with is WRONG in
  * a real browser — the zero-footprint anchors are 0x0 boxes sitting
  * at the text baseline while the chips span the line, so their tops
  * differ and the sort put every chip before every anchor, scrambling
- * the walk (the jsdom rect mocks all shared top 0, which masked it;
- * the realistic-geometry harness reproduced the exact scramble).
+ * the walk. The jsdom rect mocks must keep the realistic anchor
+ * geometry (true 0x0 rects at the baseline) — degenerate mocks (a
+ * shared top for every droppable) would mask exactly this failure.
  * The droppable registry exposes each container's DOM node
  * (RegisterDroppable carries `node`), so the walk sorts by
  * compareDocumentPosition — geometry-independent, line breaks
@@ -105,7 +108,7 @@ export const landingSnippetPosition = (
  * the collision). Up/Down are prevented but inert (the caret must
  * never move while a chip is raised). The sensor's own end codes
  * (Space/Enter/Tab) and cancel (Escape) are untouched, as are the
- * round-6 caret-restore and raised-guard contracts.
+ * caret-restore and raised-guard contracts.
  */
 export const landingKeyboardCoordinates: KeyboardCoordinateGetter = (
   event,
@@ -263,9 +266,9 @@ export const insertTextAtSelection = (
  *   delete-and-insert path).
  *
  * The Enter handler uses this for the "a line break never enters a
- * snippet" rule (user decision 2026-10-17): only the two boundary
+ * snippet" rule: only the two boundary
  * cases take the escape path; a mid-chip Enter (and every typed
- * character) keeps the Q3 in-snippet integration contract.
+ * character) keeps the in-snippet integration contract.
  */
 export type CaretChipPosition =
   | 'inside-chip-at-end'
@@ -348,9 +351,8 @@ const plantTextBesideChip = (
  * Plants a raw text node as the chip's SIBLING (see
  * plantTextBesideChip) and places the caret right after the node (the
  * same Range/Selection technique insertTextAtSelection uses). The
- * Enter escape path ("a line break never enters a snippet", user
- * decision 2026-10-17) and the paste escape paths (round 3: the same
- * rule applies to pasted text) build on it.
+ * Enter escape path ("a line break never enters a snippet") and the
+ * paste escape paths (the same rule applies to pasted text) build on it.
  */
 const insertTextBesideChip = (
   chip: HTMLElement,
@@ -377,17 +379,16 @@ const insertLineBreakOutsideChip = (
 ): Text => insertTextBesideChip(chip, side, '\n');
 
 /**
- * The at-end split-paste path (user decision 2026-10-17, round 3:
- * "a line break never enters a snippet" applies to pasted text —
- * "pasted text integrates into the snippet only up to its first
- * newline"). The pasted PREFIX (before the first newline) inserts
- * at the caret INSIDE the chip (Q3 integration: the chip's text
+ * The at-end split-paste path — pasted text integrates into the
+ * snippet only up to its first newline (a line break never enters a
+ * snippet). The pasted PREFIX (before the first newline) inserts
+ * at the caret INSIDE the chip (integration: the chip's text
  * grows, so its `edited` flag becomes true — the user modified the
  * chip); the first newline and everything after it insert as flow
  * content immediately AFTER the chip element (line-break + own-text
  * tokens after parse). Returns the tail node — the caller runs the
  * trailing-line-anchor bookkeeping and the commit. An empty prefix
- * (the paste starts with the newline) reduces to the round-2 Enter
+ * (the paste starts with the newline) reduces to the Enter
  * escape: nothing integrates, the whole paste lands after the chip.
  */
 export const insertSplitPasteAtChipEnd = (
@@ -427,7 +428,7 @@ const textChildrenOf = (chip: HTMLElement): Text[] =>
   );
 
 /**
- * Round-6 rule B helpers: the saved caret for the keyboard-sort
+ * rule B helpers: the saved caret for the keyboard-sort
  * restore (the caret position at Ctrl+Space, so the drop/cancel can
  * put it back inside the sorted snippet). A text-node caret inside
  * the chip saves its exact (text child index, offset); any other
@@ -436,7 +437,7 @@ const textChildrenOf = (chip: HTMLElement): Text[] =>
  * BOUNDARY SENTINEL { textChildIndex: -1, offset: +Infinity }: the
  * restore's index fallback selects the LAST text child and the
  * offset clamp lands at its END — the documented chip-end fallback
- * for the boundary geometry (a tester round-6 finding: returning
+ * for the boundary geometry (returning
  * null here skipped the restore entirely, leaving the host
  * unfocused after the drop's remount).
  */
@@ -473,9 +474,8 @@ const savedKeyboardSortCaret = (
 };
 
 // ---------------------------------------------------------------------------
-// Typing auto-separation + gap collapse (user decision 2026-10-17,
-// round 4): "we always have at least one white space between snippets
-// and texts".
+// Typing auto-separation + gap collapse: at least one white space
+// always separates snippets and texts.
 // ---------------------------------------------------------------------------
 
 const isChipElement = (node: Node): node is HTMLElement =>
@@ -498,7 +498,7 @@ const isWalkTransparent = (node: Node): boolean =>
  * NON-WHITESPACE text it crosses (through parser-transparent
  * elements), until a snippet chip. Any whitespace character between
  * the caret and the chip means a separator exists → { chip: null,
- * crossed: <text-so-far> }. The `crossed` string is the round-5
+ * crossed: <text-so-far> }. The `crossed` string is the redirect's
  * redirect's currency: for an insertText event the just-typed run is
  * exactly `data`, so a chip reached through `crossed === data` abuts
  * the PRE-TYPING caret position directly (chip territory), while a
@@ -726,9 +726,9 @@ const extractTypedRunEndingAtCaret = (range: Range, data: string): boolean => {
 };
 
 /**
- * Round-5 rule A — the chip-territory redirect (user decision
- * 2026-10-18: "every caret position directly abutting a chip is the
- * chip's territory"). When a non-whitespace insertText lands at a
+ * Rule A — the chip-territory redirect: every caret position
+ * directly abutting a chip is the chip's territory. When a
+ * non-whitespace insertText lands at a
  * caret position that DIRECTLY abutted a chip before typing (the
  * walk from the caret crosses exactly the typed run to a chip on the
  * left, or crosses nothing to a chip on the right), the typed run
@@ -740,7 +740,7 @@ const extractTypedRunEndingAtCaret = (range: Range, data: string): boolean => {
  * (e.g. `mytext|` before the chip), ONE space is planted outside the
  * chip between them (the ≥1-space-between-snippet-and-text rule).
  * The seam — two GLUED chips with the caret exactly between them —
- * keeps the round-4 behavior (agent default): spaces on both sides,
+ * keeps the seam behavior: spaces on both sides,
  * the typed run stays own text. Whitespace typing, deletions, bare
  * (data-less) events, and positions not directly abutting a chip are
  * untouched; the caller runs the parse+sync for EVERY input event
@@ -754,7 +754,7 @@ export const redirectTypedRunToChipTerritory = (
   if (!range.collapsed) {
     return;
   }
-  // Typing inside a chip (any position) is native Q3 integration.
+  // Typing inside a chip (any position) integrates natively.
   if (classifyCaretRelativeChip(root, range).chip) {
     return;
   }
@@ -768,7 +768,7 @@ export const redirectTypedRunToChipTerritory = (
   const directRight = after.chip !== null && after.crossed === '';
 
   if (directLeft && directRight && before.chip && after.chip) {
-    // Seam (agent default, kept from round 4): symmetric ambiguity —
+    // Seam: symmetric ambiguity —
     // spaces on both sides, the run stays own text.
     plantTextBesideChip(before.chip, 'after', ' ');
     plantTextBesideChip(after.chip, 'before', ' ');
@@ -799,14 +799,14 @@ export const redirectTypedRunToChipTerritory = (
     }
     return;
   }
-  // Free territory: no redirect, no plants (round-4 rule 1 rescoped
-  // to the seam and the doc-edge scaffolds).
+  // Free territory: no redirect, no plants (the separation rules
+  // cover the seam and the doc-edge scaffolds).
 };
 
 /**
  * The caret's current "gap": a spaces-only (no `\n`, no tabs) run of
- * text DIRECTLY between two snippet chips — the place the user's
- * round-4 rule calls "between two snippets". Null when the caret is
+ * text DIRECTLY between two snippet chips — the place the gap
+ * rules call "between two snippets". Null when the caret is
  * not inside such a run (content, edges, line breaks, or runs not
  * bounded by chips on both sides do not count).
  */
@@ -979,7 +979,7 @@ export const collapseGapSpaces = (
 };
 
 // ---------------------------------------------------------------------------
-// Round 5 (user decision 2026-10-18): the chip-territory redirect
+// the chip-territory redirect
 // (above) + the arrow-created free zones ("scaffolds"). Rule B's
 // helpers: meaningful-chip scans, single-space gap lookup, chip hops.
 // ---------------------------------------------------------------------------
@@ -1072,7 +1072,7 @@ const chipBesideNode = (
 };
 
 /**
- * Round 8 (user decision 2026-10-19): places the caret at the END of
+ * places the caret at the END of
  * the preview text — "the last position of the text" — for the
  * edit-OFF→ON toggle convenience (the equivalent of clicking at the
  * end, ready to type). The walk targets the end of the last
@@ -1083,7 +1083,7 @@ const chipBesideNode = (
  * `<br>`, the visible-new-line position; a document ending in a chip
  * places the caret inside the chip's last text child at its end (the
  * browser's click-at-end preference — chip territory for typing per
- * round 5); an empty flow lands at position 0 (the F3 placeholder
+ * for typing); an empty flow lands at position 0 (the placeholder
  * editor).
  */
 export const placeCaretAtTextEnd = (root: HTMLElement): void => {
@@ -1118,7 +1118,7 @@ export const placeCaretAtTextEnd = (root: HTMLElement): void => {
     }
     // Comments and other non-rendering nodes: keep walking.
   }
-  // No meaningful content: the flow's start (the F3 empty editor).
+  // No meaningful content: the flow's start (the empty editor).
   placeCaret(root, 0);
 };
 
@@ -1135,7 +1135,7 @@ const chipBoundingGapSide = (
 /**
  * True for nodes that contribute neither text nor a rendered line to
  * the flow's end: zero-length text nodes, comments, the zero-footprint
- * landing anchors (round 7's `data-landing` word-boundary anchors and
+ * landing anchors (the `data-landing` word-boundary anchors and
  * the legacy gap anchors), and the drop-indicator needle. Scans for
  * the block's meaningful end skip these.
  */
@@ -1157,7 +1157,7 @@ const isZeroFootprintNode = (node: Node): boolean => {
 /**
  * Plants a bogus `<br>` line anchor right after a trailing "\n" text
  * node — Chrome's own native contentEditable technique for pre-wrap
- * blocks (user-reported fix, 2026-10-17): a newline at the very end
+ * blocks: a newline at the very end
  * of the block renders no empty last line, so a caret placed after it
  * has no visible line box and appears stuck on the previous line.
  * The anchor forces the line box; the caret — already placed right
@@ -1257,7 +1257,7 @@ const EDITING_KEYS = {
  * Composes i18n, the preview document from SnippetsContext, and this
  * PreviewArea instance's drag-sorting wiring (sensors, announcements,
  * drag lifecycle handlers on token indexes) plus — while edit mode is
- * ON — the editable-surface contract (ADR 0004): the focused surface
+ * ON — the editable-surface contract: the focused surface
  * owns its DOM (its parsed edits dispatch one whole-document sync
  * without React reconciling the token children; the snapshot thaws on
  * blur and on non-text model changes), Enter inserts a "\n" text
@@ -1289,7 +1289,7 @@ export function usePreviewArea(
     [snippetTokens]
   );
 
-  // Round 6 (user decision 2026-10-18): while edit mode is ON the
+  // While edit mode is ON the
   // mouse serves the editor — the pointer sensor is NOT mounted for
   // the editing surface. Both sensor sets are created by separate
   // unconditional hooks (the hooks themselves are never
@@ -1301,7 +1301,7 @@ export function usePreviewArea(
     })
   );
   const keyboardSensors = useSensors(
-    // Round 7: the arrows step through ALL droppable landing
+    // the arrows step through ALL droppable landing
     // positions (chips + word-boundary anchors) in reading order.
     useSensor(KeyboardSensor, {
       coordinateGetter: landingKeyboardCoordinates,
@@ -1320,7 +1320,7 @@ export function usePreviewArea(
   // (no active drag, or no target resolves).
   const [dropLanding, setDropLanding] = useState<Landing | null>(null);
 
-  // ---- editable surface state (ADR 0004) ---------------------------
+  // ---- editable surface state ---------------------------
 
   // The segment-flow root (the contentEditable host while edit is ON).
   const flowRef = useRef<HTMLDivElement | null>(null);
@@ -1343,18 +1343,18 @@ export function usePreviewArea(
   const lastParseRef = useRef<PreviewToken[] | null>(null);
   // The last document this instance has accounted for in a render.
   const modelRef = useRef<PreviewToken[]>(previewDocument);
-  // Gap-collapse tracking (user decision 2026-10-17, round 4): the
+  // Gap-collapse tracking: the
   // caret's current spaces-only between-chips run, plus whether the
   // document-level selectionchange listener is attached.
   const gapRef = useRef<CaretGap | null>(null);
   const gapListenerActiveRef = useRef(false);
-  // Round-5 doc-edge scaffold (user decision 2026-10-18): the space
+  // doc-edge scaffold: the space
   // node an arrow created at the document's start/end, by identity —
   // removed on exit when nothing was typed into it.
   const scaffoldRef = useRef<{ node: Text; edge: 'doc-start' | 'doc-end' } | null>(
     null
   );
-  // Round-6 keyboard sort (user decision 2026-10-18): while edit mode
+  // keyboard sort: while edit mode
   // is ON, Ctrl+Space with the caret inside a snippet lifts it. The
   // ref guards the keydown paths synchronously; the state drives the
   // post-drop/cancel caret restoration effect.
@@ -1405,14 +1405,15 @@ export function usePreviewArea(
       return;
     }
     const parsed = parsePreviewDom(root, modelRef.current);
-    // Round 8 (dev-server-safe commits): a content-identical parse
-    // dispatches NOTHING. The reducer's SYNC no-op check is
-    // id-sensitive (the parse regenerates own-text ids), so even a
-    // content-equal commit churns the document REFERENCE — and a
-    // reference change remounts any OTHER focused+editing surface
-    // (the ADR 0004 external-change contract). With the round-8
-    // toggle auto-focus, the sibling surfaces hand focus over on
-    // every OFF→ON transition (the visible one wins); the blurred
+    // A content-identical parse dispatches NOTHING. The reducer's
+    // SYNC no-op check is id-sensitive (the parse regenerates
+    // own-text ids), so even a content-equal commit churns the
+    // document REFERENCE — and a reference change remounts any OTHER
+    // focused+editing surface (the external-change contract: a
+    // document change while a surface is focused and editing
+    // re-freezes and remounts it). The sibling surfaces hand focus
+    // over on every OFF→ON toggle transition (the visible one wins);
+    // the blurred
     // surface's content-equal commit must not ripple a remount into
     // the winner. Skipping the dispatch is semantically exact: the
     // model already matches the DOM, the edited flags and tombstones
@@ -1424,8 +1425,8 @@ export function usePreviewArea(
     dispatchParsedSync(parsed);
   }, [dispatchParsedSync]);
 
-  // ---- gap collapse on caret exit (user decision 2026-10-17,
-  // round 4): a spaces-only run directly between two chips keeps any
+  // ---- gap collapse on caret exit: a spaces-only run directly
+  // between two chips keeps any
   // number of spaces while the caret stays inside it, and collapses
   // to exactly one space the moment the caret leaves it — by click,
   // arrow navigation (selectionchange), or blur. ---------------------
@@ -1452,7 +1453,7 @@ export function usePreviewArea(
       // absorbs it as its own parse, the blurred twin re-renders.
       commitFlow();
     }
-    // Round-5 doc-edge scaffold: the caret leaving an untouched
+    // doc-edge scaffold: the caret leaving an untouched
     // scaffold (click-away, arrows that did not handle it) removes
     // it — the free zone only exists while the caret occupies it.
     const scaffold = scaffoldRef.current;
@@ -1507,7 +1508,7 @@ export function usePreviewArea(
     [handleSelectionChange]
   );
 
-  // Mode-aware focused-surface-owns-DOM contract (ADR 0004): an
+  // Mode-aware focused-surface-owns-DOM contract: an
   // incoming document change is classified against this surface's
   // last dispatched parse — content-equal (ignoring `edited`) means
   // it is the surface's own parsed edit: absorb it (the focused DOM
@@ -1576,13 +1577,13 @@ export function usePreviewArea(
       setRenderEpoch((epoch) => epoch + 1);
       return;
     }
-    // Round 8 (user decision 2026-10-19): "auto position the caret on
+    // "auto position the caret on
     // the last position of the text in preview area when enabling
     // edit text mode" — the OFF→ON transition focuses this surface's
     // host and places the caret at the text's end, ready to type (the
     // convenience equivalent of clicking at the end). The focus runs
     // the established onFocus machinery (the frozen-snapshot seeding,
-    // the round-1 trailing-line-anchor planting, gap tracking);
+    // the trailing-line-anchor planting, gap tracking);
     // EVERY mounted surface reacts, and the VISIBLE one wins
     // deterministically: React runs this effect in tree order, so
     // with the modal open the modal's portal-subtree effect (the
@@ -1658,12 +1659,12 @@ export function usePreviewArea(
       if (!root) {
         return;
       }
-      // EVERY input event syncs the model (EDIT-33: one parse + one
-      // whole-document sync per input — the round-4 cycle-1 fix is
-      // sacred). Real browsers label every input via InputEvent —
-      // deletions (deleteContentBackward, deleteByCut, historyUndo,
-      // …) and whitespace keystrokes included — so the round-5
-      // redirect gates gate ONLY the chip-territory redirect, never
+      // EVERY input event syncs the model (one parse + one
+      // whole-document sync per input — this is sacred). Real
+      // browsers label every input via InputEvent — deletions
+      // (deleteContentBackward, deleteByCut, historyUndo, …) and
+      // whitespace keystrokes included — so the redirect gates gate
+      // ONLY the chip-territory redirect, never
       // the sync below.
       const nativeEvent = event.nativeEvent as InputEvent;
       const inputType = nativeEvent?.inputType;
@@ -1673,10 +1674,10 @@ export function usePreviewArea(
         typeof data === 'string' && data.length > 0 && /\S/.test(data);
       const range = selectionRangeInRoot(root);
       if (isInsertion && hasTypedRun && range && range.collapsed) {
-        // Round-5 rule A (user decision 2026-10-18): typing at a caret
+        // rule A: typing at a caret
         // position that directly abutted a chip is the chip's
         // territory — the typed run moves into the chip (or, at a
-        // glued seam, keeps the round-4 spaces-both-sides behavior).
+        // glued seam, keeps the spaces-both-sides behavior).
         // Bare (data-less) events — the jsdom-driven suites — never
         // redirect: the run cannot be identified safely.
         redirectTypedRunToChipTerritory(root, range, data as string);
@@ -1687,7 +1688,7 @@ export function usePreviewArea(
   );
 
   /**
-   * Creates the round-5 doc-edge scaffold: ONE space planted outside
+   * Creates the doc-edge scaffold: ONE space planted outside
    * the first/last chip, the caret inside it, tracked by node
    * identity. The caret placement makes typing produce the user's
    * pinned results: doc-start at the space's START (the typed run
@@ -1724,7 +1725,7 @@ export function usePreviewArea(
     [commitFlow]
   );
 
-  // Round-5 rule B (user decision 2026-10-18): arrows create the free
+  // rule B: arrows create the free
   // zones — ArrowLeft/ArrowRight at a between-chips gap edge (or from
   // the adjacent chip's boundary) expand the one-space gap to two
   // with the caret centered; at the document's start/end they
@@ -1942,7 +1943,7 @@ export function usePreviewArea(
       if (!root) {
         return;
       }
-      // Round 6: while a snippet is raised (keyboard sort), editing
+      // while a snippet is raised (keyboard sort), editing
       // keys are suspended — everything is preventDefaulted so no
       // input fires mid-sort. The sensor-owned keys (bare Space and
       // Enter — both native end codes in the installed 6.3.1 —
@@ -1971,7 +1972,7 @@ export function usePreviewArea(
         }
         return;
       }
-      // Round 6 (user decision 2026-10-18): Ctrl+Space with the
+      // Ctrl+Space with the
       // caret inside a snippet lifts it into keyboard sorting. The
       // chip cannot take focus while editing (plain spans), so the
       // activation keydown is dispatched directly on the chip
@@ -2011,8 +2012,8 @@ export function usePreviewArea(
         return;
       }
       event.preventDefault();
-      // "A line break never enters a snippet" (user decision
-      // 2026-10-17): browsers place a click-at-the-end caret INSIDE
+      // "A line break never enters a snippet": browsers place a
+      // click-at-the-end caret INSIDE
       // the chip's text node, and inserting there would make the
       // newline — and everything typed on the next line — part of
       // the snippet token (the parser takes the chip's whole
@@ -2020,7 +2021,7 @@ export function usePreviewArea(
       // is therefore planted OUTSIDE the chip, as its sibling; the
       // caret follows it, so the new line's text is own text in the
       // flow. Mid-chip Enters (and every typed character) keep the
-      // Q3 in-snippet integration contract.
+      // in-snippet integration contract.
       const range = selectionRangeInRoot(root);
       const classification = range
         ? classifyCaretRelativeChip(root, range)
@@ -2057,7 +2058,7 @@ export function usePreviewArea(
 
   const handleFlowPaste = useCallback(
     (event: React.ClipboardEvent<HTMLDivElement>) => {
-      // Round 6: pasting is suspended while a snippet is raised.
+      // pasting is suspended while a snippet is raised.
       if (keyboardSortActiveRef.current) {
         event.preventDefault();
         return;
@@ -2073,8 +2074,8 @@ export function usePreviewArea(
         return;
       }
       // "A line break never enters a snippet" applies to pasted text
-      // too (user decision 2026-10-17, round 3: pasted text integrates
-      // into the snippet only up to its first newline):
+      // too — pasted text integrates into the snippet only up to its
+      // first newline:
       // - caret OUTSIDE any chip → plain insert (unchanged);
       // - caret inside a chip, paste with NO newline → full
       //   integration (a single-line paste behaves like typed
@@ -2088,8 +2089,7 @@ export function usePreviewArea(
       //   integrating the prefix would scramble the pasted reading
       //   order (only the chip's text follows the caret there, so the
       //   tail would render before the prefix without splitting the
-      //   chip — the rejected deviation b). Geometric agent default,
-      //   recorded in implementation.md;
+      //   chip — the rejected chip split). Geometric default;
       // - caret mid-chip, paste WITH a newline → full integration
       //   (unchanged, consistent with mid-chip Enter: an
       //   order-preserving escape is impossible without splitting).
@@ -2140,7 +2140,7 @@ export function usePreviewArea(
           ? landingBeforeToken(previewDocument, tokenIndexOf(String(event.active.id)))
           : null
       );
-      // Round 6: a raised snippet suspends editing keydowns while
+      // a raised snippet suspends editing keydowns while
       // edit mode is on (the guard is inert while edit is off).
       keyboardSortActiveRef.current = true;
       setKeyboardSortActive(true);
@@ -2157,7 +2157,7 @@ export function usePreviewArea(
         return;
       }
 
-      // Round 7: a landing anchor is hovered — the needle marks
+      // a landing anchor is hovered — the needle marks
       // exactly that word boundary / token gap. A stale anchor (the
       // document shrank mid-drag) hides the needle: the landing must
       // resolve against the current document.
@@ -2206,7 +2206,7 @@ export function usePreviewArea(
       notifyActiveDragChange(false);
       setActiveSnippet(null);
       setDropLanding(null);
-      // Round 6: the sort ended — schedule the caret restoration
+      // the sort ended — schedule the caret restoration
       // (after the drop's re-render; a no-op drop restores into the
       // unchanged chip).
       if (keyboardSortActiveRef.current) {
@@ -2232,7 +2232,7 @@ export function usePreviewArea(
         return;
       }
 
-      // Round 7: a landing anchor — the word-boundary landing model.
+      // a landing anchor — the word-boundary landing model.
       const landing = parseLandingId(overId);
       if (landing) {
         moveTokenToLanding(fromTokenIndex, landing);
@@ -2268,7 +2268,7 @@ export function usePreviewArea(
       notifyActiveDragChange(false);
       setActiveSnippet(null);
       setDropLanding(null);
-      // Round 6: cancelled — the snippet never moved; restore the
+      // cancelled — the snippet never moved; restore the
       // caret right away (the document is unchanged).
       if (keyboardSortActiveRef.current) {
         keyboardSortActiveRef.current = false;
@@ -2279,10 +2279,10 @@ export function usePreviewArea(
     [notifyActiveDragChange]
   );
 
-  // Round 6: after a keyboard sort ends (drop or cancel), restore the
+  // after a keyboard sort ends (drop or cancel), restore the
   // host focus and place the caret back inside the sorted snippet —
   // at the position saved at Ctrl+Space when it still resolves, at
-  // the chip's end otherwise (agent default). The timer lets the
+  // the chip's end otherwise. The timer lets the
   // drop's re-render (and the edit-mode remount) commit first.
   useEffect(() => {
     if (keyboardSortActive || !pendingCaretRestoreRef.current) {
@@ -2333,7 +2333,7 @@ export function usePreviewArea(
           return t(SORTING_KEYS.cancelled);
         }
         const overId = String(over.id);
-        // Round 7: a landing drop (word boundary or token gap)
+        // a landing drop (word boundary or token gap)
         // announces the moved chip's resulting position among the
         // snippet tokens — the same position identity chip drops
         // use, no new strings.

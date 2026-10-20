@@ -69,7 +69,7 @@ export const PreviewZone = styled.div`
  * built for the inline column (`flex: 1 1 auto` — fills its parent);
  * inside the modal's centered zone it takes its natural size up to
  * the zone bounds and scrolls internally beyond that, keeping its
- * min-height 400px. It stays the exact same component (ADR 0003).
+ * min-height 400px. It stays the exact same component.
  */
 export const ModalPreviewArea = styled.div<{
   onActiveDragChange?: (active: boolean) => void;
@@ -84,7 +84,7 @@ export const ModalPreviewArea = styled.div<{
  * no duplicate preview-toolbar testid, no card-inside-card), top-
  * aligned, inset theme.spacing(2) from the right edge so it does
  * not interfere with the centralization of the preview. Rail order
- * (user decision 2026-10-17, superseding the F2 order): copy on
+ *: copy on
  * top, close under it, the edit-text toggle last. Stays visible in
  * fullScreen so close remains reachable on the resize edge.
  */

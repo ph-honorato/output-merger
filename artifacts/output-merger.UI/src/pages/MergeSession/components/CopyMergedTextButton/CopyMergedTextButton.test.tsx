@@ -136,7 +136,7 @@ describe('CopyMergedTextButton', () => {
     expect(writeText).toHaveBeenCalledWith('Alpha! then\nmore');
   });
 
-  it('writes the empty string and shows the toast on an empty document while edit is ON (agent default)', async () => {
+  it('writes the empty string and shows the toast on an empty document while edit is ON', async () => {
     renderWithProviders([], { enableEditing: true });
     fireEvent.click(screen.getByTestId('preview-copy-button'));
     await act(() => writeText.mock.results[0]?.value ?? Promise.resolve());

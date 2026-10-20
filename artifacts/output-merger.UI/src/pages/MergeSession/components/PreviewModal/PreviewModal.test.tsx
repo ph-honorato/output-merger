@@ -30,7 +30,7 @@ const makeSnippet = (id: string, text: string, color = '#0080FF'): Snippet => ({
 
 // Mirrors the page composition: the inline preview plus the toolbar
 // (copy button + the modal's own trigger + the edit-text toggle) — so
-// the suite exercises the real duplicate-testid situation (ADR 0003)
+// the suite exercises the real duplicate-testid situation
 // and its within(dialog) scoping, exactly like the page integration
 // does.
 const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
@@ -175,14 +175,14 @@ const ZERO_RECT: SegmentRect = { left: 0, top: 0, right: 0, bottom: 0, width: 0,
 
 // Landing anchors sit at the droppable word boundaries / token gaps of
 // the seeded layout (same convention as the PreviewArea suite —
-// round 7: keyed by the data-landing id).
+// keyed by the data-landing id).
 const LANDING_X: Record<string, number> = {
   'preview-landing:g:0': -4,
   'preview-landing:s:1:0': 104,
   'preview-landing:s:1:1': 110,
   'preview-landing:s:3:0': 224,
   'preview-landing:s:3:1': 230,
-  // The round-7 words document (the second separator rewritten into
+  // The words document (the second separator rewritten into
   // " text entered_by_user "): the word anchors sit between Beta
   // (ends 220) and Gamma (starts 240).
   'preview-landing:s:3:5': 230,
@@ -200,7 +200,7 @@ const installSegmentRects = () =>
       const landingId = (this as HTMLElement).dataset?.landing;
       if (landingId !== undefined) {
         const x = LANDING_X[landingId] ?? 0;
-        // REAL-BROWSER GEOMETRY (dev-server correction, 2026-10-19):
+        // REAL-BROWSER GEOMETRY:
         // the landing anchors are zero-footprint spans — a true 0x0
         // rect at the text baseline (top === bottom), matching the
         // real browser exactly.
@@ -270,7 +270,7 @@ describe('PreviewModal', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('renders nothing below md while closed (mobile deviation)', () => {
+  it('renders nothing below md while closed (mobile layout)', () => {
     const viewport = installViewport(true);
     renderWithProviders(seedInterleaved());
 
@@ -361,7 +361,7 @@ describe('PreviewModal dialog', () => {
       'Alpha Beta Gamma',
     );
 
-    // Duplicate data-testids exist by design while open (ADR 0003):
+    // Duplicate data-testids exist by design while open:
     // the inline preview stays mounted alongside the modal's copy.
     const areas = screen.getAllByTestId('preview-area');
     expect(areas).toHaveLength(2);
@@ -383,8 +383,7 @@ describe('PreviewModal dialog', () => {
     expect(rail).toContainElement(copyButton);
     expect(rail).toContainElement(editToggle);
     expect(rail).toContainElement(closeButton);
-    // Rail order (user decision 2026-10-17, superseding the F2 order
-    // "copy → toggle → close"): copy on top, close under it, the
+    // Rail order: copy on top, close under it, the
     // edit toggle last — all direct children of the rail.
     expect(
       copyButton.compareDocumentPosition(closeButton) &
@@ -652,7 +651,7 @@ describe('PreviewModal escape guard wiring (additive onActiveDragChange)', () =>
 });
 
 // ---------------------------------------------------------------------------
-// Editable preview text inside the modal (Feature 3 Task 3): the
+// Editable preview text inside the modal: the
 // gating matrix on the trigger, the shared toggle pair, and the
 // inline ↔ modal typing sync. Typing is simulated with direct DOM
 // mutation + dispatched input events (jsdom's caret simulation is
@@ -775,13 +774,13 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
   });
 
   // -----------------------------------------------------------------
-  // Round 6 (user decision 2026-10-18): keyboard sorting via
+  // Keyboard sorting via
   // Ctrl+Space while editing — inside the modal it must compose with
   // the Escape guard (Escape cancels ONLY the sort) and with the
   // shared document (the inline twin reflects the drop).
   // -----------------------------------------------------------------
 
-  describe('keyboard sorting via Ctrl+Space (round 6)', () => {
+  describe('keyboard sorting via Ctrl+Space', () => {
     beforeEach(() => {
       installSegmentRects();
     });
@@ -876,7 +875,7 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
       liftAtCaret(flow, alpha, 2);
       await flush();
 
-      // Round 7 (Q16): reaching the Beta chip takes three hops — the
+      // reaching the Beta chip takes three hops — the
       // arrows walk through the separator's edge anchors first.
       hostKey(flow, 'ArrowRight', 'ArrowRight');
       hostKey(flow, 'ArrowRight', 'ArrowRight');
@@ -897,7 +896,7 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
       expect(inlineFlow(dialog).textContent).toBe('Beta Alpha Gamma');
     });
 
-    it('drops the raised snippet at a word boundary inside the modal and the inline twin reflects it (round 7)', async () => {
+    it('drops the raised snippet at a word boundary inside the modal and the inline twin reflects it', async () => {
       renderWithProviders(seedInterleaved());
       const dialog = await openDialog();
       fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
@@ -955,7 +954,7 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Round 8 (user decision 2026-10-19): "I want you to auto position the
+// "I want you to auto position the
 // caret on the last position of the text in preview area when enabling
 // edit text mode" — the modal composition: the rail toggle must leave
 // the MODAL's editor focused (the visible surface wins), and opening
@@ -963,7 +962,7 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
 // scope).
 // ---------------------------------------------------------------------------
 
-describe('edit-toggle caret auto-positioning (round 8)', () => {
+describe('edit-toggle caret auto-positioning', () => {
   const inlineFlowOf = (dialog: HTMLElement) =>
     screen
       .getAllByTestId('preview-segment-flow')
@@ -992,7 +991,7 @@ describe('edit-toggle caret auto-positioning (round 8)', () => {
 
   it('opening the modal while already editing keeps click-to-focus (the transition-only scope)', async () => {
     renderWithProviders(seedInterleaved());
-    // The toolbar toggle: the inline editor auto-focuses (round 8).
+    // The toolbar toggle: the inline editor auto-focuses.
     fireEvent.click(screen.getByTestId('preview-edit-toggle'));
     expect(document.activeElement).toBe(
       screen.getByTestId('preview-segment-flow'),

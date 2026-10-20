@@ -4,8 +4,7 @@ import * as S from './TextEditingToggle.styles';
 import type { TextEditingToggleProps } from './TextEditingToggle.types';
 
 /**
- * The "T" edit-text toggle (roadmap 3.3 — deviation a, user decision
- * 2026-10-16): icon-only, off by default, one shared session state
+ * The "T" edit-text toggle: icon-only, off by default, one shared session state
  * consumed by both the toolbar and the modal's tools rail. While
  * pressed, typing is enabled on both preview surfaces; while not,
  * the preview is today's sort-only flow (dragging is always live in
