@@ -2,6 +2,7 @@ import type { PreviewToken, SnippetToken } from '../context/SnippetsContext';
 import {
   buildLandingId,
   buildSnippetTokenId,
+  clampDocumentToLimit,
   enumerateLandingAnchors,
   isDocumentAtLimit,
   isSeparatorToken,
@@ -729,5 +730,117 @@ describe('truncateToUtf16Budget', () => {
     // A COMPLETE pair at the end is kept whole (its last unit is the
     // low half — the drop check must not fire).
     expect(truncateToUtf16Budget('a\ud83d\ude00', 3)).toBe('a\ud83d\ude00');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The post-commit document clamp: peeling the over-budget tail so a
+// parsed document fits the character limit.
+// ---------------------------------------------------------------------------
+
+describe('clampDocumentToLimit', () => {
+  it('is a no-op within the limit (same reference, zero removed)', () => {
+    const tokens = [snippetToken('text-1:a1', 'Alpha'), ownText('t1', ' tail')];
+    const result = clampDocumentToLimit(tokens, 20);
+    expect(result.tokens).toBe(tokens);
+    expect(result.removedUnits).toBe(0);
+  });
+
+  it('cuts the trailing text token\'s tail by the overflow', () => {
+    const tokens = [ownText('t1', 'abcdefgh')];
+    const { tokens: clamped, removedUnits } = clampDocumentToLimit(tokens, 5);
+    expect(serialize(clamped)).toBe('abcde');
+    expect(removedUnits).toBe(3);
+  });
+
+  it('drops a trailing separator whole when it fits the overflow', () => {
+    const tokens = [snippetToken('text-1:a1', 'Alpha'), ownText('t1', ' ')];
+    const { tokens: clamped } = clampDocumentToLimit(tokens, 5);
+    // 1 unit over: the separator is dropped whole, the chip keeps its
+    // text and its id.
+    expect(serialize(clamped)).toBe('Alpha');
+    expect(clamped[0]).toEqual(expect.objectContaining({ tokenId: 'text-1:a1' }));
+  });
+
+  it('cuts a trailing chip\'s TEXT tail — the chip survives with its id', () => {
+    const tokens = [snippetToken('text-1:a1', 'Alphabc')];
+    const { tokens: clamped, removedUnits } = clampDocumentToLimit(tokens, 5);
+    expect(serialize(clamped)).toBe('Alpha');
+    expect(removedUnits).toBe(2);
+    expect(clamped).toHaveLength(1);
+    expect(clamped[0]).toEqual(
+      expect.objectContaining({ kind: 'snippet', tokenId: 'text-1:a1', text: 'Alpha' })
+    );
+  });
+
+  it('peels across multiple tokens in one overflow (text + separator + chip text)', () => {
+    // "AB x" at limit 2 — overflow 2: the tail text drops whole and
+    // the separator drops whole; the chip survives with its id.
+    const crossing = [
+      snippetToken('text-1:a1', 'AB'),
+      ownText('t1', ' '),
+      ownText('t2', 'x'),
+    ];
+    const first = clampDocumentToLimit(crossing, 2);
+    expect(serialize(first.tokens)).toBe('AB');
+    expect(first.removedUnits).toBe(2);
+    expect(first.tokens[0]).toEqual(
+      expect.objectContaining({ kind: 'snippet', tokenId: 'text-1:a1' })
+    );
+
+    // "ABCDE x" at limit 4 — overflow 3: the tail text drops whole,
+    // the separator drops whole, and the chip loses 1 text unit —
+    // the chip survives with its id and a shortened text.
+    const deep = [
+      snippetToken('text-1:a1', 'ABCDE'),
+      ownText('t1', ' '),
+      ownText('t2', 'x'),
+    ];
+    const second = clampDocumentToLimit(deep, 4);
+    expect(serialize(second.tokens)).toBe('ABCD');
+    expect(second.removedUnits).toBe(3);
+    expect(second.tokens).toHaveLength(1);
+    expect(second.tokens[0]).toEqual(
+      expect.objectContaining({ kind: 'snippet', tokenId: 'text-1:a1', text: 'ABCD' })
+    );
+  });
+
+  it('drops trailing line breaks one unit each', () => {
+    const tokens = [ownText('t1', 'ab'), lineBreak('br1'), lineBreak('br2')];
+    const { tokens: clamped } = clampDocumentToLimit(tokens, 2);
+    expect(serialize(clamped)).toBe('ab');
+    expect(clamped).toEqual([expect.objectContaining({ kind: 'text', text: 'ab' })]);
+  });
+
+  it('yields the empty document when the overflow exceeds everything (text-only)', () => {
+    const tokens = [ownText('t1', 'abc'), ownText('t2', 'de')];
+    const { tokens: clamped, removedUnits } = clampDocumentToLimit(tokens, 0);
+    expect(clamped).toEqual([]);
+    expect(serialize(clamped)).toBe('');
+    expect(removedUnits).toBe(5);
+  });
+
+  it('never exceeds the limit and never removes a chip', () => {
+    const cases: PreviewToken[][] = [
+      [ownText('t1', 'x'.repeat(30))],
+      [snippetToken('text-1:a1', 'y'.repeat(20)), ownText('t1', ' ')],
+      [ownText('t1', ' '), snippetToken('text-1:a1', 'z'.repeat(20))],
+      [
+        snippetToken('text-1:a1', 'chip'),
+        ownText('t1', ' '),
+        ownText('t2', 'tail words'),
+        lineBreak('br1'),
+      ],
+    ];
+    for (const tokens of cases) {
+      const { tokens: clamped } = clampDocumentToLimit(tokens, 7);
+      expect(serialize(clamped).length).toBeLessThanOrEqual(7);
+      for (const token of clamped) {
+        if (isSnippetToken(token)) {
+          // A chip is never removed, whatever the overflow.
+          expect(tokens.some((original) => original.tokenId === token.tokenId)).toBe(true);
+        }
+      }
+    }
   });
 });

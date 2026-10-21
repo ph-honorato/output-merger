@@ -86,6 +86,54 @@ export const isDocumentAtLimit = (tokens: PreviewToken[]): boolean =>
   remainingDocumentLength(tokens) <= 0;
 
 /**
+ * Clamps a parsed document to the character limit by peeling the
+ * over-budget tail, k = serialized length − limit units at a time:
+ * a trailing text token loses units from its text tail (a fully
+ * consumed token — separators included — is dropped whole); a
+ * trailing line break costs one unit and is dropped; a trailing
+ * snippet token loses units from its TEXT tail only — the chip
+ * itself is never removed and its id and structure survive (an
+ * exhausted chip keeps its id with the remaining text; the parser
+ * prunes an emptied chip on the next parse). The peel repeats until
+ * the document fits or nothing remains. Within the limit the input
+ * is returned unchanged (same reference); the result always
+ * satisfies serialize(result).length <= limit.
+ */
+export const clampDocumentToLimit = (
+  tokens: PreviewToken[],
+  limit: number
+): { tokens: PreviewToken[]; removedUnits: number } => {
+  const overflow = serialize(tokens).length - limit;
+  if (overflow <= 0) {
+    return { tokens, removedUnits: 0 };
+  }
+  const result = [...tokens];
+  let toRemove = overflow;
+  while (toRemove > 0 && result.length > 0) {
+    const last = result[result.length - 1];
+    if (last.kind === 'line-break') {
+      result.pop();
+      toRemove -= 1;
+      continue;
+    }
+    const cut = Math.min(last.text.length, toRemove);
+    if (cut >= last.text.length && last.kind === 'text') {
+      result.pop();
+      toRemove -= last.text.length;
+      continue;
+    }
+    result[result.length - 1] = { ...last, text: last.text.slice(0, last.text.length - cut) };
+    toRemove -= cut;
+    if (cut === 0) {
+      // A snippet with no text left to give: never removed — the
+      // peel continues with the token before it.
+      break;
+    }
+  }
+  return { tokens: result, removedUnits: overflow - toRemove };
+};
+
+/**
  * Truncates text to a UTF-16 CODE-UNIT budget (the unit the
  * document limit and its counter measure): slice by units to the
  * budget, then drop a trailing lone high surrogate so a surrogate

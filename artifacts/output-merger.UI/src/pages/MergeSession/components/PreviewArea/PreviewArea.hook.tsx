@@ -25,11 +25,13 @@ import type {
   SnippetToken,
 } from '../../../../context/SnippetsContext';
 import {
+  clampDocumentToLimit,
   isSnippetToken,
   landingAfterToken,
   landingBeforeToken,
   parseLandingId,
   parsePreviewDom,
+  PREVIEW_DOCUMENT_MAX_LENGTH,
   remainingDocumentLength,
   serialize,
   tokensEqualIgnoringEdited,
@@ -1401,6 +1403,51 @@ export function usePreviewArea(
     [syncDocument]
   );
 
+  // Post-commit limit clamp: some user-agent insertions cannot be
+  // prevented before they land (composition commits are the case —
+  // see the beforeinput guard's comment), so the limit is enforced
+  // AFTER the fact: when the parsed document exceeds the limit, the
+  // over-budget tail is peeled off and the CLAMPED document is
+  // dispatched. The raw parse stays recorded as this surface's
+  // parse, so the clamped model renders as an EXTERNAL change — the
+  // established re-freeze + remount path — which trims the over-cap
+  // text out of the DOM and restores the WYSIWYG invariant (the DOM
+  // briefly holds the over-cap text between the commit and the
+  // clamp's re-render). A within-limit parse dispatches normally
+  // (same reference path, no re-render).
+  const pendingClampRestoreRef = useRef(false);
+  const applyDocumentLimitClamp = useCallback(
+    (parsed: PreviewToken[]) => {
+      if (serialize(parsed).length <= PREVIEW_DOCUMENT_MAX_LENGTH) {
+        dispatchParsedSync(parsed);
+        return;
+      }
+      const { tokens: clamped } = clampDocumentToLimit(
+        parsed,
+        PREVIEW_DOCUMENT_MAX_LENGTH
+      );
+      lastParseRef.current = parsed;
+      syncDocument(clamped);
+      // After the re-render, the host regains focus and the caret
+      // lands at the cut point — the document end for a tail trim.
+      pendingClampRestoreRef.current = true;
+    },
+    [dispatchParsedSync, syncDocument]
+  );
+
+  // The composition-commit trigger: OS text services (the Windows
+  // emoji panel, IME, voice) end a composition session with this
+  // event, and the DOM then holds the committed text — the clamp
+  // runs on the parsed result. Idempotent with the input-path
+  // clamp (a second pass finds the document within the limit).
+  const handleFlowCompositionEnd = useCallback(() => {
+    const root = flowRef.current;
+    if (!root) {
+      return;
+    }
+    applyDocumentLimitClamp(parsePreviewDom(root, modelRef.current));
+  }, [applyDocumentLimitClamp]);
+
   const commitFlow = useCallback(() => {
     const root = flowRef.current;
     if (!root) {
@@ -1671,6 +1718,11 @@ export function usePreviewArea(
       const nativeEvent = event.nativeEvent as InputEvent;
       const inputType = nativeEvent?.inputType;
       const data = nativeEvent?.data;
+      // Mid-composition inputs are never clamped: the in-progress
+      // composition state survives untouched (blocking or trimming
+      // it would corrupt the session) — the compositionend listener
+      // enforces the limit once the session commits.
+      const isComposing = nativeEvent?.isComposing === true;
       const isInsertion = !inputType || inputType.startsWith('insert');
       const hasTypedRun =
         typeof data === 'string' && data.length > 0 && /\S/.test(data);
@@ -1684,9 +1736,13 @@ export function usePreviewArea(
         // redirect: the run cannot be identified safely.
         redirectTypedRunToChipTerritory(root, range, data as string);
       }
-      dispatchParsedSync(parsePreviewDom(root, modelRef.current));
+      if (isComposing) {
+        dispatchParsedSync(parsePreviewDom(root, modelRef.current));
+      } else {
+        applyDocumentLimitClamp(parsePreviewDom(root, modelRef.current));
+      }
     },
-    [dispatchParsedSync]
+    [applyDocumentLimitClamp, dispatchParsedSync]
   );
 
   /**
@@ -2086,6 +2142,106 @@ export function usePreviewArea(
     },
     [commitFlow, handleArrowNavigation]
   );
+
+  // The insertion-family safety net for user-agent insertions that
+  // carry NO measurable keydown key: emoji-panel clicks, voice
+  // input, and extension insertions reach the contentEditable as
+  // native `beforeinput` events with real data. React's synthetic
+  // onBeforeInput is a legacy polyfill over keypress/textInput and
+  // does NOT fire for these, so the listener is attached natively.
+  const handleFlowBeforeInput = useCallback((event: InputEvent) => {
+    const inputType = event.inputType ?? '';
+    // Only insertion-family types are budgeted.
+    if (!inputType.startsWith('insert')) {
+      return;
+    }
+    // Composition-family insertions pass through BY DESIGN: the OS
+    // text-services pipeline (the Windows emoji panel, IME, voice)
+    // commits through composition events, and in Chromium the
+    // composition beforeinput is fired NON-CANCELABLE — no
+    // pre-insertion guard can stop a composition commit, and
+    // blocking mid-composition would corrupt the session. The
+    // limit is enforced AFTER the commit instead: the post-commit
+    // clamp trims the over-budget tail back to the limit. Plain-text
+    // paste is excluded the same way — the paste handler's own
+    // truncation owns that budget.
+    if (
+      inputType === 'insertCompositionText' ||
+      inputType === 'insertFromPaste'
+    ) {
+      return;
+    }
+    const root = flowRef.current;
+    if (!root) {
+      return;
+    }
+    // The insertion replaces the current selection, so the budget
+    // covers the NET units: incoming minus replaced. Enter's
+    // paragraph/lineBreak events carry null data (net <= 0 — the
+    // keydown guard owns Enter), and a selection replacement can
+    // pass at the cap whenever it does not grow the document.
+    const incoming =
+      event.data ?? event.dataTransfer?.getData('text/plain') ?? '';
+    const replaced = selectionRangeInRoot(root)?.toString().length ?? 0;
+    const net = incoming.length - replaced;
+    if (net > 0 && net > remainingDocumentLength(modelRef.current)) {
+      event.preventDefault();
+    }
+  }, []);
+
+  // Native beforeinput wiring: attached to the live flow host while
+  // editing is enabled (the same gating as the React-prop handlers),
+  // removed on disable and unmount. The host remounts on the epoch
+  // key, so the epoch joins the deps — every remount re-attaches the
+  // listener to the current node. The hook's own DOM-writing helpers
+  // all use manual Range manipulation, which fires no beforeinput —
+  // the guard only ever sees genuine user-agent insertions.
+  useEffect(() => {
+    const root = flowRef.current;
+    if (!editEnabled || !root) {
+      return undefined;
+    }
+    const listener = (event: Event) => {
+      handleFlowBeforeInput(event as InputEvent);
+    };
+    root.addEventListener('beforeinput', listener);
+    return () => {
+      root.removeEventListener('beforeinput', listener);
+    };
+  }, [editEnabled, renderEpoch, handleFlowBeforeInput]);
+
+  // Native compositionend wiring: same gating and remount
+  // re-attachment as the beforeinput listener above.
+  useEffect(() => {
+    const root = flowRef.current;
+    if (!editEnabled || !root) {
+      return undefined;
+    }
+    const listener = () => {
+      handleFlowCompositionEnd();
+    };
+    root.addEventListener('compositionend', listener);
+    return () => {
+      root.removeEventListener('compositionend', listener);
+    };
+  }, [editEnabled, renderEpoch, handleFlowCompositionEnd]);
+
+  // After a clamp re-render (the epoch the clamp's external-change
+  // classification bumps), the host regains focus and the caret
+  // lands at the cut point — the document end for a tail trim, or
+  // after the remaining chip text when the cut ended inside a chip.
+  useEffect(() => {
+    if (!pendingClampRestoreRef.current || !editEnabled) {
+      return;
+    }
+    pendingClampRestoreRef.current = false;
+    const root = flowRef.current;
+    if (!root) {
+      return;
+    }
+    root.focus();
+    placeCaretAtTextEnd(root);
+  }, [renderEpoch, editEnabled]);
 
   const handleFlowPaste = useCallback(
     (event: React.ClipboardEvent<HTMLDivElement>) => {

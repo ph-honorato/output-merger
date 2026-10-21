@@ -1112,6 +1112,55 @@ describe('bounded height and the document limit inside the modal', () => {
     expect(inlineCounter!.textContent).toContain('/');
   });
 
+  it('clamps a composition commit at the cap inside the modal (the shared hook), and the inline twin reflects it', async () => {
+    renderWithProviders(seedInterleaved());
+    fireEvent.click(screen.getByTestId('preview-edit-toggle'));
+    const inlineFlow = screen.getByTestId('preview-segment-flow');
+    // "Alpha Beta Gamma" serializes to 16 characters.
+    inlineFlow.appendChild(
+      document.createTextNode('x'.repeat(2000 - 'Alpha Beta Gamma'.length)),
+    );
+    fireEvent.input(inlineFlow);
+    fireEvent.click(screen.getByTestId('preview-edit-toggle')); // OFF — commit
+
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+    const modalFlow = within(dialog).getByTestId('preview-segment-flow');
+    expect(document.activeElement).toBe(modalFlow);
+
+    // The composition stream: the emoji lands over cap, the commit
+    // clamp trims it back to exactly the limit, and the re-rendered
+    // modal flow matches the shared document.
+    const tail = Array.from(modalFlow.childNodes)
+      .reverse()
+      .find(
+        (child) => child.nodeType === Node.TEXT_NODE && (child as Text).data !== '',
+      ) as Text;
+    act(() => {
+      modalFlow.dispatchEvent(
+        new CompositionEvent('compositionstart', { bubbles: true }),
+      );
+      tail.insertData(tail.data.length, '\ud83d\ude00');
+      const input = new window.InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertCompositionText',
+        data: '\ud83d\ude00',
+      });
+      Object.defineProperty(input, 'isComposing', { value: true });
+      modalFlow.dispatchEvent(input);
+      modalFlow.dispatchEvent(
+        new CompositionEvent('compositionend', { bubbles: true }),
+      );
+    });
+    // The inline twin renders the same shared document: exactly at
+    // the limit, and the re-rendered modal flow matches it.
+    const flows = screen.getAllByTestId('preview-segment-flow');
+    const inline = flows.find((candidate) => !dialog.contains(candidate));
+    expect(inline?.textContent).toHaveLength(2000);
+    const liveModalFlow = within(dialog).getByTestId('preview-segment-flow');
+    expect(liveModalFlow.textContent).toBe(inline?.textContent);
+  });
+
   it('the shared document limit caps the modal editor: the next printable keystroke is prevented at 2000', async () => {
     renderWithProviders(seedInterleaved());
     // Build the shared document to exactly 2000 characters inline

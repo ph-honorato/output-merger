@@ -5271,6 +5271,366 @@ describe("document length limit", () => {
     expect(screen.getByTestId("document-probe").textContent).toHaveLength(1999);
   });
 
+  // Native beforeinput: the insertion-family safety net for
+  // user-agent insertions that carry NO measurable keydown key
+  // (emoji-panel clicks, voice input, extension insertions). The
+  // events are dispatched natively on the flow root with
+  // cancelable: true so defaultPrevented reflects the guard.
+  const dispatchBeforeInput = (
+    flow: HTMLElement,
+    init: { inputType: string; data?: string | null; dataTransfer?: unknown }
+  ) => {
+    const event = new InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      inputType: init.inputType,
+      data: init.data ?? null,
+    });
+    if (init.dataTransfer !== undefined) {
+      // jsdom's InputEvent init does not carry dataTransfer — assign
+      // after construction (insertFromDrop's carrier).
+      Object.defineProperty(event, "dataTransfer", {
+        value: init.dataTransfer,
+      });
+    }
+    act(() => {
+      flow.dispatchEvent(event);
+    });
+    return event;
+  };
+
+  const selectUnitsAtTail = (flow: HTMLElement, units: number) => {
+    const node = lastTail(flow);
+    const start = Math.max(0, node.data.length - units);
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, node.data.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  };
+
+  it("blocks emoji-panel insertions at the cap, repeatedly (the unbounded-overshoot scenario)", () => {
+    const flow = seedAtLength(2000);
+    for (let click = 0; click < 3; click += 1) {
+      const event = dispatchBeforeInput(flow, {
+        inputType: "insertText",
+        data: "\ud83d\ude00",
+      });
+      expect(event.defaultPrevented).toBe(true);
+    }
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+
+  it("blocks a two-unit insertion at remaining 1, allows it at remaining 2 (lands exactly at the limit)", () => {
+    let flow = seedAtLength(1999);
+    const blocked = dispatchBeforeInput(flow, {
+      inputType: "insertText",
+      data: "\ud83d\ude00",
+    });
+    expect(blocked.defaultPrevented).toBe(true);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(1999);
+
+    cleanup();
+    flow = seedAtLength(1998);
+    const allowed = dispatchBeforeInput(flow, {
+      inputType: "insertText",
+      data: "\ud83d\ude00",
+    });
+    expect(allowed.defaultPrevented).toBe(false);
+    landChar(flow, "\ud83d\ude00");
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+    const next = dispatchBeforeInput(flow, { inputType: "insertText", data: "x" });
+    expect(next.defaultPrevented).toBe(true);
+  });
+
+  it("budgets the NET units: selection replacements pass when they do not grow the document", () => {
+    // 3 units selected at the cap, an emoji replaces them (net -1):
+    // allowed.
+    let flow = seedAtLength(2000);
+    selectUnitsAtTail(flow, 3);
+    let event = dispatchBeforeInput(flow, {
+      inputType: "insertText",
+      data: "\ud83d\ude00",
+    });
+    expect(event.defaultPrevented).toBe(false);
+
+    // 1 unit selected at the cap, an emoji replaces it (net 1 > 0):
+    // prevented.
+    cleanup();
+    flow = seedAtLength(2000);
+    selectUnitsAtTail(flow, 1);
+    event = dispatchBeforeInput(flow, {
+      inputType: "insertText",
+      data: "\ud83d\ude00",
+    });
+    expect(event.defaultPrevented).toBe(true);
+
+    // 1 unit selected at the cap, 'x' replaces it (net 0): allowed —
+    // a neutral replacement never grows the document.
+    cleanup();
+    flow = seedAtLength(2000);
+    selectUnitsAtTail(flow, 1);
+    event = dispatchBeforeInput(flow, { inputType: "insertText", data: "x" });
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("excludes composition, paste, deletions, and paragraph insertions on purpose", () => {
+    const flow = seedAtLength(2000);
+    // Mid-IME composition: never blocked (breaking a composition
+    // session corrupts the input) — the documented limitation.
+    expect(
+      dispatchBeforeInput(flow, {
+        inputType: "insertCompositionText",
+        data: "\ud83d\ude00",
+      }).defaultPrevented,
+    ).toBe(false);
+    // Plain-text paste: the paste handler's truncation owns the
+    // budget.
+    expect(
+      dispatchBeforeInput(flow, {
+        inputType: "insertFromPaste",
+        data: "\ud83d\ude00",
+      }).defaultPrevented,
+    ).toBe(false);
+    // Deletions and history always pass.
+    expect(
+      dispatchBeforeInput(flow, { inputType: "deleteContentBackward" })
+        .defaultPrevented,
+    ).toBe(false);
+    expect(
+      dispatchBeforeInput(flow, { inputType: "historyUndo" }).defaultPrevented,
+    ).toBe(false);
+    // Enter's paragraph event carries null data (net <= 0) — the
+    // keydown guard owns Enter.
+    expect(
+      dispatchBeforeInput(flow, { inputType: "insertParagraph" })
+        .defaultPrevented,
+    ).toBe(false);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+
+  it("budgets native text drops via dataTransfer (insertFromDrop)", () => {
+    const flow = seedAtLength(2000);
+    const event = dispatchBeforeInput(flow, {
+      inputType: "insertFromDrop",
+      dataTransfer: { getData: (type: string) => (type === "text/plain" ? "ab" : "") },
+    });
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("does not guard while edit mode is off (the listener is detached)", () => {
+    renderWithProviders(seedTwoChips());
+    enableEditing();
+    enableEditing(); // OFF — the native listener detaches
+    const flow = screen.getByTestId("preview-segment-flow");
+    const event = dispatchBeforeInput(flow, {
+      inputType: "insertText",
+      data: "\ud83d\ude00",
+    });
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  // The REAL panel stream, simulated end-to-end: the OS
+  // text-services pipeline fires compositionstart → beforeinput
+  // (insertCompositionText, NON-cancelable in Chromium) → input
+  // (isComposing true) → compositionend. The pre-insertion guards
+  // all pass by design; the limit is enforced by the post-commit
+  // clamp on compositionend.
+  const dispatchCompositionCommit = (flow: HTMLElement, emoji: string) => {
+    act(() => {
+      flow.dispatchEvent(
+        new CompositionEvent("compositionstart", { bubbles: true })
+      );
+      const beforeInput = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: false,
+        inputType: "insertCompositionText",
+        data: emoji,
+      });
+      flow.dispatchEvent(beforeInput);
+      // The panel insertion lands in the DOM (the suite's DOM
+      // driving — the browser writes the committed text itself).
+      const tail = Array.from(flow.childNodes)
+        .reverse()
+        .find(
+          (child) =>
+            child.nodeType === Node.TEXT_NODE && (child as Text).data !== ""
+        ) as Text;
+      tail.insertData(tail.data.length, emoji);
+      const input = new window.InputEvent("input", {
+        bubbles: true,
+        inputType: "insertCompositionText",
+        data: emoji,
+      });
+      Object.defineProperty(input, "isComposing", { value: true });
+      flow.dispatchEvent(input);
+      flow.dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true })
+      );
+    });
+  };
+
+  it("clamps composition commits at the cap: the panel emoji lands, gets trimmed back to the limit, and the flow re-renders (WYSIWYG)", () => {
+    const flow = seedAtLength(2000);
+    const before = screen.getByTestId("document-probe").textContent;
+    expect(before).toHaveLength(2000);
+
+    // The beforeinput of a composition is non-cancelable and
+    // excluded — nothing prevents it (mirrors the real event).
+    const probe = new InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: false,
+      inputType: "insertCompositionText",
+      data: "\ud83d\ude00",
+    });
+    act(() => {
+      flow.dispatchEvent(probe);
+    });
+    expect(probe.defaultPrevented).toBe(false);
+
+    // The full stream: the emoji lands (over cap), the
+    // mid-composition input does NOT clamp, and the compositionend
+    // clamp trims the overflow back to exactly the limit.
+    dispatchCompositionCommit(flow, "\ud83d\ude00");
+
+    const probeText = screen.getByTestId("document-probe").textContent;
+    expect(probeText).toHaveLength(2000);
+    // The over-cap emoji is gone from the model AND the re-rendered
+    // DOM (the clamp's re-render restored the WYSIWYG invariant).
+    expect(probeText?.endsWith("x")).toBe(true);
+    const liveFlow = screen.getByTestId("preview-segment-flow");
+    expect(liveFlow.textContent).toBe(probeText);
+    // The caret sits at the cut point — the document end.
+    expect(document.activeElement).toBe(liveFlow);
+    const range = window.getSelection()?.getRangeAt(0);
+    expect(range?.collapsed).toBe(true);
+  });
+
+  it("the repeat scenario: every further panel emoji at the cap is committed and trimmed back — the document never grows", () => {
+    const flow = seedAtLength(2000);
+    for (let click = 0; click < 3; click += 1) {
+      dispatchCompositionCommit(flow, "\ud83d\ude00");
+      expect(screen.getByTestId("document-probe").textContent).toHaveLength(
+        2000,
+      );
+    }
+  });
+
+  it("mid-composition inputs never clamp — the in-progress state survives until compositionend", () => {
+    const flow = seedAtLength(2000);
+    act(() => {
+      flow.dispatchEvent(
+        new CompositionEvent("compositionstart", { bubbles: true })
+      );
+      const tail = Array.from(flow.childNodes)
+        .reverse()
+        .find(
+          (child) =>
+            child.nodeType === Node.TEXT_NODE && (child as Text).data !== ""
+        ) as Text;
+      tail.insertData(tail.data.length, "\ud83d\ude00");
+      const input = new window.InputEvent("input", {
+        bubbles: true,
+        inputType: "insertCompositionText",
+        data: "\ud83d\ude00",
+      });
+      Object.defineProperty(input, "isComposing", { value: true });
+      flow.dispatchEvent(input);
+    });
+    // Mid-composition: NO clamp — the in-progress state holds the
+    // over-cap text (the IME UX is untouched).
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(
+      2002,
+    );
+
+    // The session commits: the clamp trims the overflow.
+    act(() => {
+      flow.dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true })
+      );
+    });
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(
+      2000,
+    );
+  });
+
+  it("a composition commit below the cap lands without any clamp", () => {
+    const flow = seedAtLength(1998);
+    dispatchCompositionCommit(flow, "\ud83d\ude00");
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(
+      2000,
+    );
+    expect(
+      screen.getByTestId("document-probe").textContent?.endsWith("\ud83d\ude00"),
+    ).toBe(true);
+  });
+
+  it("clamps the chip-boundary separator overshoot: a 1-unit keystroke landing +2 at remaining 1 trims back to exactly the limit", () => {
+    // The auto-separator edge: a single-unit keystroke the keydown
+    // guard allows at remaining 1 lands TWO units when the caret
+    // sits OUTSIDE a chip but directly abutting it, with own text on
+    // the far side (chip-territory rule A) — the redirect moves the
+    // character into the chip AND plants the missing separator. The
+    // RAW commit nets +2 (2001 at a 1-unit budget); the post-commit
+    // clamp peels the 1-unit over-budget tail back to exactly 2000,
+    // and the re-rendered flow restores the WYSIWYG invariant. This
+    // pins the clamped outcome (the former bounded residual is
+    // closed by the same clamp).
+    const flow = seedAtLength(1999);
+    // seedAtLength ends with [A, " ", B, tail] — B abuts the tail
+    // with no separator. The chip-territory caret sits in the FLOW
+    // right after B's element (outside any chip), not inside B's
+    // text (inside-chip typing integrates natively and plants
+    // nothing).
+    const chips = screen.getAllByTestId("preview-snippet");
+    const beta = chips[chips.length - 1];
+    const flowOffset = Array.from(flow.childNodes).indexOf(beta) + 1;
+    const before = screen.getByTestId("document-probe").textContent;
+    expect(before).toHaveLength(1999);
+
+    // The browser's native typing: the character lands in a fresh
+    // text node at the caret (outside the chip) and the realistic
+    // input event runs the redirect + the clamp.
+    const typed = document.createTextNode("x");
+    flow.insertBefore(typed, flow.childNodes[flowOffset] ?? null);
+    const caret = document.createRange();
+    caret.setStart(typed, 1);
+    caret.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(caret);
+    act(() => {
+      flow.dispatchEvent(
+        new window.InputEvent("input", {
+          bubbles: true,
+          inputType: "insertText",
+          data: "x",
+        }),
+      );
+    });
+
+    // The raw commit netted +2 (the character + the planted
+    // separator); the clamp peeled the 1-unit over-budget tail: the
+    // document is EXACTLY at the limit, the chip keeps the
+    // redirected character and its planted separator, and the
+    // re-rendered flow matches the model (WYSIWYG).
+    const after = screen.getByTestId("document-probe").textContent;
+    expect(after).toHaveLength(2000);
+    expect(after?.includes("Betax ")).toBe(true);
+    const liveFlow = screen.getByTestId("preview-segment-flow");
+    expect(liveFlow.textContent).toBe(after);
+
+    // At the limit again: every further insertion is blocked.
+    const blockedKey = keyDown(liveFlow, { key: "x", code: "KeyX" });
+    expect(blockedKey.defaultPrevented).toBe(true);
+    const blockedNative = dispatchBeforeInput(liveFlow, {
+      inputType: "insertText",
+      data: "x",
+    });
+    expect(blockedNative.defaultPrevented).toBe(true);
+  });
+
   it("paste truncates to what fits; at the limit nothing lands", () => {
     // At 1995 a 10-character paste lands only its 5-character
     // fitting prefix.
