@@ -17,4 +17,12 @@ export interface PreviewAreaProps {
    * the drag while the dialog stays open.
    */
   onActiveDragChange?: (active: boolean) => void;
+  /**
+   * Whether this instance renders the document char counter row
+   * inside its card (below the scrolling flow area). Purely
+   * additive: defaults to true (the default view's textarea look).
+   * The preview modal passes false — it renders the counter as the
+   * last element of its tools rail instead.
+   */
+  showCharCount?: boolean;
 }

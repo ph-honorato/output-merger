@@ -1,16 +1,16 @@
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { withAlpha } from '../../utils/color';
-import { useAutoTextareaRows, useTextInput } from './TextInput.hook';
+import { TEXT_INPUT_MAX_CHARACTERS, TEXTAREA_BASELINE_ROWS, useTextInput } from './TextInput.hook';
 import { parseBoundary, serializeBoundary } from './TextInput.geometry';
 import { type TextInputProps } from './TextInput.types';
 import * as S from './TextInput.styles';
 
 function TextInput(props: TextInputProps) {
-  const { mode = 'input', color = '#0080FF', maxCharacters = 500, label, id } = props;
+  const { mode = 'input', color = '#0080FF', maxCharacters = TEXT_INPUT_MAX_CHARACTERS, label, id } = props;
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
-  const textareaRows = useAutoTextareaRows(rootRef, mode === 'input');
+  const textareaRows = TEXTAREA_BASELINE_ROWS;
   const {
     text,
     segments,

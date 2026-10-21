@@ -371,20 +371,23 @@ describe('PreviewModal dialog', () => {
     expect(areas[1].closest('[aria-hidden="true"]')).toBeNull();
   });
 
-  it('lays the paper out as a row: centered preview zone plus a bare rail with copy, close, and the edit toggle in order', async () => {
+  it('lays the paper out as a row: centered preview zone plus a bare rail with copy, close, the edit toggle, and the char counter in order', async () => {
     renderWithProviders(seedInterleaved());
     const dialog = await openDialog();
 
     const closeButton = within(dialog).getByTestId('preview-modal-close-button');
     const copyButton = within(dialog).getByTestId('preview-copy-button');
     const editToggle = within(dialog).getByTestId('preview-edit-toggle');
+    const counter = within(dialog).getByTestId('preview-char-count');
     const rail = closeButton.parentElement;
     expect(rail).not.toBeNull();
     expect(rail).toContainElement(copyButton);
     expect(rail).toContainElement(editToggle);
     expect(rail).toContainElement(closeButton);
-    // Rail order: copy on top, close under it, the
-    // edit toggle last — all direct children of the rail.
+    expect(rail).toContainElement(counter);
+    // Rail order: copy on top, close under it, the edit toggle, and
+    // the document char counter LAST (the lowest part of the rail) —
+    // all direct children of the rail.
     expect(
       copyButton.compareDocumentPosition(closeButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -393,6 +396,17 @@ describe('PreviewModal dialog', () => {
       closeButton.compareDocumentPosition(editToggle) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(
+      editToggle.compareDocumentPosition(counter) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // The rail's counter is the number-only variant: the limit
+    // suffix is hidden on modal view.
+    expect(counter.textContent).not.toContain('/');
+    // The card's own counter row is suppressed inside the modal —
+    // the rail's counter is the only one, outside the card.
+    const card = within(dialog).getByTestId('preview-area');
+    expect(card.contains(counter)).toBe(false);
     expect(copyButton.parentElement).toBe(rail);
     expect(editToggle.parentElement).toBe(rail);
     expect(closeButton.parentElement).toBe(rail);
@@ -1007,5 +1021,135 @@ describe('edit-toggle caret auto-positioning', () => {
       modalFlow.focus();
     });
     expect(document.activeElement).toBe(modalFlow);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bounded card height inside the modal: the layout tweak lifts the
+// shared root's viewport-share cap to the zone bounds; and the shared
+// document limit caps the modal's editor exactly like the inline one
+// (the limit measures the ONE document both surfaces render).
+// ---------------------------------------------------------------------------
+
+describe('bounded height and the document limit inside the modal', () => {
+  it("the modal tweak fills its zone and WINS over the shared fixed height regardless of injection order", async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+    const area = within(dialog).getByTestId('preview-area');
+    // The ModalPreviewArea class merges into the shared root's class
+    // (the as={PreviewArea} pattern): the tweak's zone-relative
+    // height + cap ship under a DOUBLED selector (.cls.cls —
+    // specificity 0,2,0), so they beat the shared fixed height and
+    // any single-class rule unconditionally — not by injection-order
+    // luck. The bigger view fills its definite-height zone (the 90dvh
+    // stretch row) and its flow area scrolls internally.
+    const css = stylesText();
+    expect(css).toContain('height:400px');
+    const doubled = new RegExp(
+      '\\.([A-Za-z0-9_-]+)\\.\\1\\{height:100%;max-height:100%;?\\}',
+    );
+    const match = doubled.exec(css);
+    expect(match).not.toBeNull();
+    // The doubled-selector rule is the modal tweak's own class — the
+    // same class the rendered area carries.
+    expect(area.className).toContain(match![1]);
+  });
+
+  it('forwards its tunneled props with NO styled-components or React prop warnings', async () => {
+    // The styled interface's non-transient props (onActiveDragChange,
+    // showCharCount) are TYPE TUNNELS: styled-components forwards
+    // them to the resolved `as` COMPONENT (PreviewArea), which
+    // consumes them — nothing reaches the DOM, so neither
+    // styled-components' unknown-prop warning nor React's
+    // unrecognized-prop error may ever fire.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderWithProviders(seedInterleaved());
+      const dialog = await openDialog();
+      fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+      const warnings = warnSpy.mock.calls
+        .map((call) => String(call[0]))
+        .filter((message) =>
+          /unknown prop|not recognized|forwarded to the DOM|Warning: Received/.test(
+            message,
+          ),
+        );
+      const errors = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .filter((message) =>
+          /unknown prop|not recognized|React does not recognize/.test(message),
+        );
+      expect(warnings).toEqual([]);
+      expect(errors).toEqual([]);
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('renders exactly ONE counter in the modal — the rail number-only one, never a second in-card instance', async () => {
+    renderWithProviders(seedInterleaved());
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+
+    // Scoped INSIDE the dialog: exactly one counter (the rail's). The
+    // inline twin card (outside the dialog, default view) keeps its
+    // own count/limit counter — the two placements never collide.
+    const dialogCounters = within(dialog).getAllByTestId(
+      'preview-char-count',
+    );
+    expect(dialogCounters).toHaveLength(1);
+    const rail = within(dialog).getByTestId('preview-edit-toggle')
+      .parentElement;
+    expect(rail).toContainElement(dialogCounters[0]);
+    expect(dialogCounters[0].textContent).not.toContain('/');
+    const inlineCounter = screen
+      .getAllByTestId('preview-char-count')
+      .find((counter) => !dialog.contains(counter));
+    expect(inlineCounter).toBeDefined();
+    expect(inlineCounter!.textContent).toContain('/');
+  });
+
+  it('the shared document limit caps the modal editor: the next printable keystroke is prevented at 2000', async () => {
+    renderWithProviders(seedInterleaved());
+    // Build the shared document to exactly 2000 characters inline
+    // ("Alpha Beta Gamma" serializes to 16).
+    fireEvent.click(screen.getByTestId('preview-edit-toggle'));
+    const inlineFlow = screen.getByTestId('preview-segment-flow');
+    inlineFlow.appendChild(
+      document.createTextNode('x'.repeat(2000 - 'Alpha Beta Gamma'.length)),
+    );
+    fireEvent.input(inlineFlow);
+    fireEvent.click(screen.getByTestId('preview-edit-toggle')); // OFF — commit
+    expect(screen.getByTestId('preview-segment-flow')).not.toBe(
+      document.activeElement,
+    );
+
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByTestId('preview-edit-toggle'));
+    const modalFlow = within(dialog).getByTestId('preview-segment-flow');
+    expect(document.activeElement).toBe(modalFlow);
+
+    // At the limit the next printable keystroke is prevented — the
+    // same guard the inline editor runs, over the same document.
+    const event = new KeyboardEvent('keydown', {
+      key: 'a',
+      code: 'KeyA',
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      modalFlow.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(true);
+
+    const flows = screen.getAllByTestId('preview-segment-flow');
+    const probe = flows.find((flow) => !dialog.contains(flow));
+    expect(probe).toBeDefined();
+    expect(within(dialog).getByTestId('preview-segment-flow')).toHaveTextContent(
+      `Alpha Beta Gamma${'x'.repeat(2000 - 'Alpha Beta Gamma'.length)}`,
+    );
   });
 });

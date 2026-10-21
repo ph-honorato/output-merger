@@ -4,6 +4,7 @@ import type {
   PreviewToken,
   SnippetToken,
 } from '../context/SnippetsContext';
+import { readEnvNumber } from './env';
 
 /**
  * Globally unique token id for a source snippet inside the document
@@ -43,8 +44,8 @@ export const makeSeparatorToken = (tokenId: string): OwnTextToken => ({
 /**
  * Serializes the document: pure concatenation of token texts
  * (line-break tokens → "\n"). No trimming, no implicit separators —
- * every character of the merged output belongs to exactly one token
- *. `buildMergedText`'s successor.
+ * every character of the merged output belongs to exactly one token.
+ * `buildMergedText`'s successor.
  */
 export function serialize(tokens: PreviewToken[]): string {
   let text = '';
@@ -53,6 +54,56 @@ export function serialize(tokens: PreviewToken[]): string {
   }
   return text;
 }
+
+/**
+ * The document character limit: the serialized document's length
+ * (the WYSIWYG invariant makes the flow's DOM text equal it; line
+ * breaks count as one character each). At the limit, further
+ * printable keystrokes and Enter are prevented and pastes truncate to
+ * what fits — the native `maxLength` textarea feel. Deletions always
+ * work. The value reads the `VITE_PREVIEW_MAX_LENGTH` environment
+ * variable (a finite integer > 0), falling back to 2000.
+ */
+export const PREVIEW_DOCUMENT_MAX_LENGTH = readEnvNumber(
+  'VITE_PREVIEW_MAX_LENGTH',
+  2000,
+);
+
+/**
+ * How many more characters the serialized document may take before
+ * hitting the limit (0 when at it, negative over it — the limit is
+ * never exceeded through the guarded paths, but a restored source or
+ * a sync could momentarily exceed it).
+ */
+export const remainingDocumentLength = (tokens: PreviewToken[]): number =>
+  PREVIEW_DOCUMENT_MAX_LENGTH - serialize(tokens).length;
+
+/**
+ * True when the serialized document has no room left for another
+ * character.
+ */
+export const isDocumentAtLimit = (tokens: PreviewToken[]): boolean =>
+  remainingDocumentLength(tokens) <= 0;
+
+/**
+ * Truncates text to a UTF-16 CODE-UNIT budget (the unit the
+ * document limit and its counter measure): slice by units to the
+ * budget, then drop a trailing lone high surrogate so a surrogate
+ * pair is never split — the result never ends in a broken
+ * character (even when the input itself does). The result's length
+ * never exceeds the budget.
+ */
+export const truncateToUtf16Budget = (text: string, budget: number): string => {
+  if (budget <= 0) {
+    return '';
+  }
+  let fitting = text.slice(0, budget);
+  const last = fitting.charCodeAt(fitting.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff && fitting.length > 0) {
+    fitting = fitting.slice(0, -1);
+  }
+  return fitting;
+};
 
 /**
  * Content equality for two token arrays (ignores nothing but array

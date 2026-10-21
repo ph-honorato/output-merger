@@ -66,16 +66,40 @@ export const PreviewZone = styled.div`
  * carried by its existing className prop: the component is rendered
  * via `as={PreviewArea}` (PreviewModal.tsx), so the generated class
  * merges into the PreviewAreaRoot's own class. The shared root is
- * built for the inline column (`flex: 1 1 auto` — fills its parent);
- * inside the modal's centered zone it takes its natural size up to
- * the zone bounds and scrolls internally beyond that, keeping its
- * min-height 400px. It stays the exact same component.
+ * built for the inline column (`flex: 1 1 auto` — fills its parent)
+ * with a viewport-relative height cap; inside the modal's centered
+ * zone (a definite-height stretch row) the cap lifts to the zone's
+ * own bounds so the bigger view uses its full zone and scrolls
+ * internally beyond that, keeping its min-height 400px. It stays the
+ * exact same component.
+ */
+/**
+ * The prop entries on this styled interface are TYPE TUNNELS for
+ * props the resolved `as` component consumes. With no
+ * `shouldForwardProp` configured, styled-components forwards every
+ * non-transient (non-`$`) prop to the resolved target — here the
+ * shared PreviewArea COMPONENT (not a DOM tag), whose prop
+ * declarations accept them; nothing reaches the DOM. A `$` prefix
+ * would mark the prop transient and strip it BEFORE it reaches the
+ * component, breaking the in-card counter suppression; the plain
+ * declarations must stay.
  */
 export const ModalPreviewArea = styled.div<{
   onActiveDragChange?: (active: boolean) => void;
+  showCharCount?: boolean;
 }>`
   flex: 1 1 auto;
   width: 100%;
+  /* && doubles the generated class, so these zone-relative sizes
+   * beat the shared root's fixed height and cap REGARDLESS of
+   * stylesheet injection order — two single-class rules would tie at
+   * equal specificity and the winner would depend on mount
+   * composition. The bigger view fills its definite-height zone (the
+   * 90dvh stretch row) and its flow area scrolls internally. */
+  && {
+    height: 100%;
+    max-height: 100%;
+  }
 `;
 
 /**
@@ -83,10 +107,11 @@ export const ModalPreviewArea = styled.div<{
  * no card chrome (deliberately NOT the PreviewToolbar component —
  * no duplicate preview-toolbar testid, no card-inside-card), top-
  * aligned, inset theme.spacing(2) from the right edge so it does
- * not interfere with the centralization of the preview. Rail order
- *: copy on
- * top, close under it, the edit-text toggle last. Stays visible in
- * fullScreen so close remains reachable on the resize edge.
+ * not interfere with the centralization of the preview. Rail order:
+ * copy on top, close under it, then the edit-text toggle, and the
+ * document char counter last. Stays
+ * visible in fullScreen so close remains reachable on the resize
+ * edge.
  */
 export const ToolsRail = styled.div`
   display: flex;

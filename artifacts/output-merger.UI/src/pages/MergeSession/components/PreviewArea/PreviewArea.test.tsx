@@ -4901,6 +4901,479 @@ describe("edit-toggle caret auto-positioning", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Document length limit: the serialized document caps at 2000
+// characters. At the limit printable keystrokes and Enter are
+// prevented (nothing more lands), deletions free space, and pastes
+// truncate to what fits — the native maxLength textarea feel. The
+// limit measures the ONE shared document, so every surface inherits
+// it; the modal-scoped pin lives in the PreviewModal suite.
+// ---------------------------------------------------------------------------
+
+describe("document length limit", () => {
+  const seedTwoChips = (): Array<[string, Snippet[]]> => [
+    ["text-1", [makeSnippet("a1", "Alpha")]],
+    ["text-2", [makeSnippet("b1", "Beta")]],
+  ];
+
+  // Builds a committed document whose serialized length is exactly
+  // `length` ("A" + " " + "B" + tail), then re-enters edit mode — the
+  // toggle auto-caret places the caret at the text's end, ready to
+  // type.
+  const seedAtLength = (length: number) => {
+    renderWithProviders(seedTwoChips());
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    // "Alpha" + " " + "Beta" serialize to 10 characters.
+    const tail = "x".repeat(Math.max(0, length - 10));
+    flow.appendChild(document.createTextNode(tail));
+    fireEvent.input(flow);
+    enableEditing(); // OFF — commit
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(
+      length,
+    );
+    enableEditing(); // ON — the caret at the end
+    return screen.getByTestId("preview-segment-flow");
+  };
+
+  const keyDown = (flow: HTMLElement, init: Record<string, unknown>) => {
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    });
+    act(() => {
+      flow.dispatchEvent(event);
+    });
+    return event;
+  };
+
+  const awaitFlush = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
+
+  const lastTail = (flow: HTMLElement) => {
+    const node = Array.from(flow.childNodes)
+      .reverse()
+      .find(
+        (child) => child.nodeType === Node.TEXT_NODE && (child as Text).data !== "",
+      ) as Text;
+    return node;
+  };
+
+  // Simulates the browser's native insertion for an allowed
+  // keystroke: the character lands at the caret (the end) and the
+  // realistic input event fires.
+  const landChar = (flow: HTMLElement, data: string) => {
+    const node = lastTail(flow);
+    node.insertData(node.data.length, data);
+    const range = document.createRange();
+    range.setStart(node, node.data.length);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    act(() => {
+      flow.dispatchEvent(
+        new window.InputEvent("input", {
+          bubbles: true,
+          inputType: "insertText",
+          data,
+        }),
+      );
+    });
+  };
+
+  // Simulates the browser's native deletion for an allowed Backspace.
+  const landBackspace = (flow: HTMLElement) => {
+    const node = lastTail(flow);
+    node.deleteData(node.data.length - 1, 1);
+    const range = document.createRange();
+    range.setStart(node, node.data.length);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    act(() => {
+      flow.dispatchEvent(
+        new window.InputEvent("input", {
+          bubbles: true,
+          inputType: "deleteContentBackward",
+          data: null,
+        }),
+      );
+    });
+  };
+
+  it("the 2000th character lands; the 2001st keystroke is prevented with the model unchanged", () => {
+    const flow = seedAtLength(1999);
+
+    // At 1999 there is room for exactly one more character.
+    const allowed = keyDown(flow, { key: "a", code: "KeyA" });
+    expect(allowed.defaultPrevented).toBe(false);
+    landChar(flow, "a");
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+
+    // At 2000 the next printable keystroke is prevented before the
+    // browser can insert it: no DOM change, no input event, no
+    // redirect, the model unchanged.
+    const blocked = keyDown(flow, { key: "b", code: "KeyB" });
+    expect(blocked.defaultPrevented).toBe(true);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+    expect(flow.textContent).toHaveLength(2000);
+  });
+
+  it("Backspace frees space and typing resumes", () => {
+    const flow = seedAtLength(2000);
+
+    landBackspace(flow);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(1999);
+
+    const allowed = keyDown(flow, { key: "b", code: "KeyB" });
+    expect(allowed.defaultPrevented).toBe(false);
+    landChar(flow, "b");
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+
+  it("Enter is inert at the limit and inserts at one below it", () => {
+    // At 2000 Enter does nothing: the guard returns before the
+    // line-break insertion, so the document keeps its exact length.
+    const flow = seedAtLength(2000);
+    keyDown(flow, { key: "Enter", code: "Enter" });
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+    expect(screen.getByTestId("document-probe").textContent).not.toContain(
+      "\n",
+    );
+
+    // At 1999 the newline lands (one character) and the document
+    // reaches the limit.
+    cleanup();
+    const flowTwo = seedAtLength(1999);
+    keyDown(flowTwo, { key: "Enter", code: "Enter" });
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+
+  it("modifier combos and navigation are never blocked at the limit", () => {
+    const flow = seedAtLength(2000);
+
+    // Ctrl+key (select-all, shortcuts) passes.
+    const ctrl = keyDown(flow, { key: "a", code: "KeyA", ctrlKey: true });
+    expect(ctrl.defaultPrevented).toBe(false);
+    // Meta+key passes.
+    const meta = keyDown(flow, { key: "a", code: "KeyA", metaKey: true });
+    expect(meta.defaultPrevented).toBe(false);
+    // Multi-character keys (Backspace, Tab, F5) pass the guard.
+    const backspace = keyDown(flow, { key: "Backspace", code: "Backspace" });
+    expect(backspace.defaultPrevented).toBe(false);
+    const tab = keyDown(flow, { key: "Tab", code: "Tab" });
+    expect(tab.defaultPrevented).toBe(false);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+
+  it("keyboard sorting still lifts at the limit (sorting never adds characters)", async () => {
+    const flow = seedAtLength(2000);
+    const [alpha] = screen.getAllByTestId("preview-snippet");
+    const setCaretInNode = (node: Node, offset: number) => {
+      const range = document.createRange();
+      range.setStart(node, offset);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    };
+    setCaretInNode(alpha.firstChild as Text, 1);
+
+    const event = new KeyboardEvent("keydown", {
+      key: " ",
+      code: "Space",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      flow.dispatchEvent(event);
+    });
+    await awaitFlush();
+    expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+    act(() => {
+      flow.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          code: "Escape",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await awaitFlush();
+    expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+
+  it("a bare Space mid-sort at the limit still drops: the sensor's end key commits the move, never a character", async () => {
+    // The rect mocks drive the arrow step's collision walk.
+    const restoreRects = installSegmentRects();
+    try {
+      const flow = seedAtLength(2000);
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      const setCaretInNode = (node: Node, offset: number) => {
+        const range = document.createRange();
+        range.setStart(node, offset);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      };
+      setCaretInNode(alpha.firstChild as Text, 1);
+
+      const lift = new KeyboardEvent("keydown", {
+        key: " ",
+        code: "Space",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        flow.dispatchEvent(lift);
+      });
+      await awaitFlush();
+      expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+
+      // One arrow hop (the raised-sort movement path — allowed at
+      // the cap, sorting never adds characters).
+      keyDown(flow, { key: "ArrowRight", code: "ArrowRight" });
+
+      // A BARE Space is the sensor's native end key: the raised
+      // guard preventDefaults it (no character is typed — the
+      // browser never inserts a space) and propagates it, so the
+      // sensor DROPS the snippet even at the document limit. The
+      // cap guard never sees it (the raised guard returns first).
+      const drop = keyDown(flow, { key: " ", code: "Space" });
+      expect(drop.defaultPrevented).toBe(true);
+      await awaitFlush();
+
+      // The sort ended: the overlay is gone, the document keeps its
+      // exact length, and the move committed through the landing
+      // path (here: the chip's own separator edge — the inert
+      // landing, the order unchanged).
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+      expect(screen.getByTestId("document-probe").textContent).toHaveLength(
+        2000,
+      );
+      expect(screen.getByTestId("document-probe").textContent).toContain(
+        "Alpha Beta",
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Snippet dropped at position 1 of 2.",
+      );
+    } finally {
+      restoreRects.mockRestore();
+    }
+  });
+
+  it("a two-unit emoji key is prevented at the limit AND one unit below it, allowed at two", () => {
+    // At the limit (remaining 0): the emoji key is prevented before
+    // the browser can insert it, no input event, nothing lands.
+    let flow = seedAtLength(2000);
+    const blockedAtLimit = keyDown(flow, { key: "\ud83d\ude00", code: "" });
+    expect(blockedAtLimit.defaultPrevented).toBe(true);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+
+    // One unit below the limit (remaining 1): a two-unit emoji
+    // cannot fit — prevented (the near-limit hole a plain
+    // at-limit-only guard would miss).
+    cleanup();
+    flow = seedAtLength(1999);
+    const blockedAtOne = keyDown(flow, { key: "\ud83d\ude00", code: "" });
+    expect(blockedAtOne.defaultPrevented).toBe(true);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(1999);
+
+    // Two units below (remaining 2): the emoji fits exactly and the
+    // document lands exactly at the limit; the next key is prevented.
+    cleanup();
+    flow = seedAtLength(1998);
+    const allowed = keyDown(flow, { key: "\ud83d\ude00", code: "" });
+    expect(allowed.defaultPrevented).toBe(false);
+    landChar(flow, "\ud83d\ude00");
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+    const afterEmoji = keyDown(flow, { key: "x", code: "KeyX" });
+    expect(afterEmoji.defaultPrevented).toBe(true);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+
+  it("a one-unit key is still allowed at remaining 1 and blocked at 0", () => {
+    const flow = seedAtLength(1999);
+    const allowed = keyDown(flow, { key: "x", code: "KeyX" });
+    expect(allowed.defaultPrevented).toBe(false);
+    landChar(flow, "x");
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+    const blocked = keyDown(flow, { key: "y", code: "KeyY" });
+    expect(blocked.defaultPrevented).toBe(true);
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+
+  it("paste cuts surrogate-safely: a pair is never split and never overshoots the cap", () => {
+    // Remaining 2, pasting a lone emoji: the full pair fits and the
+    // document lands exactly at the limit.
+    cleanup();
+    let flow = seedAtLength(1998);
+    fireEvent.paste(flow, {
+      clipboardData: {
+        getData: (type: string) =>
+          type === "text/plain" ? "\ud83d\ude00" : "",
+      },
+    });
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+
+    // Remaining 1, pasting "emoji x": the budget cuts inside the
+    // pair — the lone high surrogate is dropped and NOTHING
+    // insertable remains; the document stays unchanged.
+    cleanup();
+    flow = seedAtLength(1999);
+    fireEvent.paste(flow, {
+      clipboardData: {
+        getData: (type: string) =>
+          type === "text/plain" ? "\ud83d\ude00x" : "",
+      },
+    });
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(1999);
+
+    // Remaining 3, pasting "a emoji b c": the surrogate-safe cut
+    // lands "a" + the full pair ("a\ud83d\ude00" = 3 units).
+    cleanup();
+    flow = seedAtLength(1997);
+    fireEvent.paste(flow, {
+      clipboardData: {
+        getData: (type: string) =>
+          type === "text/plain" ? "a\ud83d\ude00bc" : "",
+      },
+    });
+    expect(screen.getByTestId("document-probe").textContent?.endsWith("a\ud83d\ude00")).toBe(
+      true,
+    );
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+
+    // Remaining 2, the same paste: the cut lands only "a" (1 unit) —
+    // the pair does not fit and is never split.
+    cleanup();
+    flow = seedAtLength(1998);
+    fireEvent.paste(flow, {
+      clipboardData: {
+        getData: (type: string) =>
+          type === "text/plain" ? "a\ud83d\ude00bc" : "",
+      },
+    });
+    expect(screen.getByTestId("document-probe").textContent?.endsWith("a")).toBe(
+      true,
+    );
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(1999);
+  });
+
+  it("paste truncates to what fits; at the limit nothing lands", () => {
+    // At 1995 a 10-character paste lands only its 5-character
+    // fitting prefix.
+    const flow = seedAtLength(1995);
+    fireEvent.paste(flow, {
+      clipboardData: {
+        getData: (type: string) => (type === "text/plain" ? "abcdefghij" : ""),
+      },
+    });
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+    expect(
+      screen.getByTestId("document-probe").textContent?.endsWith("abcde"),
+    ).toBe(true);
+
+    // At 2000 the same paste inserts nothing.
+    cleanup();
+    const flowTwo = seedAtLength(2000);
+    fireEvent.paste(flowTwo, {
+      clipboardData: {
+        getData: (type: string) => (type === "text/plain" ? "abcdefghij" : ""),
+      },
+    });
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+    expect(flowTwo.textContent?.endsWith("x")).toBe(true);
+  });
+
+  it("the chip-territory redirect is blocked at the limit: a redirected character is still a character", () => {
+    const flow = seedAtLength(2000);
+    // Place the caret inside the LAST chip's text end — chip
+    // territory, where a typed character would normally redirect
+    // into the chip.
+    const chips = screen.getAllByTestId("preview-snippet");
+    const beta = chips[chips.length - 1];
+    const range = document.createRange();
+    range.setStart(
+      beta.firstChild as Text,
+      (beta.firstChild as Text).data.length,
+    );
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const blocked = keyDown(flow, { key: "z", code: "KeyZ" });
+    expect(blocked.defaultPrevented).toBe(true);
+    // Nothing landed: the chip's text is unchanged (the redirect
+    // never ran) and the document keeps its exact length.
+    expect(beta.textContent).toBe("Beta");
+    expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The fixed card: one fixed height for every card (the text inputs
+// and the preview match) — the flow area scrolls internally, the
+// char counter row stays pinned below it, and the card never grows
+// with its content. The modal's tweak fills its zone instead.
+// ---------------------------------------------------------------------------
+
+describe("fixed card height with the counter row", () => {
+  it("the card is fixed-height: the flow area scrolls internally and the counter row stays below", () => {
+    renderWithProviders(seedInterleaved());
+    const root = screen.getByTestId("preview-area");
+    const flowArea = screen.getByTestId("preview-flow-area");
+    const css = () =>
+      Array.from(document.querySelectorAll("style"))
+        .map((style) => style.textContent)
+        .join("");
+    // One fixed height for every card; the root itself no longer
+    // scrolls (the flow area owns the scroll so the counter row
+    // never scrolls away).
+    expect(root).toHaveStyle({ height: "400px" });
+    expect(css()).toContain("height:400px");
+    expect(css()).not.toContain("max-height:70vh");
+    expect(flowArea).toHaveStyle({ overflow: "auto" });
+    // The counter is ABSOLUTELY pinned at the card's bottom-right
+    // padding inset — out of the flow, structurally OUTSIDE the
+    // scroll container, so no amount of content can push or overlap
+    // it (the content-independent basis-ZERO flow share plus the
+    // reserved bottom strip keep the text clear).
+    const pin = screen.getByTestId("preview-counter-pin");
+    expect(root).toContainElement(pin);
+    expect(flowArea.contains(pin)).toBe(false);
+    expect(pin).toHaveStyle({ position: "absolute" });
+    expect(pin).toHaveStyle({ bottom: "16px" });
+    expect(pin).toHaveStyle({ right: "16px" });
+    expect(root).toHaveStyle({ position: "relative" });
+    const counter = screen.getByTestId("preview-char-count");
+    expect(pin).toContainElement(counter);
+    // The flow region's share derives from the card's fixed height
+    // alone: basis ZERO, never `auto`.
+    expect(flowArea).toHaveStyle({ flex: "1 1 0" });
+    expect(flowArea).toHaveStyle({ minHeight: "0px" });
+    expect(flowArea).toHaveStyle({ marginBottom: "28px" });
+  });
+
+  it("the empty state fills the fixed card on a content-independent basis", () => {
+    renderWithProviders([]);
+    const empty = screen.getByTestId("preview-empty");
+    expect(empty).toHaveStyle({ flex: "1 1 0" });
+  });
+});
+
 describe("classifyCaretRelativeChip + insertSplitPasteAtChipEnd (line-break escape helpers)", () => {
   // Pure-DOM units: the classifier takes a root and a range, no
   // React and no selection global needed.

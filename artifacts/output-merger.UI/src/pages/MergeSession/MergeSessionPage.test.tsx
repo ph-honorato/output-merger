@@ -419,5 +419,27 @@ describe('MergeSessionPage', () => {
       );
     });
     expect(flow.textContent).toBe('beta gamma beta!');
+
+    // The in-card counter (the default view's placement) shows the
+    // maximum allowed characters: count/limit, live. The pin renders
+    // outside the flow area, anchored to the card root.
+    const card = flow.closest('[data-testid="preview-area"]');
+    expect(card).not.toBeNull();
+    const inCardCounter = card!.querySelector(
+      '[data-testid="preview-char-count"]',
+    );
+    expect(inCardCounter).not.toBeNull();
+    expect(inCardCounter!.textContent).toBe('16/2000');
+  });
+
+  it('the in-card counter shows n/max even on an empty document with editing on', () => {
+    renderPage();
+
+    fireEvent.click(screen.getByTestId('preview-edit-toggle'));
+    const inCardCounter = document.querySelector(
+      '[data-testid="preview-char-count"]',
+    );
+    expect(inCardCounter).not.toBeNull();
+    expect(inCardCounter!.textContent).toBe('0/2000');
   });
 });

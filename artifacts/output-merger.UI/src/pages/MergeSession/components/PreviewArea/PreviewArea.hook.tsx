@@ -30,8 +30,10 @@ import {
   landingBeforeToken,
   parseLandingId,
   parsePreviewDom,
+  remainingDocumentLength,
   serialize,
   tokensEqualIgnoringEdited,
+  truncateToUtf16Budget,
 } from '../../../../utils/previewDocument';
 
 /**
@@ -2008,6 +2010,35 @@ export function usePreviewArea(
         handleArrowNavigation(event);
         return;
       }
+      // Document limit, as a UTF-16 UNIT BUDGET: a key is measured
+      // in code units (a single-code-point key like an emoji counts
+      // its TWO units; multi-code-point named keys — Backspace,
+      // arrows, Dead, Unidentified — count as zero and are never
+      // blocked here) and is prevented when the budget cannot fit
+      // it, so nothing can push the document past its room — not at
+      // the limit, and not one unit below it with a two-unit key.
+      // Deletions, navigation, shortcuts, and every sorting key pass
+      // untouched (this guard sits below the arrow/shortcut/sorting
+      // handling); modifier combos (ctrl/meta/alt) are never blocked
+      // here. A prevented keystroke fires no input event, so the
+      // chip-territory redirect never runs either — a redirected
+      // character is still a character.
+      const insertUnits =
+        event.key === 'Enter'
+          ? 1
+          : Array.from(event.key).length === 1 &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !event.altKey
+            ? event.key.length
+            : 0;
+      if (
+        insertUnits > 0 &&
+        insertUnits > remainingDocumentLength(modelRef.current)
+      ) {
+        event.preventDefault();
+        return;
+      }
       if (event.key !== 'Enter') {
         return;
       }
@@ -2069,6 +2100,20 @@ export function usePreviewArea(
       if (!text) {
         return;
       }
+      // Document limit: only the prefix that fits lands — the
+      // native `maxLength` textarea feel. The budget is UTF-16 code
+      // units (the unit the limit and the counter measure) and the
+      // cut is surrogate-safe: a pair is never split, so a broken
+      // character can never land. An empty remainder (the document
+      // is at or past its room) inserts nothing.
+      const remaining = Math.max(
+        0,
+        remainingDocumentLength(modelRef.current)
+      );
+      const fitting = truncateToUtf16Budget(text, remaining);
+      if (!fitting) {
+        return;
+      }
       const root = flowRef.current;
       if (!root) {
         return;
@@ -2093,24 +2138,24 @@ export function usePreviewArea(
       // - caret mid-chip, paste WITH a newline → full integration
       //   (unchanged, consistent with mid-chip Enter: an
       //   order-preserving escape is impossible without splitting).
-      const firstNewline = text.indexOf('\n');
+      const firstNewline = fitting.indexOf('\n');
       const range = selectionRangeInRoot(root);
       let inserted: Text | null = null;
       if (range) {
         const { position, chip } = classifyCaretRelativeChip(root, range);
         if (chip && firstNewline >= 0 && position === 'inside-chip-at-end') {
-          inserted = insertSplitPasteAtChipEnd(chip, range, text);
+          inserted = insertSplitPasteAtChipEnd(chip, range, fitting);
         } else if (
           chip &&
           firstNewline >= 0 &&
           position === 'inside-chip-at-start'
         ) {
-          inserted = insertTextBesideChip(chip, 'before', text);
+          inserted = insertTextBesideChip(chip, 'before', fitting);
         } else {
-          inserted = insertTextAtSelection(root, text);
+          inserted = insertTextAtSelection(root, fitting);
         }
       } else {
-        inserted = insertTextAtSelection(root, text);
+        inserted = insertTextAtSelection(root, fitting);
       }
       if (!inserted) {
         return;

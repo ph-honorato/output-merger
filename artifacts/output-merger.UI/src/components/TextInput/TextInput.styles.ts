@@ -10,7 +10,12 @@ export const TextInputRoot = styled.div`
   flex-direction: column;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
   padding: ${({ theme }) => (theme as StyledTheme).spacing(2)};
-  min-height: 400px;
+  /* One fixed height for every card (the text inputs and the
+   * preview match): the card never grows with its content — the
+   * textarea area (input mode) or the view container (view mode)
+   * fills the fixed card and scrolls internally, and the optional
+   * label and the counter stay inside it. */
+  height: 400px;
   box-sizing: border-box;
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};
@@ -28,11 +33,17 @@ export const Label = styled.span`
 `;
 
 export const StyledTextField = styled(TextField)<{ $accent?: string }>`
-  flex: 1;
+  /* Content-independent basis ZERO at every level of the MUI chain
+   * (this root is MUI's FormControl — an inline-flex column — and
+   * the OutlinedInput below it): each region's share of the fixed
+   * card derives from the card's height alone, never from the
+   * typed content, so the textarea fills its area and scrolls
+   * natively while the counter stays put. */
+  flex: 1 1 0;
   min-height: 0;
 
   & .MuiInputBase-root {
-    flex: 1;
+    flex: 1 1 0;
     min-height: 0;
     align-items: stretch;
   }
@@ -53,6 +64,13 @@ export const StyledTextField = styled(TextField)<{ $accent?: string }>`
 
 export const TextViewContainer = styled.div<{ $dragging?: boolean }>`
   position: relative;
+  /* View mode inside the fixed card: the container takes the
+   * remaining height on a content-independent basis-ZERO share and
+   * scrolls internally (the needles position against the scrollable
+   * content, so they scroll with it). */
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
   text-align: start;
   white-space: pre-wrap;
   word-break: break-word;

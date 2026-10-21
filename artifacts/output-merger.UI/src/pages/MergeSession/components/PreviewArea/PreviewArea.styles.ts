@@ -7,11 +7,20 @@ type StyledTheme = DefaultTheme & Theme;
 export const PreviewAreaRoot = styled.div`
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 400px;
+  /* One fixed height for every card (the text inputs and the
+   * preview match, so the default-view columns align): the card
+   * never grows with its content — the flow area fills the fixed
+   * card and scrolls internally (the caret auto-scrolls natively
+   * while typing at the bottom), and the char counter is ABSOLUTELY
+   * pinned at the card's bottom, so no content amount can ever push
+   * it out of view. The modal's layout tweak overrides this to its
+   * zone bounds. */
+  height: 400px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  /* The absolute counter pin anchors against the card itself. */
+  position: relative;
   padding: ${({ theme }) => (theme as StyledTheme).spacing(2)};
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};
@@ -20,7 +29,41 @@ export const PreviewAreaRoot = styled.div`
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 `;
 
+/**
+ * The scrolling text region of the fixed card: takes every remaining
+ * pixel and scrolls its own content. The editable flow host (and the
+ * drag wiring around it) lives inside. The flex basis is ZERO, never
+ * `auto`: the region's share of the card derives from the card's
+ * fixed height alone, never from the content — a content-driven
+ * basis lets the contentEditable's intrinsic height push the region
+ * past the card in a real browser (jsdom computes no layout, so this
+ * can only be caught by the content-independent geometry itself).
+ * When the card's counter pin renders, the reserved bottom strip
+ * keeps the scrolling text clear of it; the modal (which suppresses
+ * the in-card counter) reserves nothing.
+ */
+export const FlowArea = styled.div<{ $reserveCounter?: boolean }>`
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  margin-bottom: ${({ theme, $reserveCounter }) =>
+    $reserveCounter ? (theme as StyledTheme).spacing(3.5) : '0px'};
+`;
+
+/**
+ * The absolutely pinned counter anchor: out of the flow, fixed to
+ * the card's bottom-right padding inset — its position derives from
+ * the card alone, so no amount of content can move or overlap it
+ * (the flow area's reserved strip keeps the text clear).
+ */
+export const CounterPin = styled.div`
+  position: absolute;
+  bottom: ${({ theme }) => (theme as StyledTheme).spacing(2)};
+  right: ${({ theme }) => (theme as StyledTheme).spacing(2)};
+`;
+
 export const EmptyState = styled.div`
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   align-items: center;

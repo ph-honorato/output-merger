@@ -8,7 +8,7 @@ import {
   useDroppable,
 } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
-import { SortableSegment } from '../';
+import { PreviewCharCount, SortableSegment } from '../';
 import { sameLanding, usePreviewArea } from './PreviewArea.hook';
 import {
   buildLandingId,
@@ -48,7 +48,7 @@ function LandingAnchor({ landing }: { landing: Landing }) {
 }
 
 function PreviewArea(props: PreviewAreaProps) {
-  const { className, onActiveDragChange } = props;
+  const { className, onActiveDragChange, showCharCount = true } = props;
   const {
     t,
     editEnabled,
@@ -204,7 +204,17 @@ function PreviewArea(props: PreviewAreaProps) {
           <span>{t('pages.mergeSession.previewArea.empty')}</span>
         </S.EmptyState>
       ) : (
-        <DndContext
+        <>
+          {/* The scrolling text region of the fixed card. Its
+              content-independent geometry (basis ZERO) plus the
+              absolutely pinned counter below mean no amount of
+              content can push the counter out of view; the reserved
+              bottom strip keeps the scrolling text clear of it. */}
+          <S.FlowArea
+            data-testid="preview-flow-area"
+            $reserveCounter={showCharCount}
+          >
+            <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           accessibility={{ announcements, screenReaderInstructions }}
@@ -248,7 +258,19 @@ function PreviewArea(props: PreviewAreaProps) {
               </S.OverlayChip>
             ) : null}
           </DragOverlay>
-        </DndContext>
+            </DndContext>
+          </S.FlowArea>
+          {/* The char counter, ABSOLUTELY pinned at the card's
+              bottom-right padding inset: out of the flow, so no
+              amount of content can move or overlap it. The modal
+              suppresses it here and renders it as the last element
+              of its tools rail instead. */}
+          {showCharCount ? (
+            <S.CounterPin data-testid="preview-counter-pin">
+              <PreviewCharCount />
+            </S.CounterPin>
+          ) : null}
+        </>
       )}
     </S.PreviewAreaRoot>
   );

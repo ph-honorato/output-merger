@@ -32,6 +32,7 @@
   "pages.mergeSession.previewArea.editing.placeholder": "Type here to add your own text",
   "pages.mergeSession.previewArea.editing.toggleOn": "Enable text editing",
   "pages.mergeSession.previewArea.editing.toggleOff": "Disable text editing",
+  "pages.mergeSession.previewArea.counterLabel": "Character count",
   "textInput.placeholder": "Type or paste your text here",
   "textInput.counterLabel": "Character count",
   "textInput.emptyView": "No text added yet.",

@@ -3,6 +3,7 @@ import {
   buildLandingId,
   buildSnippetTokenId,
   enumerateLandingAnchors,
+  isDocumentAtLimit,
   isSeparatorToken,
   isSnippetToken,
   landingAfterToken,
@@ -11,10 +12,13 @@ import {
   normalizeTextTokens,
   parseLandingId,
   parsePreviewDom,
+  PREVIEW_DOCUMENT_MAX_LENGTH,
+  remainingDocumentLength,
   serialize,
   snippetSlotToTokenIndex,
   tokensEqual,
   tokensEqualIgnoringEdited,
+  truncateToUtf16Budget,
   wordBoundaryOffsets,
 } from './previewDocument';
 
@@ -635,5 +639,95 @@ describe('chip-over insertion mapping', () => {
       kind: 'token-gap',
       tokenIndex: 0,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Document length limit: the serialized document's character count
+// is capped; the helpers drive the typing/Enter/paste guards.
+// ---------------------------------------------------------------------------
+
+describe('document length limit helpers', () => {
+  it('the limit constant and the remaining/at-limit math over token kinds', () => {
+    expect(PREVIEW_DOCUMENT_MAX_LENGTH).toBe(2000);
+
+    // An empty document has full room.
+    expect(remainingDocumentLength([])).toBe(2000);
+    expect(isDocumentAtLimit([])).toBe(false);
+
+    // Near the limit there is exactly one room left; at it, none.
+    const near = [ownText('t1', 'a'.repeat(1999))];
+    expect(remainingDocumentLength(near)).toBe(1);
+    expect(isDocumentAtLimit(near)).toBe(false);
+    const at = [ownText('t1', 'a'.repeat(2000))];
+    expect(remainingDocumentLength(at)).toBe(0);
+    expect(isDocumentAtLimit(at)).toBe(true);
+
+    // Chips count their text; line breaks count one character each.
+    const mixed = [
+      snippetToken('text-1:a1', 'abc'),
+      lineBreak('br1'),
+      ownText('t1', 'de'),
+    ];
+    expect(serialize(mixed)).toBe('abc\nde');
+    expect(remainingDocumentLength(mixed)).toBe(2000 - 6);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Surrogate-safe truncation: the paste budget is UTF-16 code units,
+// and a cut must never split a surrogate pair.
+// ---------------------------------------------------------------------------
+
+describe('truncateToUtf16Budget', () => {
+  it('cuts by code units and never splits a surrogate pair ("a\ud83d\ude00b" across all budgets)', () => {
+    const text = 'a\ud83d\ude00b'; // "a", GRINNING FACE, "b"
+    // Budget 2 would slice into the pair — the lone high surrogate
+    // is dropped so a broken character never lands.
+    expect(truncateToUtf16Budget(text, 0)).toBe('');
+    expect(truncateToUtf16Budget(text, 1)).toBe('a');
+    expect(truncateToUtf16Budget(text, 2)).toBe('a');
+    expect(truncateToUtf16Budget(text, 3)).toBe('a\ud83d\ude00');
+    expect(truncateToUtf16Budget(text, 4)).toBe('a\ud83d\ude00b');
+    // The length invariant holds everywhere.
+    for (let budget = 0; budget <= 5; budget += 1) {
+      expect(truncateToUtf16Budget(text, budget).length).toBeLessThanOrEqual(
+        budget,
+      );
+    }
+  });
+
+  it('drops a pair-leading cut at the text start too ("\ud83d\ude00ab" across all budgets)', () => {
+    const text = '\ud83d\ude00ab'; // GRINNING FACE, "a", "b"
+    expect(truncateToUtf16Budget(text, 0)).toBe('');
+    // Budget 1 cuts inside the pair: nothing insertable remains.
+    expect(truncateToUtf16Budget(text, 1)).toBe('');
+    expect(truncateToUtf16Budget(text, 2)).toBe('\ud83d\ude00');
+    expect(truncateToUtf16Budget(text, 3)).toBe('\ud83d\ude00a');
+    for (let budget = 0; budget <= 4; budget += 1) {
+      expect(truncateToUtf16Budget(text, budget).length).toBeLessThanOrEqual(
+        budget,
+      );
+    }
+  });
+
+  it('leaves BMP text untouched up to the budget', () => {
+    expect(truncateToUtf16Budget('abcdef', 4)).toBe('abcd');
+    expect(truncateToUtf16Budget('abcdef', 10)).toBe('abcdef');
+  });
+
+  it('returns empty on zero and negative budgets', () => {
+    expect(truncateToUtf16Budget('abc', 0)).toBe('');
+    expect(truncateToUtf16Budget('abc', -2)).toBe('');
+    expect(truncateToUtf16Budget('', 5)).toBe('');
+  });
+
+  it('never emits a trailing lone high surrogate, even when the input is already corrupt', () => {
+    // A trailing lone high surrogate in the pasted text itself is
+    // dropped rather than landed.
+    expect(truncateToUtf16Budget('a\ud83d', 5)).toBe('a');
+    // A COMPLETE pair at the end is kept whole (its last unit is the
+    // low half — the drop check must not fire).
+    expect(truncateToUtf16Budget('a\ud83d\ude00', 3)).toBe('a\ud83d\ude00');
   });
 });

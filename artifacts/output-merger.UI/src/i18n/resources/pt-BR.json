@@ -32,6 +32,7 @@
   "pages.mergeSession.previewArea.editing.placeholder": "Digite aqui para adicionar seu próprio texto",
   "pages.mergeSession.previewArea.editing.toggleOn": "Ativar edição de texto",
   "pages.mergeSession.previewArea.editing.toggleOff": "Desativar edição de texto",
+  "pages.mergeSession.previewArea.counterLabel": "Contagem de caracteres",
   "textInput.placeholder": "Digite ou cole seu texto aqui",
   "textInput.counterLabel": "Contagem de caracteres",
   "textInput.emptyView": "Nenhum texto adicionado ainda.",

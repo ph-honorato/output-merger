@@ -2,7 +2,7 @@ import OpenInFull from "@mui/icons-material/OpenInFull";
 import CloseFullscreen from "@mui/icons-material/CloseFullscreen";
 import Dialog from "@mui/material/Dialog";
 import IconButton from "@mui/material/IconButton";
-import { CopyMergedTextButton, PreviewArea, TextEditingToggle } from "../";
+import { CopyMergedTextButton, PreviewArea, PreviewCharCount, TextEditingToggle } from "../";
 import { usePreviewModal } from "./PreviewModal.hook";
 import type { PreviewModalProps } from "./PreviewModal.types";
 import * as S from "./PreviewModal.styles";
@@ -13,7 +13,9 @@ import * as S from "./PreviewModal.styles";
  * that renders the SAME unmodified PreviewArea from SnippetsContext
  * (zero duplicated snippet state) plus the existing
  * CopyMergedTextButton, a close button, and the edit-text toggle in a
- * bare right-side tools rail (rail order copy → close → toggle).
+ * bare right-side tools rail (rail order copy → close → toggle, the
+ * document char counter last). The modal suppresses the card's own
+ * counter row and renders it as the rail's last element instead.
  * No visible title: a visually hidden DialogTitle names the
  * dialog for assistive tech.
  */
@@ -58,6 +60,7 @@ function PreviewModal(props: PreviewModalProps) {
             <S.ModalPreviewArea
               as={PreviewArea}
               onActiveDragChange={handleActiveDragChange}
+              showCharCount={false}
             />
           </S.PreviewZone>
           <S.ToolsRail>
@@ -70,6 +73,7 @@ function PreviewModal(props: PreviewModalProps) {
               <CloseFullscreen />
             </IconButton>
             <TextEditingToggle />
+            <PreviewCharCount hideLimit />
           </S.ToolsRail>
         </S.ModalLayout>
       </Dialog>
