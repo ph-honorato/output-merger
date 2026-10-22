@@ -72,7 +72,16 @@
     - [x] Task 3.4: Implement edit parsing/sync: own text insertion, Enter → line break, deletion at boundaries, typing inside a snippet integrates into the token — no split (deviation from "splits it between words", user decision 2026-10-16; see ADR 0004 and the same spec folder); focused surface owns its DOM, blurred surface re-renders from the model
     - [x] Task 3.5: Update merged-text building/copy to serialize the document (own text + newlines for line breaks)
     - [x] Task 3.6: Tests: editing workflows, parse/serialize round-trips, inline-modal sync
-- [ ] **Feature 4: Preview Area Auto fix**
+- [ ] **Feature 4: Preview Area Auto fix** - Auto-correct snippet case and spacing in the preview area to fit the merged context; triggers are snippet creation, sort and copy (the copied text is always the corrected version); text inputs are never modified
+  - [ ] **Task 1: Case Auto-Fix** - Snippet capitalization follows its new context in the preview (inline and modal)
+    - [ ] Task 1.1: Implement the pure case-fix pass in the preview document utils: predecessor classifier (document start, `.` `!` `?`, line break, mid-sentence) with capitalize-after-sentence-start and lowercase-after-mid-sentence rules, plus guards (acronyms/all-caps, camelCase brands, standalone "I", capitals that were already mid-sentence in the source, digit-leading snippets, frozen tokens)
+    - [ ] Task 1.2: Wire the pass into snippet creation/reconciliation and sort (covers the moved snippet and the tokens whose predecessor changed); skip frozen tokens and make reconciliation comparisons case-aware so corrected tokens aren't misdetected as user-edited
+    - [ ] Task 1.3: Apply the pass on the copy path before serialization (inline + modal) so the clipboard is always fully corrected, without mutating the visible document
+    - [ ] Task 1.4: Tests: unit rule/guard tables + integration (create, sort both sides, manual override survives, copy output)
+  - [ ] **Task 2: Spacing Auto-Fix** - Punctuation-adjacent spacing in the preview (inline and modal)
+    - [ ] Task 2.1: Implement the pure spacing pass: exactly one space between tokens, no space before `.,!;:`, no space after `(` / before `)`, collapse double spaces, trim spaces around line breaks (line breaks themselves preserved)
+    - [ ] Task 2.2: Wire the pass into the same trigger points (creation, sort, copy); frozen tokens skipped
+    - [ ] Task 2.3: Tests: unit rule tables + integration (creation, sort and copy outputs)
 - [ ] **Feature 5: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar (including third text input support)
   - [ ] "Start Over" button (reset page without reload)
   - [ ] "Add Text" button (add new text input, up to 4 total)
