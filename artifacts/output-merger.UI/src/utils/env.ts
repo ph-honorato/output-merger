@@ -6,7 +6,7 @@
  * number, a non-integer) falls back to the given default.
  */
 export const readEnvNumber = (key: string, fallback: number): number => {
-  const raw = import.meta.env[key];
+  const raw: unknown = import.meta.env[key];
   if (typeof raw !== 'string') {
     return fallback;
   }

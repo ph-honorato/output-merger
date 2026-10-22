@@ -51,12 +51,12 @@ export const TEXT_INPUT_MAX_CHARACTERS = readEnvNumber(
  * Hook for managing the TextInput component logic
  * @returns {Object} Object containing text state, tokens, needle descriptors and interaction handlers
  */
-export const useTextInput = (props: TextInputProps) => {
+export const useTextInput = (props: TextInputProps & { maxCharacters: number }) => {
   const {
     mode = 'input',
     initialText = '',
     color = '#0080FF',
-    maxCharacters = TEXT_INPUT_MAX_CHARACTERS,
+    maxCharacters,
     onTextChange,
     onChange,
   } = props;

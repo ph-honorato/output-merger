@@ -5,8 +5,8 @@ import { serialize } from '../../../../utils/previewDocument';
 
 export function useCopyMergedTextButton() {
   const { t } = useTranslation();
-  // Aliased on destructure so the DOM global `document` stays
-  // reachable inside this module.
+  // The context's document model (an ordered token array), aliased on
+  // destructure to avoid confusion with the DOM global `document`.
   const { document: previewDocument, editEnabled } = useSnippets();
   const [toastOpen, setToastOpen] = useState(false);
 

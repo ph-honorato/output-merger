@@ -21,7 +21,7 @@ function TextInput(props: TextInputProps) {
     handlePointerMove,
     handlePointerDown,
     positionNeedle,
-  } = useTextInput(props);
+  } = useTextInput({ ...props, maxCharacters });
 
   const needleRefs = useRef(new Map<string, HTMLSpanElement>());
   const registerNeedle = useCallback((key: string) => (el: HTMLSpanElement | null) => {
@@ -36,9 +36,17 @@ function TextInput(props: TextInputProps) {
     const root = viewRef.current;
     if (!root) return;
     const rootRect = root.getBoundingClientRect();
+    // The needles are absolutely positioned inside the scrollable
+    // view, so their offsets live in the container's content
+    // coordinate space: the origin is compensated by the current
+    // scroll for that space.
+    const origin = {
+      left: rootRect.left - root.scrollLeft,
+      top: rootRect.top - root.scrollTop,
+    };
     needleRefs.current.forEach((el) => {
       const boundary = parseBoundary(el.dataset.boundary);
-      const position = positionNeedle(boundary, rootRect);
+      const position = positionNeedle(boundary, origin);
       el.style.left = `${position?.left ?? 0}px`;
       el.style.top = `${position?.top ?? 0}px`;
     });

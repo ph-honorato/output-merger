@@ -83,7 +83,6 @@ export function usePreviewModal() {
     // document serializes to something (today's behavior).
     canOpen: editEnabled || serialize(previewDocument).length > 0,
     open,
-    dragActive,
     handleOpen,
     handleClose,
     handleDialogClose,

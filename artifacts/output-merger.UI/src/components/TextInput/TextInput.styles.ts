@@ -2,6 +2,7 @@ import styled from 'styled-components';
 import TextField from '@mui/material/TextField';
 import type { DefaultTheme } from 'styled-components';
 import type { Theme } from '@mui/material/styles';
+import { CARD_HEIGHT } from '../../theme';
 
 type StyledTheme = DefaultTheme & Theme;
 
@@ -15,7 +16,7 @@ export const TextInputRoot = styled.div`
    * textarea area (input mode) or the view container (view mode)
    * fills the fixed card and scrolls internally, and the optional
    * label and the counter stay inside it. */
-  height: 400px;
+  height: ${CARD_HEIGHT};
   box-sizing: border-box;
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};

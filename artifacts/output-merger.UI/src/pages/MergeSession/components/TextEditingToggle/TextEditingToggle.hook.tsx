@@ -25,7 +25,6 @@ export function useTextEditingToggle() {
   }, [editEnabled, setEditEnabled]);
 
   return {
-    t,
     editEnabled,
     // The label names the action the button will perform: enabling
     // while editing is off, disabling while it is on.

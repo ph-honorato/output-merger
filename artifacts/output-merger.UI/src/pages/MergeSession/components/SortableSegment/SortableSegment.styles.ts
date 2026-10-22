@@ -13,6 +13,15 @@ interface SegmentChipProps {
   $editing?: boolean;
 }
 
+// The chip's background tint: the snippet color at 0.3 alpha,
+// deepened to 0.4 on hover, or transparent with no color.
+function chipBackground($color?: string, deepened = false): string {
+  if (!$color) {
+    return 'transparent';
+  }
+  return withAlpha($color, deepened ? 0.4 : 0.3);
+}
+
 export const SegmentChip = styled.span<SegmentChipProps>`
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -23,18 +32,13 @@ export const SegmentChip = styled.span<SegmentChipProps>`
   -webkit-user-select: ${({ $editing }) => ($editing ? 'text' : 'none')};
   touch-action: ${({ $editing }) => ($editing ? 'auto' : 'none')};
   -webkit-touch-callout: ${({ $editing }) => ($editing ? 'default' : 'none')};
-  background-color: ${({ $color }) =>
-    $color ? withAlpha($color, 0.3) : 'transparent'};
+  background-color: ${({ $color }) => chipBackground($color)};
 
+  /* Hover deepens the tint only on the drag chip; the editing chip
+     keeps its base background. */
   &:hover {
     background-color: ${({ $color, $editing }) =>
-      $editing
-        ? $color
-          ? withAlpha($color, 0.3)
-          : 'transparent'
-        : $color
-          ? withAlpha($color, 0.4)
-          : 'transparent'};
+      $editing ? chipBackground($color) : chipBackground($color, true)};
   }
 
   &:focus-visible {

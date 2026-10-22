@@ -553,6 +553,33 @@ describe('TextInput Component', () => {
     expect(endNeedle).toHaveStyle({ left: '150px' });
   });
 
+  it('compensates the view scroll offset when positioning needles inside the scrollable container', () => {
+    setup({ mode: 'view' });
+    const view = screen.getByTestId('text-input-view');
+    vi.spyOn(view, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 50,
+      width: 200,
+      height: 200,
+      top: 50,
+      right: 300,
+      bottom: 250,
+      left: 100,
+      toJSON: () => ({}),
+    } as DOMRect);
+    Object.defineProperty(view, 'scrollTop', { value: 30, configurable: true });
+    Object.defineProperty(view, 'scrollLeft', { value: 10, configurable: true });
+
+    hoverAt(65);
+    const needle = getNeedleByRole('hover');
+    expect(needle).toHaveAttribute('data-boundary', '6');
+    // The needle offsets live in the container's content space: the
+    // origin is the viewport rect minus the scroll (100-10, 50-30),
+    // so the word-start rect at (60, 0) lands at (-30, -20) — glued
+    // to its word at any scroll position.
+    expect(needle).toHaveStyle({ left: '-30px', top: '-20px' });
+  });
+
   it('should highlight whitespace between words inside a snippet', () => {
     setup({ mode: 'view' });
 

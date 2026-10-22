@@ -1,6 +1,7 @@
 import styled, { css } from 'styled-components';
 import type { DefaultTheme } from 'styled-components';
 import type { Theme } from '@mui/material/styles';
+import { CARD_HEIGHT } from '../../../../theme';
 
 type StyledTheme = DefaultTheme & Theme;
 
@@ -15,7 +16,7 @@ export const PreviewAreaRoot = styled.div`
    * pinned at the card's bottom, so no content amount can ever push
    * it out of view. The modal's layout tweak overrides this to its
    * zone bounds. */
-  height: 400px;
+  height: ${CARD_HEIGHT};
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

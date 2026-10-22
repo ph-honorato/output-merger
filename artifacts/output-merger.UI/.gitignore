@@ -12,7 +12,7 @@ dist
 dist-ssr
 *.local
 
-# Vitest local cache (finding 3, round 7 cycle 1)
+# Vitest local output
 .vitest
 
 # Editor directories and files

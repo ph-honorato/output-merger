@@ -26,4 +26,4 @@ Object.defineProperty(window, 'matchMedia', {
 
 // jsdom does not implement scrollIntoView (dnd-kit calls it when a
 // sortable item is picked up inside a scrollable container)
-Element.prototype.scrollIntoView = () => {};
+Element.prototype.scrollIntoView = vi.fn();

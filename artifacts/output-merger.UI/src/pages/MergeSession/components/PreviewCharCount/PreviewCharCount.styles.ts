@@ -5,8 +5,9 @@ import type { Theme } from '@mui/material/styles';
 type StyledTheme = DefaultTheme & Theme;
 
 /**
- * The preview document's character counter: the current count only
- * (no limit suffix), in the text inputs' counter font size. Below
+ * The preview document's character counter, in the text inputs'
+ * counter font size. The default renders `count/limit`; the modal's
+ * number-only variant (`hideLimit`) drops the limit suffix. Below
  * the limit it uses the secondary text tone; AT or OVER the limit
  * it turns the theme's error red. `align-self: stretch` +
  * `text-align: center` (instead of a right-edge `flex-end`, which
