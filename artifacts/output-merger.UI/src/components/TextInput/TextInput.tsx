@@ -1,16 +1,16 @@
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { withAlpha } from '../../utils/color';
-import { useAutoTextareaRows, useTextInput } from './TextInput.hook';
+import { TEXT_INPUT_MAX_CHARACTERS, TEXTAREA_BASELINE_ROWS, useTextInput } from './TextInput.hook';
 import { parseBoundary, serializeBoundary } from './TextInput.geometry';
 import { type TextInputProps } from './TextInput.types';
 import * as S from './TextInput.styles';
 
 function TextInput(props: TextInputProps) {
-  const { mode = 'input', color = '#0080FF', maxCharacters = 500, label, id } = props;
+  const { mode = 'input', color = '#0080FF', maxCharacters = TEXT_INPUT_MAX_CHARACTERS, label, id } = props;
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
-  const textareaRows = useAutoTextareaRows(rootRef, mode === 'input');
+  const textareaRows = TEXTAREA_BASELINE_ROWS;
   const {
     text,
     segments,
@@ -21,7 +21,7 @@ function TextInput(props: TextInputProps) {
     handlePointerMove,
     handlePointerDown,
     positionNeedle,
-  } = useTextInput(props);
+  } = useTextInput({ ...props, maxCharacters });
 
   const needleRefs = useRef(new Map<string, HTMLSpanElement>());
   const registerNeedle = useCallback((key: string) => (el: HTMLSpanElement | null) => {
@@ -36,9 +36,17 @@ function TextInput(props: TextInputProps) {
     const root = viewRef.current;
     if (!root) return;
     const rootRect = root.getBoundingClientRect();
+    // The needles are absolutely positioned inside the scrollable
+    // view, so their offsets live in the container's content
+    // coordinate space: the origin is compensated by the current
+    // scroll for that space.
+    const origin = {
+      left: rootRect.left - root.scrollLeft,
+      top: rootRect.top - root.scrollTop,
+    };
     needleRefs.current.forEach((el) => {
       const boundary = parseBoundary(el.dataset.boundary);
-      const position = positionNeedle(boundary, rootRect);
+      const position = positionNeedle(boundary, origin);
       el.style.left = `${position?.left ?? 0}px`;
       el.style.top = `${position?.top ?? 0}px`;
     });

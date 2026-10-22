@@ -78,12 +78,17 @@ When working on this project, agents should:
 
 Whenever starting the implementation of a task, the resolution must follow this sub-agent pipeline:
 
-1. **Create a sub-agent (specs)**: This sub-agent must call the `/grill-with-docs` skill and grill the user to fully understand the task implementation. After that, the sub-agent should update the `.specs/` folder following its current structure and finish
-2. **Create a sub-agent (developer)**: This sub-agent must develop the task properly following all the rules on this AGENTS.md file, create an `implementation.md` file on the `.specs/` folder following its structure, and finish
-3. **Create a sub-agent (tester)**: This sub-agent must test the task, check for security breaches, and verify the tests implementation
-4. **If the tester checks fail**: Run the `/diagnosing-bugs` skill. When the cause of the bug is identified, follow these steps:
-   1. [Optional] If the fix possibly needs another round of specs, call the specs sub-agent again passing the problem
-   2. Call the developer sub-agent to fix the problem
+1. **Create a sub-agent (Specs)**: This sub-agent must call the `/grill-with-docs` skill and grill the user to fully understand the task implementation. After that, the sub-agent should update the `.specs/` folder following its current structure and finish
+2. **Create a sub-agent (Developer)**: This sub-agent must develop the task properly following the `.spec.md` and `context.md` created by Specs sub-agent and respecting the rules on this `AGENTS.md` file. After task is implemented, create an `implementation.md` file on the `.specs/` folder following its structure, and finish
+3. **Create a sub-agent (Tester)**: This sub-agent must test the task:
+   1. Look only at the edited files and check for possible security breaches, code smells and tests implementation
+   2. Compare the edited files with the codebase and check for code duplications
+   3. Check for possible bugs created with the new files, if any is found run `/diagnosing-bugs` skill and pass the results to next step.
+4. **If Tester checks fail or find any bug**: follow these steps:
+   1. [Optional] If the fix possibly needs another round of specs, call the Specs sub-agent again passing the problem
+   2. Call the Developer sub-agent to fix the problems
+   3. Call Tester sub-agent
+   4. This cycle can be called at maximum of 3 times. If more cycles are needed, report back to user
 5. **Report back**: If the tester sub-agent returns that everything is ok, return to the user telling everything is ready
 
 ### Git Operations
@@ -96,7 +101,8 @@ Whenever starting the implementation of a task, the resolution must follow this 
 
 | Guideline             | Description                                                                                                                                                                            | Applies To                             |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| **Comment Discipline** | Code comments describe only how the code works (functions/components/props/mechanisms). Never put round numbers, dates, user decisions, review cycles, or spec/ADR/requirement references in code comments — decisions and history are recorded in `.specs/**/implementation.md` and `spec.md` | All code files                         |
 | **Styling**           | Implement styling using MUI and Styled Components consistently across all components                                                                                                   | All UI components                      |
 | **State Management**  | Implement state management using React Context + useReducer for global state                                                                                                           | All features requiring shared state    |
 | **Integration Tests** | Write integration tests for key user workflows using Vitest. Test files should be placed alongside the implementation files or in a `__tests__` directory following Vitest conventions | All features (complete user workflows) |
-| **Unit Tests**        | Implement unit tests only for UI components (in `src/components` or in a page/context `components` folder) and future API functions (in `artifacts/output-merger.API`)                                                          | Components and API functions only      |
+| **Unit Tests**        | Implement unit tests only for UI components (in `src/components` or in a page/context `components` folder) and future API functions (in `artifacts/output-merger.API`)                 | Components and API functions only      |

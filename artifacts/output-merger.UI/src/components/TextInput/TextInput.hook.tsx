@@ -18,6 +18,7 @@ import {
   trimRangeStart,
 } from './TextInput.snippets';
 import { computeNeedlePosition, resolvePointerAt, tokenize } from './TextInput.tokenize';
+import { readEnvNumber } from '../../utils/env';
 
 export type { CharRectLike, NeedleDescriptor, Segment, Token } from './TextInput.types';
 export {
@@ -28,82 +29,34 @@ export {
 } from './TextInput.tokenize';
 export { computeSegments, generateId, trimRangeStart } from './TextInput.snippets';
 
-const MIN_TEXTAREA_ROWS = 4;
+/**
+ * The textarea's fixed row baseline. The input area's CSS stretches
+ * the textarea to the card's full fixed height (`.MuiInputBase-input
+ * { height: 100% }` inside the flex column), so this is only the
+ * pre-CSS baseline.
+ */
+export const TEXTAREA_BASELINE_ROWS = 4;
 
 /**
- * Computes how many textarea rows fit the remaining vertical space of the root card,
- * so the textarea always shows the maximum number of rows for its height
+ * Each text input's default character limit. Reads the
+ * `VITE_TEXT_INPUT_MAX_LENGTH` environment variable (a finite
+ * integer > 0), falling back to 500.
  */
-export const useAutoTextareaRows = (
-  rootRef: React.RefObject<HTMLDivElement | null>,
-  enabled: boolean
-) => {
-  const [rows, setRows] = useState(MIN_TEXTAREA_ROWS);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const root = rootRef.current;
-    if (!root) return;
-
-    const compute = () => {
-      const textarea = root.querySelector('textarea');
-      if (!textarea) return;
-      const taStyles = window.getComputedStyle(textarea);
-      const lineHeight = parseFloat(taStyles.lineHeight);
-      if (!Number.isFinite(lineHeight) || lineHeight <= 0) return;
-      const taExtraY =
-        parseFloat(taStyles.paddingTop) +
-        parseFloat(taStyles.paddingBottom) +
-        parseFloat(taStyles.borderTopWidth) +
-        parseFloat(taStyles.borderBottomWidth);
-
-      const rootStyles = window.getComputedStyle(root);
-      const rootPaddingY =
-        parseFloat(rootStyles.paddingTop) + parseFloat(rootStyles.paddingBottom);
-      const rowGap = parseFloat(rootStyles.rowGap) || 0;
-      const minHeight = parseFloat(rootStyles.minHeight);
-      const baseHeight =
-        Number.isFinite(minHeight) && minHeight > 0 ? minHeight : root.clientHeight;
-
-      const children = Array.from(root.children) as HTMLElement[];
-      const otherHeight = children.reduce((total, child) => {
-        if (child.contains(textarea)) return total;
-        const childStyles = window.getComputedStyle(child);
-        return (
-          total +
-          child.offsetHeight +
-          parseFloat(childStyles.marginTop) +
-          parseFloat(childStyles.marginBottom)
-        );
-      }, 0);
-      const gaps = rowGap * Math.max(children.length - 1, 0);
-
-      const available = baseHeight - rootPaddingY - otherHeight - gaps - taExtraY;
-      const usableRows = Math.floor(available / lineHeight);
-      if (!Number.isFinite(usableRows)) return;
-      setRows(Math.max(MIN_TEXTAREA_ROWS, usableRows));
-    };
-
-    compute();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(compute);
-    observer.observe(root);
-    return () => observer.disconnect();
-  }, [rootRef, enabled]);
-
-  return rows;
-};
+export const TEXT_INPUT_MAX_CHARACTERS = readEnvNumber(
+  'VITE_TEXT_INPUT_MAX_LENGTH',
+  500,
+);
 
 /**
  * Hook for managing the TextInput component logic
  * @returns {Object} Object containing text state, tokens, needle descriptors and interaction handlers
  */
-export const useTextInput = (props: TextInputProps) => {
+export const useTextInput = (props: TextInputProps & { maxCharacters: number }) => {
   const {
     mode = 'input',
     initialText = '',
     color = '#0080FF',
-    maxCharacters = 500,
+    maxCharacters,
     onTextChange,
     onChange,
   } = props;

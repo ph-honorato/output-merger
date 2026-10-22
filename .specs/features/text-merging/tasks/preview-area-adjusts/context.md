@@ -8,7 +8,7 @@
 
 ## Feature Boundary
 
-Three presentation adjustments to the MergeSession page's preview column (post-Feature 2 polish — no dedicated roadmap line item; refines the outputs of Task 4 PreviewArea and Task 6.4 toolbar decoupling): (1) below the MUI `md` breakpoint (900px) the `PreviewToolbar` renders **below** the `PreviewArea` as a full-width horizontal row of tool buttons, while from `md` up it keeps today's beside-the-card vertical layout; (2) the PreviewArea empty state is rewritten as a single-sentence tutorial hint ("Select some snippets on the inputs to start"), keeping its centered icon + sentence presentation, in en-US and pt-BR; (3) snippet chip text becomes left-aligned, scoped to the segment flow. Explicitly supersedes the ui-fixes agent-default assumption "Toolbar on mobile: stays beside the card on stacked layouts" (never user-confirmed). Not Start Over / Add Text (Feature 3), not the third input (Feature 4), not preview tools (Feature 5), not empty-state steps/dismiss/persistence, not desktop layout changes, not backend/routing changes.
+Three presentation adjustments to the MergeSession page's preview column (post-Feature 2 polish — no dedicated roadmap line item; refines the outputs of Task 4 PreviewArea and Task 6.4 toolbar decoupling): (1) below the MUI `md` breakpoint (900px) the `PreviewToolbar` renders **below** the `PreviewArea` as a full-width horizontal row of tool buttons, while from `md` up it keeps today's beside-the-card vertical layout; (2) the PreviewArea empty state is rewritten as a single-sentence tutorial hint ("Select some snippets on the inputs to start"), keeping its centered icon + sentence presentation, in en-US and pt-BR; (3) snippet chip text becomes left-aligned, scoped to the segment flow. Explicitly supersedes the ui-fixes agent-default assumption "Toolbar on mobile: stays beside the card on stacked layouts" (never user-confirmed). Not Start Over / Add Text (Feature 5), not the third input (Feature 4), not preview tools (Feature 3), not empty-state steps/dismiss/persistence, not desktop layout changes, not backend/routing changes.
 
 ---
 
@@ -25,8 +25,8 @@ Three presentation adjustments to the MergeSession page's preview column (post-F
 - **"Mobile" definition (user decision)**: below the MUI `md` breakpoint (900px) — exactly where the page Grid already flips the preview column to full width (`Grid size={{ xs: 12, md: 4 }}`), so the toolbar goes below precisely when the column stops being a side panel. Matches DESIGN.md's "Mobile collapse: all multi-column layouts collapse below 900px".
 - (agent's discretion) `PreviewColumn` flips to `flex-direction: column` with `align-items: stretch` below `md` (children take the full column width); from `md` up it keeps today's row with `align-items: flex-start`. Mobile-first base styles with an `md`-and-up override via MUI `theme.breakpoints` keeps the 900px value in one source of truth (the theme) — exact mechanics are the developer's choice; the spec stays behavioral.
 - (agent's discretion) `PreviewToolbarRoot` flips its own axis the same way: buttons in a row below `md`, vertical column from `md` up; card styling (paper, border, radius, shadow), padding, and gap unchanged.
-- (agent's discretion) the mobile toolbar row wraps (`flex-wrap: wrap`) instead of overflowing if it ever runs out of width — future-proofing for Feature 5's tools (today only the copy button exists). DESIGN.md: no horizontal overflow on mobile collapse.
-- (agent's discretion) contracts preserved: children-composition, `preview-toolbar` / `preview-copy-button` testids, card styling, and the copy button as the first child — topmost on desktop, leftmost in the mobile row. Feature 5 tools will stack after it on desktop and follow it in the mobile row.
+- (agent's discretion) the mobile toolbar row wraps (`flex-wrap: wrap`) instead of overflowing if it ever runs out of width — future-proofing for Feature 3's tools (today only the copy button exists). DESIGN.md: no horizontal overflow on mobile collapse.
+- (agent's discretion) contracts preserved: children-composition, `preview-toolbar` / `preview-copy-button` testids, card styling, and the copy button as the first child — topmost on desktop, leftmost in the mobile row. Feature 3 tools will stack after it on desktop and follow it in the mobile row.
 - **Supersedes ui-fixes**: the ui-fixes spec's agent-default assumption "Toolbar on mobile: stays beside the card on stacked layouts" (marked "n (agent default)", never user-confirmed) is superseded by this task's user-confirmed behavior.
 
 ### 2. Empty state as a tutorial hint
@@ -67,11 +67,11 @@ Three presentation adjustments to the MergeSession page's preview column (post-F
 
 ## Deferred Ideas
 
-- Collapsing the mobile toolbar into a menu — unnecessary with one tool; revisit when Feature 5 raises the tool count.
+- Collapsing the mobile toolbar into a menu — unnecessary with one tool; revisit when Feature 3 raises the tool count.
 - Mirroring the tutorial banner inside the empty state (headline + steps) — rejected by user decision (single sentence); the Task 6.1 banner already covers the full flow.
 - An action button inside the empty state (DESIGN.md's "icon + text + action button" composition) — nothing to action yet; Start Merge lives in the ActionsBar.
 - Removing `text-align: center` from the page `Wrapper` globally — broader refactor; the left-alignment is scoped to the segment flow instead.
 - Animating the responsive flip (DESIGN.md motion rules) — later polish task.
-- "Start Over" / "Add Text" ActionsBar buttons — Feature 3.
+- "Start Over" / "Add Text" ActionsBar buttons — Feature 5.
 - Third source — Feature 4.
-- Additional toolbar tools (drag-sort, split, line breaks, add-own-text) — Feature 5.
+- Additional toolbar tools (drag-sort, split, line breaks, add-own-text) — Feature 3.

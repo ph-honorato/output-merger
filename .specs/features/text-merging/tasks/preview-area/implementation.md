@@ -81,8 +81,8 @@ None — all 13 requirements implemented as specified (PREVA-01–13, Verified).
 
 ## 6. Known gaps / deferred
 
-- User text editing and the editing model (atomic islands vs free-form) — deliberately undecided; Feature 5 discussions (user north star: edit text however they want + reorder snippets).
-- Drag-sort snippet reordering — Feature 5 (the per-snippet segment units are its natural drag anchors).
-- Split-snippet / line-break / add-own-text tools — Feature 5; necessity to be re-discussed (typing may replace tools).
+- User text editing and the editing model (atomic islands vs free-form) — deliberately undecided; Feature 3 discussions (user north star: edit text however they want + reorder snippets).
+- Drag-sort snippet reordering — Feature 3 (the per-snippet segment units are its natural drag anchors).
+- Split-snippet / line-break / add-own-text tools — Feature 3; necessity to be re-discussed (typing may replace tools).
 - Future toolbar buttons — added per feature as children of `PreviewToolbar`.
 - Persistence — V1.

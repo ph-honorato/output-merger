@@ -1,5 +1,12 @@
 import { createTheme } from '@mui/material/styles';
 
+/**
+ * The fixed card height shared by the merge session's text inputs
+ * and the preview area, so the default-view columns align. Each
+ * card scrolls internally instead of growing with its content.
+ */
+export const CARD_HEIGHT = '400px';
+
 export const theme = createTheme({
   palette: {
     mode: 'light',

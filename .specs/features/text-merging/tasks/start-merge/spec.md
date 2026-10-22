@@ -7,7 +7,7 @@ The implemented Merge Session page renders the Start Merge button hardcoded as d
 ## Goals
 
 - [ ] The Start Merge button is enabled once at least one source has text, and disabled while every source is empty.
-- [ ] Clicking Start Merge enters Merge Mode: both sources switch to `view` mode, the button hides (its slot is reserved for Start Over in Feature 3).
+- [ ] Clicking Start Merge enters Merge Mode: both sources switch to `view` mode, the button hides (its slot is reserved for Start Over in Feature 5).
 - [ ] Source text is preserved across the transition; an empty source shows its view-mode empty state.
 - [ ] Roadmap 5.2 (needles enable snippet creation; snippets auto-appear in the preview) is verified as already delivered — no new snippet-path code.
 - [ ] One focused page-level test covers gating and the mode transition (the page's first test, per user decision).
@@ -18,8 +18,8 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 | ------- | ------ |
-| "Start Over" button (reset) | Feature 3; will occupy the ActionsBar slot the Start Merge button vacates |
-| Toggling back from Merge Mode to input mode | Feature 3 territory (Start Over); Task 5's transition is one-way |
+| "Start Over" button (reset) | Feature 5; will occupy the ActionsBar slot the Start Merge button vacates |
+| Toggling back from Merge Mode to input mode | Feature 5 territory (Start Over); Task 5's transition is one-way |
 | Text editing in Merge Mode | Sources are read-only in view mode (TextInput contract) |
 | Entry animations on the mode flip | DESIGN.md motion rules deferred; no animation this task |
 | Third text input | Feature 4 |
@@ -34,9 +34,9 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
-| Button gating | Enabled iff at least one source has non-empty text | Prevents the dead end of starting with nothing (no way back until Feature 3) while allowing single-source merges | y (grilled) |
-| Text tracking | Page-local `Record<sourceId, string>` fed by `onTextChange`; no context | Needed for gating; page owns session UI state; Feature 3/4 will reuse it | y (grilled) |
-| Post-start button | Hidden (not disabled); ActionsBar stays rendered (empty until Feature 3 fills it) | User decision: Start Over takes the place in the next feature | y (grilled) |
+| Button gating | Enabled iff at least one source has non-empty text | Prevents the dead end of starting with nothing (no way back until Feature 5) while allowing single-source merges | y (grilled) |
+| Text tracking | Page-local `Record<sourceId, string>` fed by `onTextChange`; no context | Needed for gating; page owns session UI state; Feature 4/5 will reuse it | y (grilled) |
+| Post-start button | Hidden (not disabled); ActionsBar stays rendered (empty until Feature 5 fills it) | User decision: Start Over takes the place in a later feature | y (grilled) |
 | `mergeStarted` state | `useState` inside the page workspace; no context, no hook file | Two-line UI state; SRP — snippets context stays snippets-only | y (grilled) |
 | Mode propagation | Both sources get `mode={mergeStarted ? 'view' : 'input'}` | Roadmap 5.1 | y (grilled) |
 | Domain term | "Merge Mode" added to GLOSSARY.md | The page now flips between two named states | y (grilled) |
@@ -95,7 +95,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 **Acceptance Criteria**:
 
 1. WHEN the enabled Start Merge button is clicked THEN both sources SHALL switch to `view` mode and SHALL render no textareas.
-2. WHEN Merge Mode is entered THEN the Start Merge button SHALL be hidden while the ActionsBar SHALL remain rendered (its slot awaits Start Over in Feature 3).
+2. WHEN Merge Mode is entered THEN the Start Merge button SHALL be hidden while the ActionsBar SHALL remain rendered (its slot awaits Start Over in Feature 5).
 3. WHEN Merge Mode is entered THEN each source's text SHALL be preserved and visible in view mode.
 4. IF a source was empty at entry THEN it SHALL render the view-mode empty state ("No text added yet").
 

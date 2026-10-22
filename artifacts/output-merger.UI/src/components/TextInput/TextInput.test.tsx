@@ -115,6 +115,54 @@ const getHighlightSegments = (): HTMLElement[] => screen.getAllByTestId('text-in
 const getPlainSegments = (): HTMLElement[] => screen.getAllByTestId('text-input-segment');
 
 describe('TextInput Component', () => {
+  it('renders a fixed-height card: the textarea fills it at a fixed row baseline and the counter stays inside', () => {
+    setup({});
+    const root = screen.getByTestId('text-input-root');
+    expect(root).toHaveStyle({ height: '400px' });
+    // The textarea no longer auto-grows with its content: it carries
+    // the fixed row baseline and fills the card through the input
+    // area's CSS instead.
+    const textarea = screen.getByTestId('text-input-textarea');
+    expect(textarea).toHaveAttribute('rows', '4');
+  });
+
+  it('hardens the geometry chain: every region of the fixed card shares it on a content-independent basis ZERO', () => {
+    setup({});
+    const css = () =>
+      Array.from(document.querySelectorAll('style'))
+        .map((style) => style.textContent)
+        .join('');
+    // The card column's regions — the MUI FormControl root (the
+    // TextField) and the OutlinedInput inside it, plus the view-mode
+    // container — all take basis-zero shares of the fixed card: the
+    // typed content never influences the layout, the textarea fills
+    // its area and scrolls natively, and the counter stays put.
+    expect(css()).toMatch(/\.([\w-]+)\{[^}]*flex:1 1 0[^}]*min-height:0/);
+    expect(css()).toContain('flex:1 1 0');
+  });
+
+  it('keeps the counter at n/limit and the textarea maxLength at the env-fed default', () => {
+    setup({});
+    fireEvent.change(screen.getByTestId('text-input-textarea'), {
+      target: { value: 'hello' },
+    });
+    expect(screen.getByTestId('text-input-counter')).toHaveTextContent(
+      '5/500',
+    );
+    expect(screen.getByTestId('text-input-textarea')).toHaveAttribute(
+      'maxlength',
+      '500',
+    );
+  });
+
+  it('scrolls the view-mode container inside the fixed card instead of growing it', () => {
+    setup({ mode: 'view', initialText: 'line\n'.repeat(200) });
+    const root = screen.getByTestId('text-input-root');
+    const view = screen.getByTestId('text-input-view');
+    expect(root).toHaveStyle({ height: '400px' });
+    expect(view).toHaveStyle({ overflow: 'auto' });
+  });
+
   it('should render textarea and counter in input mode and call onTextChange on typing', () => {
     const onTextChange = vi.fn();
     setup({ onTextChange });
@@ -503,6 +551,33 @@ describe('TextInput Component', () => {
 
     expect(endNeedle).toHaveAttribute('data-boundary', '16');
     expect(endNeedle).toHaveStyle({ left: '150px' });
+  });
+
+  it('compensates the view scroll offset when positioning needles inside the scrollable container', () => {
+    setup({ mode: 'view' });
+    const view = screen.getByTestId('text-input-view');
+    vi.spyOn(view, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 50,
+      width: 200,
+      height: 200,
+      top: 50,
+      right: 300,
+      bottom: 250,
+      left: 100,
+      toJSON: () => ({}),
+    } as DOMRect);
+    Object.defineProperty(view, 'scrollTop', { value: 30, configurable: true });
+    Object.defineProperty(view, 'scrollLeft', { value: 10, configurable: true });
+
+    hoverAt(65);
+    const needle = getNeedleByRole('hover');
+    expect(needle).toHaveAttribute('data-boundary', '6');
+    // The needle offsets live in the container's content space: the
+    // origin is the viewport rect minus the scroll (100-10, 50-30),
+    // so the word-start rect at (60, 0) lands at (-30, -20) — glued
+    // to its word at any scroll position.
+    expect(needle).toHaveStyle({ left: '-30px', top: '-20px' });
   });
 
   it('should highlight whitespace between words inside a snippet', () => {

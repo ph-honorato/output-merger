@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-The merge session aggregates snippets in the global snippets context (Task 3), but column 3 still renders the invisible placeholder stub created in Task 2. The user cannot see which snippets they selected, in what order, or from which source, and cannot extract the merged text. This specification defines Task 4 of Feature 2 (roadmap 4.1–4.4): a read-only preview of the merge-ordered snippets with source color highlighting, a floating vertical toolbar on its right side, and a copy tool that writes the Merged Text to the clipboard with toast feedback — not user text editing (deferred, see Out of Scope), not drag-sorting/splitting/line-break tools (Feature 5), not Start Merge (Task 5).
+The merge session aggregates snippets in the global snippets context (Task 3), but column 3 still renders the invisible placeholder stub created in Task 2. The user cannot see which snippets they selected, in what order, or from which source, and cannot extract the merged text. This specification defines Task 4 of Feature 2 (roadmap 4.1–4.4): a read-only preview of the merge-ordered snippets with source color highlighting, a floating vertical toolbar on its right side, and a copy tool that writes the Merged Text to the clipboard with toast feedback — not user text editing (deferred, see Out of Scope), not drag-sorting/splitting/line-break tools (Feature 3), not Start Merge (Task 5).
 
 ## Goals
 
@@ -18,9 +18,9 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 | ------- | ------ |
-| User text editing / editing model (free typing, caret behavior, atomic islands vs free-form) | Deferred by user decision: north star is "the user edits text however they want" plus snippet reordering; the model will be discussed at Feature 5. Task 4 must not block it (see Forward Direction below) |
-| Drag-sort / snippet reordering | Feature 5 |
-| Splitting snippets, line breaks, add-own-text tools | Feature 5; their necessity will be re-discussed (typing may replace tools) |
+| User text editing / editing model (free typing, caret behavior, atomic islands vs free-form) | Deferred by user decision: north star is "the user edits text however they want" plus snippet reordering; the model will be discussed at Feature 3. Task 4 must not block it (see Forward Direction below) |
+| Drag-sort / snippet reordering | Feature 3 |
+| Splitting snippets, line breaks, add-own-text tools | Feature 3; their necessity will be re-discussed (typing may replace tools) |
 | Start Merge mode switching | Feature 2 Task 5 |
 | Third text input | Feature 4 |
 | Persistence | V1 (Merges CRUD) |
@@ -56,7 +56,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 | Toolbar z-index | 1 (above base content; DESIGN.md's contract reserves 100+ for nav/overlay/modal/toast) | Floating control over content | n (agent default) |
 | Toast placement & timing | Bottom-center, auto-hide 2500ms | MUI Snackbar defaults are acceptable | n (agent default) |
 | Clipboard failure | Silent no-op (no toast, no error UI) | Non-secure contexts/permission denials are rare; no error infrastructure in v0 | n (agent default) |
-| Merged Text builder | Pure exported `buildMergedText(snippets)` in the copy button's hook file | Single consumer today; moves if Feature 5 needs it elsewhere | n (agent default) |
+| Merged Text builder | Pure exported `buildMergedText(snippets)` in the copy button's hook file | Single consumer today; moves if Feature 3 needs it elsewhere | n (agent default) |
 | Empty-state icon | MUI `Preview` icon | Neutral, thematic | n (agent default) |
 | Content/toolbar overlap | Segment flow gets right padding so text never flows under the floating toolbar | Readability | n (agent default) |
 | data-testids | `preview-area`, `preview-snippet`, `preview-toolbar`, `preview-copy-button`, `preview-copy-toast` | Stub continuity (`preview-area` kept) | n (agent default) |

@@ -18,9 +18,9 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 | ------- | ------ |
-| "Start Over" / "Add Text" buttons | Feature 3; unrelated to the preview column |
+| "Start Over" / "Add Text" buttons | Feature 5; unrelated to the preview column |
 | Third text input | Feature 4 |
-| New toolbar tools (drag-sort, split, line breaks, add-own-text) | Feature 5; this task only repositions existing tools — the composition contract is preserved so tools can be added without rework |
+| New toolbar tools (drag-sort, split, line breaks, add-own-text) | Feature 3; this task only repositions existing tools — the composition contract is preserved so tools can be added without rework |
 | Empty-state content beyond the single sentence + hint styling (numbered steps, headline, dismiss control, persistence) | User decision: single sentence only; the Task 6.1 tutorial banner already teaches the full flow |
 | Desktop (`md`-and-up) layout changes | User decision: mobile is the target; desktop keeps today's layout exactly |
 | Backend/API changes, route changes | UI-only styling/copy task; no backend surface involved |
@@ -41,8 +41,8 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 | Superseded ui-fixes assumption | The ui-fixes row "Toolbar on mobile: stays beside the card on stacked layouts" (agent default, never user-confirmed) is superseded: below `md` the toolbar goes under the area | Direct consequence of this task's grilled decisions; recorded here and in context.md | y (grilled) — supersession is explicit |
 | `PreviewColumn` mechanics | Below `md`: `flex-direction: column` + `align-items: stretch` (toolbar = full-width bar under the area); `md`-and-up: today's row + `align-items: flex-start`. Mobile-first base + `theme.breakpoints.up('md')` override | Keeps the 900px flip in one source of truth (the theme) and in sync with the Grid; mechanics are the developer's choice — the spec stays behavioral | n (agent default) |
 | Toolbar axis flip | `PreviewToolbarRoot` lays out its buttons in a row below `md`, column from `md` up (same breakpoint); card styling, gap, and padding unchanged | The toolbar owns its own axis; one breakpoint drives both flips | n (agent default) |
-| Toolbar contract preserved | Children-composition, `preview-toolbar`/`preview-copy-button` testids, card styling, copy button as first child (topmost on desktop, leftmost on mobile); Feature 5 tools follow it | Continuity with Task 4/5 suites; Feature 5 must not need rework | n (agent default) |
-| Toolbar overflow on very narrow screens | Mobile toolbar row wraps (`flex-wrap: wrap`), never overflows horizontally | DESIGN.md "No horizontal overflow"; only reachable once Feature 5 adds tools | n (agent default) |
+| Toolbar contract preserved | Children-composition, `preview-toolbar`/`preview-copy-button` testids, card styling, copy button as first child (topmost on desktop, leftmost on mobile); Feature 3 tools follow it | Continuity with Task 4/5 suites; Feature 3 must not need rework | n (agent default) |
+| Toolbar overflow on very narrow screens | Mobile toolbar row wraps (`flex-wrap: wrap`), never overflows horizontally | DESIGN.md "No horizontal overflow"; only reachable once Feature 3 adds tools | n (agent default) |
 | Empty-state styling | Existing composition kept: `Preview` icon (`aria-hidden`) + sentence, centered flex, `text.secondary` color; only the copy changes; `preview-empty` testid preserved; still disappears when the first snippet arrives | The current layout already reads as a hint; Task 4 contract (PREVA-04/05) untouched | n (agent default) |
 | i18n key & wording | Same key `pages.mergeSession.previewArea.empty` updated in BOTH en-US and pt-BR (draft pt-BR: "Selecione alguns trechos nas entradas para começar"); final wording reviewed during implementation | ui-fixes copy-authorship precedent (agent drafts, user reviews) | n (agent default) — the single-sentence approach itself is y (grilled) |
 | Left-alignment scope | `text-align: left` scoped to `SegmentFlow` in `PreviewArea.styles.ts` (preferred over `PreviewAreaRoot`) | Narrowest blast radius: the empty state's centering and the page's centered chrome stay untouched | n (agent default) |
@@ -86,7 +86,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 2. WHILE below `md` THEN the toolbar's tool buttons SHALL lay out in a single horizontal row (side by side), with the copy button as the leftmost button.
 3. WHILE below `md` THEN the toolbar bar SHALL stretch to the full width of the preview column.
 4. WHILE the viewport is `md` and wider THEN the toolbar SHALL keep today's desktop layout: beside the preview card's right side, top-aligned, with the buttons stacked in a vertical column.
-5. The toolbar SHALL keep its children-composition contract, card styling, and data-testids (`preview-toolbar`, `preview-copy-button`), with the copy button as the first child — so Feature 5 tools stack below it on desktop and follow it in the mobile row without further layout work.
+5. The toolbar SHALL keep its children-composition contract, card styling, and data-testids (`preview-toolbar`, `preview-copy-button`), with the copy button as the first child — so Feature 3 tools stack below it on desktop and follow it in the mobile row without further layout work.
 
 **Independent Test**: Manual dev-server verification on both sides of 900px (resize or device emulator; jsdom cannot evaluate media queries): below `md` the toolbar renders under the area as a full-width row with the copy button leftmost; at `md`+ it is beside the card's right side, vertical, top-aligned. Unit suites assert base styles only (the `PreviewToolbar` `flexDirection` assertion updated to the mobile-first base).
 
@@ -138,12 +138,12 @@ The user picked the single-sentence content; the final wording is reviewed/corre
 ## Edge Cases
 
 - IF the preview is empty on a mobile viewport THEN the toolbar SHALL still render below the (empty) preview area as a horizontal row, with the copy button disabled (Task 4 contract unchanged).
-- IF the toolbar row ever exceeds the column width (only possible once Feature 5 adds tools) THEN its buttons SHALL wrap within the bar rather than overflow horizontally (DESIGN.md: no horizontal overflow on mobile).
+- IF the toolbar row ever exceeds the column width (only possible once Feature 3 adds tools) THEN its buttons SHALL wrap within the bar rather than overflow horizontally (DESIGN.md: no horizontal overflow on mobile).
 - IF a snippet's text wraps across multiple lines THEN every line SHALL start at the chip's left edge (`text-align: left` inherits into each chip; `white-space: pre-wrap` unchanged).
 - IF the active language changes WHILE the empty state is visible THEN the hint sentence SHALL render in the active language (i18n is orthogonal to layout).
 - IF the viewport crosses the 900px boundary THEN the toolbar position/axis SHALL flip purely via CSS — no JS state, no remount; automated tests do not cover the media-query behavior (jsdom limitation), hence the manual verification.
 - IF the toolbar moves below the area on mobile THEN the existing `PreviewColumn` gap provides the vertical spacing between the preview card and the bar (no extra spacing rules needed).
-- IF Feature 5 later adds tools THEN they compose as additional toolbar children and follow the copy button (row on mobile, stacked on desktop) with no further layout changes.
+- IF Feature 3 later adds tools THEN they compose as additional toolbar children and follow the copy button (row on mobile, stacked on desktop) with no further layout changes.
 
 ---
 

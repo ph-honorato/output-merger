@@ -51,17 +51,33 @@
     - [x] Task 6.3: ActionsBar should have a fixed height too, so if a button disappears it does not change height
     - [x] Task 6.4: The copy button should be inside at the top of a vertical bar, this bar should be placed at the right of the preview area, decoupled from the container
 
-- [ ] **Feature 3: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
-  - [ ] "Start Over" button (reset page without reload)
-  - [ ] "Add Text" button (add new text input, up to 4 total)
+- [ ] **Feature 3: Preview Area Tools** - Implement the preview area with:
+  - [x] **Task 1: Sort Snippets by Dragging** - Sort highlighted text snippets by dragging (using `@dnd-kit/core`)
+    - [x] Task 1.1: Install and set up `@dnd-kit/core` and `@dnd-kit/sortable`
+    - [x] Task 1.2: Add snippet reorder support to SnippetsContext (reducer action + `moveSnippet` API)
+    - [x] Task 1.3: Configure sensors: PointerSensor with hold-to-drag activation constraint (delay + tolerance) and KeyboardSensor for accessibility
+    - [x] Task 1.4: Make preview segments sortable (DndContext + SortableContext), wiring drag end to `moveSnippet`, keeping space separators and empty state working
+    - [x] Task 1.5: Tests: reducer reorder unit tests + component drag/keyboard sorting tests
+    - [x] Task 1.6: Add user feedback while sorting
+  - [x] **Task 2: Preview Area Modal** - Open the preview area on a modal (bigger view of the same preview)
+    - [x] Task 2.1: Create PreviewModal component in MergeSession components folder (MUI Dialog, full component structure)
+    - [x] Task 2.2: Add open-preview button to the PreviewToolbar with translations (en-US/pt-BR)
+    - [x] Task 2.3: Manage open/close state and render the same PreviewArea inside the modal (shared state via context, no duplication)
+    - [x] Task 2.4: Responsive + accessibility pass (ESC/backdrop close, focus trap; trigger hidden on mobile — user decision 2026-10-15 supersedes "full-screen on mobile", fullScreen only on the resize edge; see ADR 0003 and `.specs/features/preview-area-tools/tasks/preview-area-modal`)
+    - [x] Task 2.5: Tests: modal open/close, preview content rendering, copy button integration
+  - [x] **Task 3: Editable Preview Text** - Make the text on the preview area editable (inline and in the modal)
+    - [x] Task 3.1: Extend SnippetsContext into a preview document model (snippet tokens + own-text tokens + line breaks), migrating Task 1 reorder onto it
+    - [x] Task 3.2: Build the editable preview surface (contentEditable rendering colored snippet tokens, textarea-like caret/selection)
+    - [x] Task 3.3: Verify the click-vs-drag contract (click = caret, hold = drag) and add an edit-text toggle gating editing only — dragging stays always live in both modes (deviation from the "drag on/off toggle", user decision 2026-10-16; see ADR 0004 and `.specs/features/preview-area-tools/tasks/editable-preview-text`)
+    - [x] Task 3.4: Implement edit parsing/sync: own text insertion, Enter → line break, deletion at boundaries, typing inside a snippet integrates into the token — no split (deviation from "splits it between words", user decision 2026-10-16; see ADR 0004 and the same spec folder); focused surface owns its DOM, blurred surface re-renders from the model
+    - [x] Task 3.5: Update merged-text building/copy to serialize the document (own text + newlines for line breaks)
+    - [x] Task 3.6: Tests: editing workflows, parse/serialize round-trips, inline-modal sync
 - [ ] **Feature 4: Third Text Input** - Add support for a third text input
   - [ ] Add a button to add a third text input on MergeSession Page
   - [ ] Implement logic to handle three text inputs in the merge session
-- [ ] **Feature 5: Preview Area Tools** - Implement the preview area with:
-  - Sort highlighted text snippets by drag
-  - Creating line breaks
-  - Splitting snippets between words
-  - Adding own text
+- [ ] **Feature 5: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
+  - [ ] "Start Over" button (reset page without reload)
+  - [ ] "Add Text" button (add new text input, up to 4 total)
 - [ ] **Feature 6: Release Preparation** - Finalize and prepare for release
 
 ### v1: "Merges" CRUD
