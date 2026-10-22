@@ -51,7 +51,7 @@
     - [x] Task 6.3: ActionsBar should have a fixed height too, so if a button disappears it does not change height
     - [x] Task 6.4: The copy button should be inside at the top of a vertical bar, this bar should be placed at the right of the preview area, decoupled from the container
 
-- [ ] **Feature 3: Preview Area Tools** - Implement the preview area with:
+- [x] **Feature 3: Preview Area Tools** - Implement the preview area with:
   - [x] **Task 1: Sort Snippets by Dragging** - Sort highlighted text snippets by dragging (using `@dnd-kit/core`)
     - [x] Task 1.1: Install and set up `@dnd-kit/core` and `@dnd-kit/sortable`
     - [x] Task 1.2: Add snippet reorder support to SnippetsContext (reducer action + `moveSnippet` API)
@@ -72,12 +72,11 @@
     - [x] Task 3.4: Implement edit parsing/sync: own text insertion, Enter → line break, deletion at boundaries, typing inside a snippet integrates into the token — no split (deviation from "splits it between words", user decision 2026-10-16; see ADR 0004 and the same spec folder); focused surface owns its DOM, blurred surface re-renders from the model
     - [x] Task 3.5: Update merged-text building/copy to serialize the document (own text + newlines for line breaks)
     - [x] Task 3.6: Tests: editing workflows, parse/serialize round-trips, inline-modal sync
-- [ ] **Feature 4: Third Text Input** - Add support for a third text input
-  - [ ] Add a button to add a third text input on MergeSession Page
-  - [ ] Implement logic to handle three text inputs in the merge session
-- [ ] **Feature 5: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
+- [ ] **Feature 4: Preview Area Auto fix**
+- [ ] **Feature 5: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar (including third text input support)
   - [ ] "Start Over" button (reset page without reload)
   - [ ] "Add Text" button (add new text input, up to 4 total)
+  - [ ] Implement logic to handle three or more text inputs in the merge session
 - [ ] **Feature 6: Release Preparation** - Finalize and prepare for release
 
 ### v1: "Merges" CRUD
