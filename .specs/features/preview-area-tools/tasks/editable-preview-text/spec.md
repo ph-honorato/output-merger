@@ -34,7 +34,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Document character cap | The 500-char limit is TextInput's input-mode limit; the roadmap sets no cap for the document |
 | Persistence of the document, edit state, or tombstones | V1 (Merges CRUD); v0 lives in memory |
 | Cross-instance dragging (inline ↔ modal) | Task 1 decision stands (per-instance DndContext) |
-| Third text input, ActionsBar extensions | Features 4/5 |
+| Third text input, ActionsBar extensions | Feature 5 |
 | New routes/pages | None; the feature lives on the MergeSession page |
 | Replacing dnd-kit | The editable surface keeps Task 1's sortable investment (ADR 0002) |
 | New "Preview Document" GLOSSARY term | User decision (Q14): the token model is internal; Merged Text / Own Text / Line Break cover the language |

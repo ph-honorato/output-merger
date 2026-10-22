@@ -23,7 +23,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Mode-aware tutorial content (input vs Merge Mode variants) | User decision: one static full-flow list; steps remain true in both states |
 | Backend persistence of tutorial dismissal | V1 (Merges CRUD); v0 uses localStorage |
 | "Start Over" / "Add Text" buttons | Feature 5; the fixed-height bar is built to host them |
-| Third text input | Feature 4 |
+| Third text input | Feature 5 |
 | Additional toolbar tools (drag-sort, split, line breaks, add-own-text) | Feature 3; toolbar keeps its children-composition contract so tools stack below copy |
 | Banner entry animations (DESIGN.md motion rules) | Deferred polish task |
 | Fixed (non-growing) heights anywhere | User decision: `min-height` semantics — cards grow with content |

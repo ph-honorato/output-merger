@@ -22,7 +22,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Toggling back from Merge Mode to input mode | Feature 5 territory (Start Over); Task 5's transition is one-way |
 | Text editing in Merge Mode | Sources are read-only in view mode (TextInput contract) |
 | Entry animations on the mode flip | DESIGN.md motion rules deferred; no animation this task |
-| Third text input | Feature 4 |
+| Third text input | Feature 5 |
 | Snippet-path changes (context, preview, needles) | Delivered by Tasks 1, 3, 4; Task 5 wires flow only |
 | Persistence | V1 (Merges CRUD) |
 
@@ -35,7 +35,7 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
 | Button gating | Enabled iff at least one source has non-empty text | Prevents the dead end of starting with nothing (no way back until Feature 5) while allowing single-source merges | y (grilled) |
-| Text tracking | Page-local `Record<sourceId, string>` fed by `onTextChange`; no context | Needed for gating; page owns session UI state; Feature 4/5 will reuse it | y (grilled) |
+| Text tracking | Page-local `Record<sourceId, string>` fed by `onTextChange`; no context | Needed for gating; page owns session UI state; Feature 5 will reuse it | y (grilled) |
 | Post-start button | Hidden (not disabled); ActionsBar stays rendered (empty until Feature 5 fills it) | User decision: Start Over takes the place in a later feature | y (grilled) |
 | `mergeStarted` state | `useState` inside the page workspace; no context, no hook file | Two-line UI state; SRP — snippets context stays snippets-only | y (grilled) |
 | Mode propagation | Both sources get `mode={mergeStarted ? 'view' : 'input'}` | Roadmap 5.1 | y (grilled) |

@@ -22,10 +22,10 @@ Explicitly excluded. Documented to prevent scope creep.
 | Global snippets context | Feature 2 Task 3 |
 | Start Merge switching page-level mode | Feature 2 Task 5; this spec only defines the `mode` prop the parent will set |
 | Third text input | Feature 5 |
-| Preview reorder, line breaks, split, user-typed preview text | Feature 4 |
+| Preview reorder, line breaks, split, user-typed preview text | Feature 3 |
 | Native `window.getSelection()` snippet creation | Grilled: needles only |
 | Overlapping / stacked / merged snippets | Grilled: overlap forbidden |
-| Splitting a snippet from an interior stop | Feature 4; interior stops are hidden |
+| Splitting a snippet from an interior stop | Feature 3; interior stops are hidden |
 | Keyboard needle navigation (beyond native textarea in input mode) | Assumed out until a later task |
 | Lifting snippet state into React context | Task 3; this component owns snippet state and reports via `onChange` |
 | Backend persistence | V1 |

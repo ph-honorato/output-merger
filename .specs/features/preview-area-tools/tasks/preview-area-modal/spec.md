@@ -34,7 +34,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Extra tools in the modal rail beyond copy + close | Not requested; scope creep |
 | Persisting modal-open state across sessions/reloads | V1 (Merges CRUD); v0 state lives in memory |
 | Programmatic open API (open the modal from elsewhere) | No caller exists; the trigger is the only entry point |
-| Third text input, ActionsBar extensions | Features 4/5 |
+| Third text input, ActionsBar extensions | Feature 5 |
 | Undo/redo | No undo system in v0 |
 | New GLOSSARY.md terms | User decision (2026-10-15): the modal is UI mechanics, not domain language |
 

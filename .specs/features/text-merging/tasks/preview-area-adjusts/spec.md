@@ -19,7 +19,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Feature | Reason |
 | ------- | ------ |
 | "Start Over" / "Add Text" buttons | Feature 5; unrelated to the preview column |
-| Third text input | Feature 4 |
+| Third text input | Feature 5 |
 | New toolbar tools (drag-sort, split, line breaks, add-own-text) | Feature 3; this task only repositions existing tools — the composition contract is preserved so tools can be added without rework |
 | Empty-state content beyond the single sentence + hint styling (numbered steps, headline, dismiss control, persistence) | User decision: single sentence only; the Task 6.1 tutorial banner already teaches the full flow |
 | Desktop (`md`-and-up) layout changes | User decision: mobile is the target; desktop keeps today's layout exactly |

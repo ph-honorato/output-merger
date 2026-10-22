@@ -8,7 +8,7 @@
 
 ## Feature Boundary
 
-Three presentation adjustments to the MergeSession page's preview column (post-Feature 2 polish — no dedicated roadmap line item; refines the outputs of Task 4 PreviewArea and Task 6.4 toolbar decoupling): (1) below the MUI `md` breakpoint (900px) the `PreviewToolbar` renders **below** the `PreviewArea` as a full-width horizontal row of tool buttons, while from `md` up it keeps today's beside-the-card vertical layout; (2) the PreviewArea empty state is rewritten as a single-sentence tutorial hint ("Select some snippets on the inputs to start"), keeping its centered icon + sentence presentation, in en-US and pt-BR; (3) snippet chip text becomes left-aligned, scoped to the segment flow. Explicitly supersedes the ui-fixes agent-default assumption "Toolbar on mobile: stays beside the card on stacked layouts" (never user-confirmed). Not Start Over / Add Text (Feature 5), not the third input (Feature 4), not preview tools (Feature 3), not empty-state steps/dismiss/persistence, not desktop layout changes, not backend/routing changes.
+Three presentation adjustments to the MergeSession page's preview column (post-Feature 2 polish — no dedicated roadmap line item; refines the outputs of Task 4 PreviewArea and Task 6.4 toolbar decoupling): (1) below the MUI `md` breakpoint (900px) the `PreviewToolbar` renders **below** the `PreviewArea` as a full-width horizontal row of tool buttons, while from `md` up it keeps today's beside-the-card vertical layout; (2) the PreviewArea empty state is rewritten as a single-sentence tutorial hint ("Select some snippets on the inputs to start"), keeping its centered icon + sentence presentation, in en-US and pt-BR; (3) snippet chip text becomes left-aligned, scoped to the segment flow. Explicitly supersedes the ui-fixes agent-default assumption "Toolbar on mobile: stays beside the card on stacked layouts" (never user-confirmed). Not Start Over / Add Text (Feature 5), not the third input (Feature 5), not preview tools (Feature 3), not empty-state steps/dismiss/persistence, not desktop layout changes, not backend/routing changes.
 
 ---
 
@@ -73,5 +73,5 @@ Three presentation adjustments to the MergeSession page's preview column (post-F
 - Removing `text-align: center` from the page `Wrapper` globally — broader refactor; the left-alignment is scoped to the segment flow instead.
 - Animating the responsive flip (DESIGN.md motion rules) — later polish task.
 - "Start Over" / "Add Text" ActionsBar buttons — Feature 5.
-- Third source — Feature 4.
+- Third source — Feature 5.
 - Additional toolbar tools (drag-sort, split, line breaks, add-own-text) — Feature 3.

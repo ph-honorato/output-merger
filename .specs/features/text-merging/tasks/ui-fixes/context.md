@@ -8,7 +8,7 @@
 
 ## Feature Boundary
 
-UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Feature 2: an in-page dismissable tutorial banner (title + left-aligned numbered step list, localStorage-persisted dismissal, Help reopen button, en-US + pt-BR copy), guaranteed minimum heights for the source cards and preview area (400px), a stable ActionsBar height (min-height 74px) that survives the Start Merge → hidden transition, and a decoupled PreviewToolbar that sits beside the preview card (right side, top-aligned, copy button topmost) instead of floating over its content. Not Start Over / Add Text (Feature 5), not the third input (Feature 4), not preview editing tools (Feature 3), not an interactive tooltip tour, not backend persistence (V1).
+UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Feature 2: an in-page dismissable tutorial banner (title + left-aligned numbered step list, localStorage-persisted dismissal, Help reopen button, en-US + pt-BR copy), guaranteed minimum heights for the source cards and preview area (400px), a stable ActionsBar height (min-height 74px) that survives the Start Merge → hidden transition, and a decoupled PreviewToolbar that sits beside the preview card (right side, top-aligned, copy button topmost) instead of floating over its content. Not Start Over / Add Text (Feature 5), not the third input (Feature 5), not preview editing tools (Feature 3), not an interactive tooltip tour, not backend persistence (V1).
 
 ---
 
@@ -84,6 +84,6 @@ UI refinements for Feature 2 Task 6 (roadmap 6.1–6.4), the closing task of Fea
 - Interactive tooltip tour / mode-aware tutorial content — rejected for v0 (may be revisited post-V1 if users still get lost).
 - Backend persistence of tutorial dismissal — V1 (Merges CRUD).
 - "Start Over" / "Add Text" ActionsBar buttons — Feature 5 (the fixed bar height is built to host them).
-- Third source — Feature 4.
+- Third source — Feature 5.
 - Additional toolbar tools (drag-sort, split, line breaks, add-own-text) — Feature 3.
 - Entry animations for the banner per DESIGN.md motion rules — later polish task.

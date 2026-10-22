@@ -21,7 +21,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Reorder / move action on the context | Feature 2 Task 4 / Feature 3 (drag sort); `order` values are the contract |
 | Start Merge mode switching | Feature 2 Task 5 |
 | Adding/removing sources at runtime (Start Over, Add Text) | Feature 5; the context tolerates but does not manage source lifecycle |
-| Third text input | Feature 4 (scales by adding a third stable sourceId) |
+| Third text input | Feature 5 (scales by adding a third stable sourceId) |
 | Text ownership (`onTextChange` wiring) | Sources stay unwired for text; only snippets flow through the context |
 | Persistence of snippets | V1 (Merges CRUD) |
 | Renumbering `order` after deletions | Grilled: gaps are deliberate (ADR 0001) |

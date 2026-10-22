@@ -22,7 +22,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Drag-sort / snippet reordering | Feature 3 |
 | Splitting snippets, line breaks, add-own-text tools | Feature 3; their necessity will be re-discussed (typing may replace tools) |
 | Start Merge mode switching | Feature 2 Task 5 |
-| Third text input | Feature 4 |
+| Third text input | Feature 5 |
 | Persistence | V1 (Merges CRUD) |
 | Placement under `src/components/` (reusable) | User decision: preview pieces are page-owned, under `src/pages/MergeSession/components/` |
 

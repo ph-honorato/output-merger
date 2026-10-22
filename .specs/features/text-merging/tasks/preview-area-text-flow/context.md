@@ -83,4 +83,4 @@ Two related fixes to the MergeSession preview's segment flow (post-Feature 2 pol
 - Rendering the merged text as a single flat text node — would drop per-snippet tinting and Feature 3's natural per-snippet anchors; rejected.
 - Copy-from-preview affordances (`user-select` policies, select-all) — not requested; copying goes through the toolbar's copy tool.
 - Snippet reordering/splitting/line breaks/add-own-text — Feature 3.
-- "Start Over" / "Add Text" — Feature 5; third input — Feature 4.
+- "Start Over" / "Add Text", third input — Feature 5.

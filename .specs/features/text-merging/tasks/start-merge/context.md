@@ -23,7 +23,7 @@ Start Merge flow for Feature 2 Task 5 (roadmap 5.1–5.2) only: gating the page-
 
 - Enabled iff at least one source has non-empty text; whitespace-only text does not count (`trim().length > 0`).
 - Rationale (grilled): starting with zero content is a dead end in v0 (no way back until Feature 5's Start Over), while single-source merges are legitimate.
-- The page tracks source texts in a page-local `Record<sourceId, string>` fed by each TextInput's existing `onTextChange` callback — no context, no hook file. Feature 5 (Start Over reset) and Feature 4 (third input) will reuse this state.
+- The page tracks source texts in a page-local `Record<sourceId, string>` fed by each TextInput's existing `onTextChange` callback — no context, no hook file. Feature 5 (Start Over reset and third input) will reuse this state.
 
 ### Transition to Merge Mode
 
@@ -62,5 +62,5 @@ Start Merge flow for Feature 2 Task 5 (roadmap 5.1–5.2) only: gating the page-
 - Start Over button / reset flow — Feature 5.
 - Toggling back to input mode — Feature 5.
 - Entry animations per DESIGN.md — later polish task.
-- Third source — Feature 4.
+- Third source — Feature 5.
 - Persistence of Merge Mode across reloads — V1.

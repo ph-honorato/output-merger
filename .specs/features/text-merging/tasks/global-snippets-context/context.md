@@ -80,5 +80,5 @@ Global snippet state for Feature 2 Task 3 (roadmap 3.1–3.3) only: a React Cont
 - PreviewArea consumption and reorder/move action (Task 4).
 - Drag-sort editing of merge order (Feature 3 preview tools).
 - Source lifecycle management for Start Over / Add Text (Feature 5).
-- Third source (Feature 4) — scales by adding a stable sourceId.
+- Third source (Feature 5) — scales by adding a stable sourceId.
 - Persistence of snippets and merge sessions (V1).

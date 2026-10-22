@@ -8,7 +8,7 @@
 
 ## Feature Boundary
 
-Reusable `TextInput` for Feature 2 Task 1 (roadmap 1.1–1.8) only: parent-owned `mode` (`input` | `view`), 500-character textarea, view-mode needle selection, snippet model `{ id, text, startIndex, endIndex, color }`, `onChange` of the full snippet array, default highlight `#FF1493` with prop override, mouse and touch. Not MergeSession layout, PreviewArea, global context, Start Merge page wiring, or Feature 4 preview tools.
+Reusable `TextInput` for Feature 2 Task 1 (roadmap 1.1–1.8) only: parent-owned `mode` (`input` | `view`), 500-character textarea, view-mode needle selection, snippet model `{ id, text, startIndex, endIndex, color }`, `onChange` of the full snippet array, default highlight `#FF1493` with prop override, mouse and touch. Not MergeSession layout, PreviewArea, global context, Start Merge page wiring, or Feature 3 preview tools.
 
 ---
 
@@ -95,6 +95,6 @@ Reusable `TextInput` for Feature 2 Task 1 (roadmap 1.1–1.8) only: parent-owned
 ## Deferred Ideas
 
 - ActionsBar, two-column TextInputs, PreviewArea, global snippet order, Start Merge (Feature 2 Tasks 2–5).
-- Split from interior stops, overlap merge, preview drag-sort, typed preview text (Feature 4).
+- Split from interior stops, overlap merge, preview drag-sort, typed preview text (Feature 3).
 - Click-commit one-word snippets (rejected).
 - Slot-drag with every boundary tick visible at once (rejected after Q14).

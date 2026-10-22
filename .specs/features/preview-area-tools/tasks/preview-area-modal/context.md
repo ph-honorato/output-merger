@@ -101,5 +101,5 @@ A bigger view of the same preview for Feature 3 Task 2 (roadmap 2.1–2.5) only:
 - A `keepMounted`/always-mounted dialog variant — rejected during grilling (duplicates would exist always, not just while open).
 - Reusing `<PreviewToolbar>` as the modal rail — rejected (duplicate `preview-toolbar` testid + card-in-card chrome); revisit only if the rail needs toolbar-grade styling.
 - Programmatic open API / deep-linking to an open modal — no caller exists in v0.
-- Third text input (Feature 4), ActionsBar extensions (Feature 5).
+- Third text input, ActionsBar extensions (Feature 5).
 - Persistence of merge sessions (including any modal state) — V1 (Merges CRUD).
