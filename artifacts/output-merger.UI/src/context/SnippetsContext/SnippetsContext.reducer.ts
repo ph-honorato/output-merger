@@ -1,4 +1,6 @@
+import { i18n } from '@translation';
 import {
+  applyCaseFix,
   buildSnippetTokenId,
   isSeparatorToken,
   isSnippetToken,
@@ -6,6 +8,7 @@ import {
   normalizeTextTokens,
   serialize,
   tokensEqual,
+  tokensEqualCanonicalCase,
 } from '../../utils/previewDocument';
 import type {
   Landing,
@@ -18,12 +21,15 @@ import type {
 
 /**
  * The initial session state: an empty document, no tombstones,
- * editing off.
+ * editing off. The case-fix language seeds from the ambient UI
+ * language once, here at store creation; afterwards the language
+ * rides in state and every transition derives from the field.
  */
 export const initialSnippetsState: SnippetsState = {
   tokens: [],
   tombstones: [],
   editEnabled: false,
+  caseFixLanguage: i18n.language,
 };
 
 const sameStringSets = (a: string[], b: string[]): boolean =>
@@ -123,8 +129,14 @@ function reconcileSourceSnippets(
     (key) => !key.startsWith(prefix) || incomingIds.has(key.slice(prefix.length)),
   );
 
+  // No-op guard, case-aware: the would-be tokens are compared to the
+  // stored ones in their case-fix-canonical forms, so a re-emission
+  // whose snippet texts differ from the stored ones only in
+  // pass-correctable case is "no change" and keeps the
+  // reference-identical state (no re-render, no focused-surface
+  // remount). A genuine text difference still transitions.
   if (
-    tokensEqual(tokens, state.tokens) &&
+    tokensEqualCanonicalCase(tokens, state.tokens, state.caseFixLanguage) &&
     sameStringSets(tombstones, state.tombstones)
   ) {
     return state;
@@ -532,6 +544,11 @@ const snippetsReducerTransition = (
         ? state
         : { ...state, editEnabled: action.editEnabled };
     }
+    case 'SET_CASE_FIX_LANGUAGE': {
+      return action.language === state.caseFixLanguage
+        ? state
+        : { ...state, caseFixLanguage: action.language };
+    }
     default:
       return state;
   }
@@ -542,13 +559,37 @@ export const snippetsReducer = (
   action: SnippetsAction,
 ): SnippetsState => {
   const next = snippetsReducerTransition(state, action);
-  if (next === state) {
-    return state;
-  }
   // Eager normalization — the model's shape is canonical (one own-text token per contiguous
   // run), so the model and every parse agree and no behavior can
   // depend on merge history. Serialization never changes; the
   // reference-identity guard keeps no-op transitions churn-free.
-  const tokens = normalizeTextTokens(next.tokens);
-  return tokens === next.tokens ? next : { ...next, tokens };
+  let base = next;
+  if (next !== state) {
+    const tokens = normalizeTextTokens(next.tokens);
+    if (tokens !== next.tokens) {
+      base = { ...next, tokens };
+    }
+  }
+  // SYNC_DOCUMENT is the mid-typing sync: the focused surface owns
+  // its DOM, so the case pass never runs there (a correction between
+  // keystrokes would fight the editor) — the copy path closes the
+  // stale window.
+  if (action.type === 'SYNC_DOCUMENT') {
+    return next === state ? state : base;
+  }
+  // Whole-document case recompute on every other transition —
+  // creation, both moves, the edit toggle, the language update, and
+  // no-op transitions included: a state that enters this transition
+  // with stale casing (left by a SYNC) is corrected by the next
+  // trigger, whatever it is. The pass runs after the transition's
+  // text rewrite and the eager normalization, so it only sees
+  // canonical shapes, and derives under the state's own language
+  // field — so the SET_CASE_FIX_LANGUAGE transition (the provider's
+  // languageChanged dispatch) re-derives the whole document under
+  // the new language through this same path.
+  const tokens = applyCaseFix(base.tokens, base.caseFixLanguage);
+  if (tokens === base.tokens) {
+    return next === state ? state : base;
+  }
+  return { ...base, tokens };
 };

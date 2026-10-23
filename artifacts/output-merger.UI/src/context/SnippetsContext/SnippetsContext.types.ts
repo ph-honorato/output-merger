@@ -111,6 +111,13 @@ export interface SnippetsState {
    * both preview surfaces; dragging is always live in both modes
    */
   editEnabled: boolean;
+  /**
+   * The UI language tag the case-fix pass derives casing under.
+   * Every transition reads this field (never the i18n singleton);
+   * the provider updates it when i18n reports a language change,
+   * so a runtime switch re-derives the document through the reducer.
+   */
+  caseFixLanguage: string;
 }
 
 export interface SetSourceSnippetsAction {
@@ -160,12 +167,22 @@ export interface SetEditEnabledAction {
   editEnabled: boolean;
 }
 
+export interface SetCaseFixLanguageAction {
+  type: 'SET_CASE_FIX_LANGUAGE';
+  /**
+   * The new active UI language tag (any i18n tag form — the rule
+   * table resolves the primary subtag)
+   */
+  language: string;
+}
+
 export type SnippetsAction =
   | SetSourceSnippetsAction
   | MoveTokenAction
   | MoveTokenToLandingAction
   | SyncDocumentAction
-  | SetEditEnabledAction;
+  | SetEditEnabledAction
+  | SetCaseFixLanguageAction;
 
 export interface SnippetsContextValue {
   /**
@@ -176,6 +193,13 @@ export interface SnippetsContextValue {
    * Whether text editing is enabled (shared by both toggle buttons)
    */
   editEnabled: boolean;
+  /**
+   * The UI language tag the case-fix pass derives casing under —
+   * the document transitions and the copy path read the same
+   * field, so display and clipboard always derive under one
+   * rule set
+   */
+  caseFixLanguage: string;
   /**
    * Replaces the snippets recorded for one source (diff-by-id
    * reconciliation over the snippet tokens in the document)

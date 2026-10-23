@@ -152,9 +152,13 @@ interface SegmentRect {
 }
 
 const SEGMENT_RECTS: Record<string, SegmentRect> = {
+  // The case-fix pass lowercases mid-sentence chips, so both casings
+  // of the seeded names must resolve to their geometry.
   Alpha: { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
   Beta: { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
   Gamma: { left: 240, top: 0, right: 340, bottom: 24, width: 100, height: 24, x: 240, y: 0 },
+  beta: { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
+  gamma: { left: 240, top: 0, right: 340, bottom: 24, width: 100, height: 24, x: 240, y: 0 },
 };
 
 const ZERO_RECT: SegmentRect = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
@@ -300,7 +304,7 @@ describe("PreviewArea", () => {
     expect(segments).toHaveLength(3);
     expect(segments.map((segment) => segment.textContent)).toEqual([
       "Hello",
-      "Alpha",
+      "alpha",
       "world",
     ]);
   });
@@ -463,7 +467,7 @@ describe("PreviewArea sorting affordances", () => {
     ]);
     expect(segments.map((segment) => segment.textContent)).toEqual([
       "Hello",
-      "Alpha",
+      "alpha",
     ]);
   });
 
@@ -565,11 +569,11 @@ describe("PreviewArea keyboard sorting", () => {
     const segments = screen.getAllByTestId("preview-snippet");
     expect(segments.map((segment) => segment.textContent)).toEqual([
       "Beta",
-      "Alpha",
-      "Gamma",
+      "alpha",
+      "gamma",
     ]);
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      "Beta Alpha Gamma",
+      "Beta alpha gamma",
     );
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
       screen.getByTestId("document-probe").textContent,
@@ -588,8 +592,8 @@ describe("PreviewArea keyboard sorting", () => {
 
     expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
       "Alpha",
-      "Beta",
-      "Gamma",
+      "beta",
+      "gamma",
     ]);
     expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
   });
@@ -726,9 +730,9 @@ describe("PreviewArea pointer sorting", () => {
     );
     expect(
       screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-    ).toEqual(["Beta", "Alpha", "Gamma"]);
+    ).toEqual(["Beta", "alpha", "gamma"]);
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      "Beta Alpha Gamma",
+      "Beta alpha gamma",
     );
   });
 
@@ -747,7 +751,7 @@ describe("PreviewArea pointer sorting", () => {
 
     expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      "Alpha Beta Gamma",
+      "Alpha beta gamma",
     );
   });
 
@@ -764,7 +768,7 @@ describe("PreviewArea pointer sorting", () => {
 
     expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      "Alpha Beta Gamma",
+      "Alpha beta gamma",
     );
   });
 
@@ -780,7 +784,7 @@ describe("PreviewArea pointer sorting", () => {
     await act(async () => {});
 
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      "Alpha Beta Gamma",
+      "Alpha beta gamma",
     );
     expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
   });
@@ -800,7 +804,7 @@ describe("PreviewArea pointer sorting", () => {
 
     expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      "Alpha Beta Gamma",
+      "Alpha beta gamma",
     );
   });
 
@@ -1007,7 +1011,7 @@ describe("PreviewArea drop indicator", () => {
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Alpha", "Beta", "Gamma"]);
+      ).toEqual(["Alpha", "beta", "gamma"]);
     });
 
     it("renders the identical needle slot for the same (active, over) pair from keyboard and pointer", async () => {
@@ -1080,7 +1084,10 @@ describe("PreviewArea drop indicator", () => {
       vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
         function (this: Element) {
           const text = (this as HTMLElement).textContent ?? "";
-          if (text === long) {
+          // The case-fix pass lowercases the mid-sentence chip, so the
+          // rect lookup matches either casing.
+          const folded = text.toLocaleLowerCase("en-US");
+          if (folded === long.toLocaleLowerCase("en-US")) {
             return {
               ...ZERO_RECT,
               left: 0,
@@ -1093,7 +1100,7 @@ describe("PreviewArea drop indicator", () => {
               y: 0,
             } as DOMRect;
           }
-          if (text === second) {
+          if (folded === second.toLocaleLowerCase("en-US")) {
             return {
               ...ZERO_RECT,
               left: 120,
@@ -1137,7 +1144,8 @@ describe("PreviewArea drop indicator", () => {
       ).toBeTruthy();
       // No text: the merged-text parity holds while the needle renders.
       expect(needle.textContent).toBe("");
-      expect(flow.textContent).toBe(`${long} ${second}`);
+      // The second chip renders lowercase-first (mid-sentence).
+      expect(flow.textContent).toBe(`${long} l${second.slice(1)}`);
       expect(flow.textContent).toBe(
         screen.getByTestId("document-probe").textContent,
       );
@@ -1322,7 +1330,7 @@ describe("PreviewArea drop indicator", () => {
       // The drop landed exactly at the slot the needle marked (slot 2).
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Beta", "Alpha", "Gamma"]);
+      ).toEqual(["Beta", "alpha", "gamma"]);
     });
 
     it("removes the needle together with the overlay chip when Escape cancels the drag", async () => {
@@ -1348,7 +1356,7 @@ describe("PreviewArea drop indicator", () => {
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
       expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
       expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-        "Alpha Beta Gamma",
+        "Alpha beta gamma",
       );
     });
 
@@ -1384,7 +1392,7 @@ describe("PreviewArea drop indicator", () => {
       // moveSnippet(2, 1): Gamma lands exactly at the slot marked.
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Alpha", "Gamma", "Beta"]);
+      ).toEqual(["Alpha", "gamma", "beta"]);
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
     });
 
@@ -1411,7 +1419,7 @@ describe("PreviewArea drop indicator", () => {
       // The needle renders no text: the merged-text parity holds mid-drag.
       expect(needle.textContent).toBe("");
       expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-        "Alpha Beta Gamma",
+        "Alpha beta gamma",
       );
 
       fireEvent.pointerUp(document, { pointerId: 1 });
@@ -1420,7 +1428,7 @@ describe("PreviewArea drop indicator", () => {
       // moveSnippet(0, 2): Alpha lands at the trailing slot it marked.
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Beta", "Gamma", "Alpha"]);
+      ).toEqual(["Beta", "gamma", "alpha"]);
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
     });
 
@@ -1458,7 +1466,7 @@ describe("PreviewArea drop indicator", () => {
       // the slot the needle marked.
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Alpha", "Gamma", "Beta"]);
+      ).toEqual(["Alpha", "gamma", "beta"]);
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
     });
 
@@ -1490,7 +1498,7 @@ describe("PreviewArea drop indicator", () => {
       // the leading slot marked.
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Beta", "Alpha", "Gamma"]);
+      ).toEqual(["Beta", "alpha", "gamma"]);
     });
 
     it("marks the trailing gap after the last snippet and announces the landing", async () => {
@@ -1523,7 +1531,7 @@ describe("PreviewArea drop indicator", () => {
       // position with the existing ended key — no new strings.
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Beta", "Gamma", "Alpha"]);
+      ).toEqual(["Beta", "gamma", "alpha"]);
       expect(screen.getByRole("status")).toHaveTextContent(
         "Snippet dropped at position 3 of 3.",
       );
@@ -1559,7 +1567,7 @@ describe("PreviewArea drop indicator", () => {
       // the reducer's no-op guard keeps the order.
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Alpha", "Beta", "Gamma"]);
+      ).toEqual(["Alpha", "beta", "gamma"]);
     });
   });
 
@@ -2263,7 +2271,7 @@ describe("PreviewArea editing workflows", () => {
     // and its separator, the snippet token is unchanged…
     expect(chip.textContent).toBe("Alpha");
     expect((chip.nextSibling as Text).data).toBe("\n");
-    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha\n Beta");
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alpha\n beta");
     // …and the separator means the newline does not end the block: no
     // bogus anchor.
     expect(flow.querySelectorAll("br")).toHaveLength(0);
@@ -2275,7 +2283,7 @@ describe("PreviewArea editing workflows", () => {
     fireEvent.input(flow);
     expect(chip.textContent).toBe("Alpha");
     expect(screen.getByTestId("document-probe").textContent).toBe(
-      "Alpha\nown Beta",
+      "Alpha\nown beta",
     );
   });
 
@@ -2615,7 +2623,7 @@ describe("PreviewArea editing workflows", () => {
       // the run (subsequent typing integrates natively, Q3).
       expect(chipAlpha.textContent).toBe("Alphatext");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alphatext Beta",
+        "Alphatext beta",
       );
       expect(screen.getByTestId("edited-probe").textContent).toBe("true");
       const range = window.getSelection()?.getRangeAt(0);
@@ -2627,7 +2635,7 @@ describe("PreviewArea editing workflows", () => {
       typeRealistic(flow, chipText, chipText.data.length, "Z");
       expect(chipAlpha.textContent).toBe("AlphatextZ");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "AlphatextZ Beta",
+        "AlphatextZ beta",
       );
     });
 
@@ -2643,11 +2651,11 @@ describe("PreviewArea editing workflows", () => {
       const chipText = chipBeta.firstChild as Text;
       typeRealistic(flow, separatorNodeOf(flow), 1, "text");
 
-      expect(chipBeta.textContent).toBe("textBeta");
+      expect(chipBeta.textContent).toBe("textbeta");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha textBeta",
+        "Alpha textbeta",
       );
-      expect(flow.textContent).toBe("Alpha textBeta");
+      expect(flow.textContent).toBe("Alpha textbeta");
       const range = window.getSelection()?.getRangeAt(0);
       expect(range?.startContainer).toBe(chipText);
       expect(range?.startOffset).toBe("text".length);
@@ -2666,7 +2674,7 @@ describe("PreviewArea editing workflows", () => {
 
       expect(chipAlpha.textContent).toBe("Alphaabc");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alphaabc Beta",
+        "Alphaabc beta",
       );
     });
 
@@ -2683,7 +2691,7 @@ describe("PreviewArea editing workflows", () => {
       separator.remove();
       fireEvent.input(flow);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "AlphaBeta",
+        "Alphabeta",
       );
 
       // Type at the boundary right after the first chip (realistic
@@ -2697,7 +2705,7 @@ describe("PreviewArea editing workflows", () => {
       // Symmetric ambiguity: spaces both sides, the run stays own
       // text, the caret stays inside it.
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha X Beta",
+        "Alpha X beta",
       );
       const range = window.getSelection()?.getRangeAt(0);
       expect(range?.startContainer).toBe(typed);
@@ -2748,7 +2756,7 @@ describe("PreviewArea editing workflows", () => {
       separator.data = "hello";
       fireEvent.input(flow);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "AlphahelloBeta",
+        "Alphahellobeta",
       );
 
       const chipAlpha = screen.getAllByTestId("preview-snippet")[0];
@@ -2758,7 +2766,7 @@ describe("PreviewArea editing workflows", () => {
       // the grown chip.
       expect(chipAlpha.textContent).toBe("AlphaX");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "AlphaX helloBeta",
+        "AlphaX hellobeta",
       );
       expect(screen.getByTestId("edited-probe").textContent).toBe("true");
     });
@@ -2829,7 +2837,7 @@ describe("PreviewArea editing workflows", () => {
       separator.data = "\n\n";
       fireEvent.input(flow);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha\n\nBeta",
+        "Alpha\n\nbeta",
       );
 
       // Between the two newlines: free territory — typing is own text.
@@ -2838,20 +2846,20 @@ describe("PreviewArea editing workflows", () => {
         "Alpha",
       );
       expect(screen.getAllByTestId("preview-snippet")[1].textContent).toBe(
-        "Beta",
+        "beta",
       );
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha\nX\nBeta",
+        "Alpha\nX\nbeta",
       );
 
       // Right before the chip (after the second newline): chip
       // territory — the run redirects into the chip's start.
       typeRealistic(flow, separator, separator.data.length, "Y");
       expect(screen.getAllByTestId("preview-snippet")[1].textContent).toBe(
-        "YBeta",
+        "Ybeta",
       );
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha\nX\nYBeta",
+        "Alpha\nX\nYbeta",
       );
     });
 
@@ -2870,7 +2878,7 @@ describe("PreviewArea editing workflows", () => {
         "Alpha",
       );
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "AlphaX Beta",
+        "AlphaX beta",
       );
     });
 
@@ -2909,9 +2917,9 @@ describe("PreviewArea editing workflows", () => {
 
       // No spaces planted — the gap just grows.
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha  Beta",
+        "Alpha  beta",
       );
-      expect(flow.textContent).toBe("Alpha  Beta");
+      expect(flow.textContent).toBe("Alpha  beta");
     });
 
     it("keeps the caret stable on continued seam typing (the planted spaces block re-firing)", () => {
@@ -2960,9 +2968,9 @@ describe("PreviewArea editing workflows", () => {
       // re-firing (no double spacing).
       typeRealistic(flow, typed, 1, "Y");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha XY Beta",
+        "Alpha XY beta",
       );
-      expect(flow.textContent).toBe("Alpha XY Beta");
+      expect(flow.textContent).toBe("Alpha XY beta");
     });
 
     // -----------------------------------------------------------------
@@ -3012,9 +3020,9 @@ describe("PreviewArea editing workflows", () => {
       realisticInput(flow, { inputType: "insertText", data: " " });
 
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha  Beta",
+        "Alpha  beta",
       );
-      expect(flow.textContent).toBe("Alpha  Beta");
+      expect(flow.textContent).toBe("Alpha  beta");
     });
 
     it("redirects a realistic non-whitespace insertText typed at a glued run's chip edge (and syncs)", () => {
@@ -3030,7 +3038,7 @@ describe("PreviewArea editing workflows", () => {
       separator.data = "text";
       fireEvent.input(flow);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "AlphatextBeta",
+        "Alphatextbeta",
       );
 
       // The browser types "X" at the run's end — the position directly
@@ -3043,11 +3051,11 @@ describe("PreviewArea editing workflows", () => {
       // the own text from the grown chip.
       expect(
         screen.getAllByTestId("preview-snippet")[1].textContent,
-      ).toBe("XBeta");
+      ).toBe("Xbeta");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alphatext XBeta",
+        "Alphatext Xbeta",
       );
-      expect(flow.textContent).toBe("Alphatext XBeta");
+      expect(flow.textContent).toBe("Alphatext Xbeta");
     });
 
     it("control: a bare input event (jsdom-typical, no inputType) still syncs", () => {
@@ -3087,9 +3095,9 @@ describe("PreviewArea editing workflows", () => {
       dispatchSelectionChange();
 
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta",
+        "Alpha beta",
       );
-      expect(flow.textContent).toBe("Alpha Beta");
+      expect(flow.textContent).toBe("Alpha beta");
     });
 
     it("keeps the scaffold's two spaces while the caret stays, collapses them to one on exit (scaffold interplay)", () => {
@@ -3108,7 +3116,7 @@ describe("PreviewArea editing workflows", () => {
       expect(keydown.defaultPrevented).toBe(true);
       expect(separator.data).toBe("  ");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha  Beta",
+        "Alpha  beta",
       );
       const range = window.getSelection()?.getRangeAt(0);
       expect(range?.startContainer).toBe(separator);
@@ -3118,7 +3126,7 @@ describe("PreviewArea editing workflows", () => {
       // the two spaces remain.
       dispatchSelectionChange();
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha  Beta",
+        "Alpha  beta",
       );
 
       // Leave the place by moving the caret: the scaffold collapses
@@ -3129,9 +3137,9 @@ describe("PreviewArea editing workflows", () => {
       dispatchSelectionChange();
 
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta",
+        "Alpha beta",
       );
-      expect(flow.textContent).toBe("Alpha Beta");
+      expect(flow.textContent).toBe("Alpha beta");
     });
 
     it("collapses deliberately typed extra spaces on caret exit (shape-based, not provenance-based)", () => {
@@ -3145,13 +3153,13 @@ describe("PreviewArea editing workflows", () => {
       const separator = separatorNodeOf(flow);
       typeIntoNode(flow, separator, 0, "  ");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha   Beta",
+        "Alpha   beta",
       );
 
       // The caret still inside: no collapse.
       dispatchSelectionChange();
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha   Beta",
+        "Alpha   beta",
       );
 
       // Leave: collapse to one.
@@ -3161,7 +3169,7 @@ describe("PreviewArea editing workflows", () => {
       dispatchSelectionChange();
 
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta",
+        "Alpha beta",
       );
     });
 
@@ -3184,9 +3192,9 @@ describe("PreviewArea editing workflows", () => {
       });
 
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta",
+        "Alpha beta",
       );
-      expect(flow.textContent).toBe("Alpha Beta");
+      expect(flow.textContent).toBe("Alpha beta");
     });
 
     it("never collapses a run containing a newline", () => {
@@ -3201,7 +3209,7 @@ describe("PreviewArea editing workflows", () => {
       separator.data = " \n ";
       fireEvent.input(flow);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha \n Beta",
+        "Alpha \n beta",
       );
 
       // "Leave" the caret from inside the run: nothing collapses —
@@ -3214,7 +3222,7 @@ describe("PreviewArea editing workflows", () => {
       dispatchSelectionChange();
 
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha \n Beta",
+        "Alpha \n beta",
       );
     });
 
@@ -3269,7 +3277,7 @@ describe("PreviewArea editing workflows", () => {
       dispatchSelectionChange();
 
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha   Beta",
+        "Alpha   beta",
       );
     });
 
@@ -3312,7 +3320,7 @@ describe("PreviewArea editing workflows", () => {
       separator.data = "   ";
       setCaretInNode(separator, 1);
       fireEvent.input(flowAt(0));
-      expect(flowAt(1).textContent).toBe("Alpha   Beta");
+      expect(flowAt(1).textContent).toBe("Alpha   beta");
 
       // The caret-position signal seeds the tracker with the
       // three-space gap; the twin shows it live.
@@ -3325,9 +3333,9 @@ describe("PreviewArea editing workflows", () => {
       setCaretInNode(chipText, 1);
       dispatchSelectionChange();
 
-      expect(flowAt(1).textContent).toBe("Alpha Beta");
+      expect(flowAt(1).textContent).toBe("Alpha beta");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta",
+        "Alpha beta",
       );
     });
   });
@@ -3352,7 +3360,7 @@ describe("PreviewArea editing workflows", () => {
         expect(range?.startContainer).toBe(separator);
         expect(range?.startOffset).toBe(1);
         expect(screen.getByTestId("document-probe").textContent).toBe(
-          "Alpha  Beta",
+          "Alpha  beta",
         );
         unmount();
       }
@@ -3371,7 +3379,7 @@ describe("PreviewArea editing workflows", () => {
         const separator = separatorNodeOf(flow);
         expect(separator.data).toBe("  ");
         expect(screen.getByTestId("document-probe").textContent).toBe(
-          "Alpha  Beta",
+          "Alpha  beta",
         );
         unmount();
       }
@@ -3415,9 +3423,9 @@ describe("PreviewArea editing workflows", () => {
       ).toBe("Alpha");
       expect(
         screen.getAllByTestId("preview-snippet")[1].textContent,
-      ).toBe("Beta");
+      ).toBe("beta");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha mid Beta",
+        "Alpha mid beta",
       );
 
       // Typed content disarms rule 2: leaving keeps the text.
@@ -3426,7 +3434,7 @@ describe("PreviewArea editing workflows", () => {
       setCaretInNode(chipText, 1);
       dispatchSelectionChange();
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha mid Beta",
+        "Alpha mid beta",
       );
     });
 
@@ -3451,7 +3459,7 @@ describe("PreviewArea editing workflows", () => {
       expect(range?.startOffset).toBe("Alpha".length);
       expect(separator.data).toBe(" ");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta",
+        "Alpha beta",
       );
 
       // Scaffold again from the right edge and hop right: into
@@ -3466,7 +3474,7 @@ describe("PreviewArea editing workflows", () => {
       expect(range?.startOffset).toBe(0);
       expect(separator.data).toBe(" ");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta",
+        "Alpha beta",
       );
     });
 
@@ -3682,7 +3690,7 @@ describe("PreviewArea editing workflows", () => {
       expect(keydown.defaultPrevented).toBe(false);
       expect(separatorNodeOf(flow).data).toBe(" ");
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta",
+        "Alpha beta",
       );
     });
   });
@@ -3769,7 +3777,7 @@ describe("PreviewArea editing workflows", () => {
       const typed = hostKey(flow, "x", "KeyX");
       expect(typed.defaultPrevented).toBe(true);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta Gamma",
+        "Alpha beta gamma",
       );
 
       // Escape cancels: the snippet returns, order unchanged.
@@ -3779,8 +3787,8 @@ describe("PreviewArea editing workflows", () => {
       expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
       expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
         "Alpha",
-        "Beta",
-        "Gamma",
+        "beta",
+        "gamma",
       ]);
     });
 
@@ -3817,11 +3825,11 @@ describe("PreviewArea editing workflows", () => {
       // The drop committed through the moveToken path.
       expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
         "Beta",
-        "Alpha",
-        "Gamma",
+        "alpha",
+        "gamma",
       ]);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Beta Alpha Gamma",
+        "Beta alpha gamma",
       );
       expect(screen.getByRole("status")).toHaveTextContent(
         "Snippet dropped at position 2 of 3.",
@@ -3834,7 +3842,7 @@ describe("PreviewArea editing workflows", () => {
       );
       const sortedAlpha = screen
         .getAllByTestId("preview-snippet")
-        .find((chip) => chip.textContent === "Alpha") as HTMLElement;
+        .find((chip) => chip.textContent === "alpha") as HTMLElement;
       const range = window.getSelection()?.getRangeAt(0);
       expect(range?.startContainer).toBe(sortedAlpha.firstChild as Text);
       expect(range?.startOffset).toBe(2);
@@ -3862,11 +3870,11 @@ describe("PreviewArea editing workflows", () => {
       // Cancelled: NO moveToken — the order never changed.
       expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
         "Alpha",
-        "Beta",
-        "Gamma",
+        "beta",
+        "gamma",
       ]);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta Gamma",
+        "Alpha beta gamma",
       );
       expect(screen.getByRole("status")).toHaveTextContent(
         "Snippet reorder cancelled.",
@@ -3894,7 +3902,7 @@ describe("PreviewArea editing workflows", () => {
       expect(keydown.defaultPrevented).toBe(true);
       expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta Gamma",
+        "Alpha beta gamma",
       );
     });
 
@@ -3953,11 +3961,11 @@ describe("PreviewArea editing workflows", () => {
 
       expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
         "Beta",
-        "Alpha",
-        "Gamma",
+        "alpha",
+        "gamma",
       ]);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Beta Alpha Gamma",
+        "Beta alpha gamma",
       );
     });
 
@@ -3983,9 +3991,9 @@ describe("PreviewArea editing workflows", () => {
       // The raised guard no-ops the paste: nothing inserted, the
       // model untouched, and the sort is still raised.
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta Gamma",
+        "Alpha beta gamma",
       );
-      expect(flow.textContent).toBe("Alpha Beta Gamma");
+      expect(flow.textContent).toBe("Alpha beta gamma");
       expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
     });
 
@@ -4023,15 +4031,15 @@ describe("PreviewArea editing workflows", () => {
 
       expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
         "Beta",
-        "Alpha",
-        "Gamma",
+        "alpha",
+        "gamma",
       ]);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Beta Alpha Gamma",
+        "Beta alpha gamma",
       );
       // The read-only flow renders the committed order.
       expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-        "Beta Alpha Gamma",
+        "Beta alpha gamma",
       );
     });
   });
@@ -4046,7 +4054,7 @@ describe("PreviewArea editing workflows", () => {
 
     expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
     expect(screen.getByTestId("document-probe").textContent).toBe(
-      "Alpha Beta Gamma",
+      "Alpha beta gamma",
     );
     await pressKey(document, "Escape");
   });
@@ -4312,14 +4320,14 @@ describe("PreviewArea editing workflows", () => {
 
       expect(
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
-      ).toEqual(["Beta", "Alpha", "Gamma"]);
+      ).toEqual(["Beta", "alpha", "gamma"]);
       // The epoch remount replaces the flow root (a clean re-render
       // from the model): re-query the live node.
       expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
         screen.getByTestId("document-probe").textContent,
       );
       expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-        "Beta Alpha Gamma",
+        "Beta alpha gamma",
       );
     } finally {
       restoreRects.mockRestore();
@@ -4362,7 +4370,9 @@ describe("PreviewArea word-boundary landings", () => {
   });
   const wordsLayout = () =>
     installSegmentRects({
-      chips: { Beta: betaRect(220) },
+      // The case-fix pass lowercases the mid-sentence chip: both
+      // casings resolve to the same pushed-right rect.
+      chips: { Beta: betaRect(220), beta: betaRect(220) },
       landings: {
         "preview-landing:s:1:0": 104,
         "preview-landing:s:1:5": 150,
@@ -4436,7 +4446,7 @@ describe("PreviewArea word-boundary landings", () => {
         expect(anchor.textContent).toBe("");
       },
     );
-    expect(flow.textContent).toBe("Alpha text entered_by_user Beta");
+    expect(flow.textContent).toBe("Alpha text entered_by_user beta");
     // WYSIWYG: the flow text is exactly the serialized document.
     expect(flow.textContent).toBe(
       screen.getByTestId("document-probe").textContent,
@@ -4499,10 +4509,10 @@ describe("PreviewArea word-boundary landings", () => {
       // space — no separator was carried — the left; the documented
       // multiset exception). Alpha lands between the words.
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        " text Alpha entered_by_user Beta",
+        " text alpha entered_by_user beta",
       );
       expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-        " text Alpha entered_by_user Beta",
+        " text alpha entered_by_user beta",
       );
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
     });
@@ -4515,7 +4525,7 @@ describe("PreviewArea word-boundary landings", () => {
       expect(needleLandingOf()).toBe("preview-landing:s:1:22");
       fireEvent.pointerUp(document, { pointerId: 1, clientX: 204, clientY: 10 });
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        " text entered_by_user Alpha Beta",
+        " text entered_by_user alpha beta",
       );
 
       // Reset: drain dnd-kit's delayed click-suppression removal
@@ -4528,13 +4538,13 @@ describe("PreviewArea word-boundary landings", () => {
       cleanup();
       seedWordsDoc();
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha text entered_by_user Beta",
+        "Alpha text entered_by_user beta",
       );
       await dragAlphaTo(324);
       expect(needleLandingOf()).toBe("preview-landing:g:3");
       fireEvent.pointerUp(document, { pointerId: 1, clientX: 324, clientY: 10 });
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        " text entered_by_user BetaAlpha",
+        " text entered_by_user betaAlpha",
       );
     });
 
@@ -4599,7 +4609,7 @@ describe("PreviewArea word-boundary landings", () => {
     it("steps the raised chip word-by-word through the own text and Enter drops it between the words", async () => {
       const flow = seedWordsDoc({ editOff: false });
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha text entered_by_user Beta",
+        "Alpha text entered_by_user beta",
       );
 
       // The focused surface is FROZEN with the seeded snapshot's
@@ -4667,7 +4677,7 @@ describe("PreviewArea word-boundary landings", () => {
       });
 
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        " text Alpha entered_by_user Beta",
+        " text alpha entered_by_user beta",
       );
       expect(screen.getByRole("status")).toHaveTextContent(
         "Snippet dropped at position 1 of 2.",
@@ -4680,7 +4690,7 @@ describe("PreviewArea word-boundary landings", () => {
       );
       const sortedAlpha = screen
         .getAllByTestId("preview-snippet")
-        .find((chip) => chip.textContent === "Alpha") as HTMLElement;
+        .find((chip) => chip.textContent === "alpha") as HTMLElement;
       const range = window.getSelection()?.getRangeAt(0);
       expect(range?.startContainer).toBe(sortedAlpha.firstChild as Text);
       expect(range?.startOffset).toBe(2);
@@ -4774,18 +4784,18 @@ describe("edit-toggle caret auto-positioning", () => {
     // End-to-end: the first keystroke appends right there.
     typeAtCaret(flow, beta.firstChild as Text, 4, "!");
     expect(screen.getByTestId("document-probe").textContent).toBe(
-      "Alpha Beta!",
+      "Alpha beta!",
     );
-    expect(flow.textContent).toBe("Alpha Beta!");
+    expect(flow.textContent).toBe("Alpha beta!");
   });
 
   it("places the caret at the end of a document that ends with own text", () => {
     renderWithProviders(seedTwoChips());
     enableEditing();
     appendFlowText(screen.getByTestId("preview-segment-flow"), " tail");
-    enableEditing(); // OFF — commits "Alpha Beta tail"
+    enableEditing(); // OFF — commits "Alpha beta tail"
     expect(screen.getByTestId("document-probe").textContent).toBe(
-      "Alpha Beta tail",
+      "Alpha beta tail",
     );
 
     enableEditing(); // ON again
@@ -4801,7 +4811,7 @@ describe("edit-toggle caret auto-positioning", () => {
 
     typeAtCaret(flow, tail, 5, "X");
     expect(screen.getByTestId("document-probe").textContent).toBe(
-      "Alpha Beta tailX",
+      "Alpha beta tailX",
     );
   });
 
@@ -4852,7 +4862,7 @@ describe("edit-toggle caret auto-positioning", () => {
     appendFlowText(screen.getByTestId("preview-segment-flow"), " one");
     enableEditing(); // OFF — commits
     expect(screen.getByTestId("document-probe").textContent).toBe(
-      "Alpha Beta one",
+      "Alpha beta one",
     );
 
     enableEditing(); // ON — the caret at the NEW end
@@ -4864,7 +4874,7 @@ describe("edit-toggle caret auto-positioning", () => {
     typeAtCaret(flow, one, 4, " two");
     enableEditing(); // OFF — commits
     expect(screen.getByTestId("document-probe").textContent).toBe(
-      "Alpha Beta one two",
+      "Alpha beta one two",
     );
 
     // The line-break cycle: the anchor plants exactly once per ON.
@@ -5163,7 +5173,7 @@ describe("document length limit", () => {
         2000,
       );
       expect(screen.getByTestId("document-probe").textContent).toContain(
-        "Alpha Beta",
+        "Alpha beta",
       );
       expect(screen.getByRole("status")).toHaveTextContent(
         "Snippet dropped at position 1 of 2.",
@@ -5617,7 +5627,7 @@ describe("document length limit", () => {
     // re-rendered flow matches the model (WYSIWYG).
     const after = screen.getByTestId("document-probe").textContent;
     expect(after).toHaveLength(2000);
-    expect(after?.includes("Betax ")).toBe(true);
+    expect(after?.includes("betax ")).toBe(true);
     const liveFlow = screen.getByTestId("preview-segment-flow");
     expect(liveFlow.textContent).toBe(after);
 
@@ -5678,7 +5688,7 @@ describe("document length limit", () => {
     expect(blocked.defaultPrevented).toBe(true);
     // Nothing landed: the chip's text is unchanged (the redirect
     // never ran) and the document keeps its exact length.
-    expect(beta.textContent).toBe("Beta");
+    expect(beta.textContent).toBe("beta");
     expect(screen.getByTestId("document-probe").textContent).toHaveLength(2000);
   });
 });
@@ -5955,7 +5965,7 @@ describe("PreviewArea click-vs-drag on the editable surface", () => {
 
       expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta Gamma",
+        "Alpha beta gamma",
       );
     });
 
@@ -5985,11 +5995,11 @@ describe("PreviewArea click-vs-drag on the editable surface", () => {
       expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
       expect(screen.getAllByTestId("preview-snippet").map((s) => s.textContent)).toEqual([
         "Alpha",
-        "Beta",
-        "Gamma",
+        "beta",
+        "gamma",
       ]);
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        "Alpha Beta Gamma",
+        "Alpha beta gamma",
       );
     });
   });
@@ -6048,5 +6058,171 @@ describe("PreviewArea click-vs-drag on the editable surface", () => {
       expect(spaceOnRoot.defaultPrevented).toBe(false);
       expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The case-fix pass on the visible document: creation-time correction
+// and the sort-time flips (the moved chip and the chips whose
+// predecessors changed re-fit their merged context).
+// ---------------------------------------------------------------------------
+
+describe("case-fix pass — creation and sort flips (inline)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installSegmentRects({
+      // The seeded chips resolve by their rendered text — the pass
+      // may re-case them across the drags, so both casings map to
+      // the same geometry.
+      chips: {
+        "Just words": { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
+        "just words": { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
+        "Uppercase arrives": { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
+        "uppercase arrives": { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
+        Hello: { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
+        hello: { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
+        Paris: { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
+      },
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const pointerDownOn = (element: Element, x = 40, y = 10) =>
+    fireEvent.pointerDown(element, {
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      clientX: x,
+      clientY: y,
+    });
+
+  it("capitalizes a chip created after a sentence-ending predecessor", () => {
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "First sentence.")]],
+      ["text-2", [makeSnippet("b1", "second sentence")]],
+    ]);
+    // The second chip lands right after "." — the pass capitalizes it
+    // at creation.
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "First sentence. Second sentence",
+    );
+    expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+      "First sentence. Second sentence",
+    );
+  });
+
+  it("lowercases a chip created mid-sentence", () => {
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "Just words")]],
+      ["text-2", [makeSnippet("b1", "Uppercase arrives")]],
+    ]);
+    // The second chip lands mid-sentence — the pass lowercases it.
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Just words uppercase arrives",
+    );
+    expect(
+      screen.getAllByTestId("preview-snippet")[1].textContent,
+    ).toBe("uppercase arrives");
+  });
+
+  it("flips the letters across a context change — the moved chip and the displaced chip both re-fit, in both directions", async () => {
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "Just words")]],
+      ["text-2", [makeSnippet("b1", "Uppercase arrives")]],
+    ]);
+    // Creation: the second chip lands mid-sentence — lowercased.
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Just words uppercase arrives",
+    );
+    const [, upper] = screen.getAllByTestId("preview-snippet");
+    expect(upper.textContent).toBe("uppercase arrives");
+
+    // Drag it to the leading gap: the moved chip capitalizes at the
+    // document start and the displaced chip re-classifies
+    // mid-sentence — both letters visibly flip.
+    pointerDownOn(upper, 130, 10);
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    fireEvent.pointerMove(document, { pointerId: 1, clientX: -4, clientY: 10 });
+    fireEvent.pointerUp(document, { pointerId: 1 });
+    await act(async () => {});
+
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Uppercase arrives just words",
+    );
+    expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+      screen.getByTestId("document-probe").textContent,
+    );
+
+    // Drag it back to the trailing gap: both letters flip back.
+    const [head] = screen.getAllByTestId("preview-snippet");
+    expect(head.textContent).toBe("Uppercase arrives");
+    pointerDownOn(head, 40, 10);
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    fireEvent.pointerMove(document, { pointerId: 1, clientX: 224, clientY: 10 });
+    fireEvent.pointerUp(document, { pointerId: 1 });
+    await act(async () => {});
+
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Just words uppercase arrives",
+    );
+    const [first, last] = screen.getAllByTestId("preview-snippet");
+    expect(first.textContent).toBe("Just words");
+    expect(last.textContent).toBe("uppercase arrives");
+    expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+      screen.getByTestId("document-probe").textContent,
+    );
+  });
+
+  it("keeps a frozen chip's hand-fixed casing through a sort (the pass always skips edited tokens)", async () => {
+    // Creation: the second chip lands mid-sentence and is
+    // auto-lowercased — the accepted wrongness the user fixes by
+    // hand; the fix arrives through a parsed sync and freezes the
+    // chip (the exact edited-detection comparison).
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "Hello")]],
+      ["text-2", [makeSnippet("b1", "Paris")]],
+    ]);
+    expect(screen.getByTestId("document-probe").textContent).toBe("Hello paris");
+
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    const [, paris] = screen.getAllByTestId("preview-snippet");
+    (paris.firstChild as Text).data = "Paris";
+    fireEvent.input(flow);
+    expect(screen.getByTestId("document-probe").textContent).toBe("Hello Paris");
+
+    // Toggle edit OFF (commits the surface) — pointer sorting is
+    // live again; the toggle's thaw remounts the flow, so re-query.
+    enableEditing();
+
+    // Sort the frozen chip to the document start: its hand-fixed
+    // casing survives — the pass never re-corrects an edited token,
+    // while the displaced chip re-classifies mid-sentence.
+    const frozenChip = screen.getAllByTestId("preview-snippet")[1];
+    pointerDownOn(frozenChip, 130, 10);
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    fireEvent.pointerMove(document, { pointerId: 1, clientX: -4, clientY: 10 });
+    fireEvent.pointerUp(document, { pointerId: 1 });
+    await act(async () => {});
+
+    expect(screen.getByTestId("document-probe").textContent).toBe("Paris hello");
+    const [frozen] = screen.getAllByTestId("preview-snippet");
+    expect(frozen.textContent).toBe("Paris");
   });
 });

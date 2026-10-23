@@ -73,15 +73,16 @@
     - [x] Task 3.5: Update merged-text building/copy to serialize the document (own text + newlines for line breaks)
     - [x] Task 3.6: Tests: editing workflows, parse/serialize round-trips, inline-modal sync
 - [ ] **Feature 4: Preview Area Auto fix** - Auto-correct snippet case and spacing in the preview area to fit the merged context; triggers are snippet creation, sort and copy (the copied text is always the corrected version); text inputs are never modified
-  - [ ] **Task 1: Case Auto-Fix** - Snippet capitalization follows its new context in the preview (inline and modal)
-    - [ ] Task 1.1: Implement the pure case-fix pass in the preview document utils: predecessor classifier (document start, `.` `!` `?`, line break, mid-sentence) with capitalize-after-sentence-start and lowercase-after-mid-sentence rules, plus guards (acronyms/all-caps, camelCase brands, standalone "I", capitals that were already mid-sentence in the source, digit-leading snippets, frozen tokens)
-    - [ ] Task 1.2: Wire the pass into snippet creation/reconciliation and sort (covers the moved snippet and the tokens whose predecessor changed); skip frozen tokens and make reconciliation comparisons case-aware so corrected tokens aren't misdetected as user-edited
-    - [ ] Task 1.3: Apply the pass on the copy path before serialization (inline + modal) so the clipboard is always fully corrected, without mutating the visible document
-    - [ ] Task 1.4: Tests: unit rule/guard tables + integration (create, sort both sides, manual override survives, copy output)
+  - [x] **Task 1: Case Auto-Fix** - Snippet capitalization follows its new context in the preview (inline and modal)
+    - [x] Task 1.1: Implement the pure case-fix pass in the preview document utils: predecessor classifier (document start, `.` `!` `?`, line break, mid-sentence) with capitalize-after-sentence-start and lowercase-after-mid-sentence rules, plus guards (acronyms/all-caps, camelCase brands, digit-leading snippets, frozen tokens) (the "standalone 'I'" and "capitals that were already mid-sentence in the source" guards were dropped, user decision 2026-10-22 — "I" follows the general contextual rules, corrections come purely from merged context and wrong ones are fixed by hand; see ADR 0005 and `.specs/features/preview-area-auto-fix/tasks/case-auto-fix`)
+    - [x] Task 1.2: Wire the pass into snippet creation/reconciliation and sort (covers the moved snippet and the tokens whose predecessor changed); skip frozen tokens and make reconciliation comparisons case-aware so corrected tokens aren't misdetected as user-edited (the case-aware comparison is the reconcile no-op guard only — edited-detection and the focused-surface comparison stay exact so manual case overrides freeze the chip and survive sorts, user decision 2026-10-22; see ADR 0005 and `.specs/features/preview-area-auto-fix/tasks/case-auto-fix`)
+    - [x] Task 1.3: Apply the pass on the copy path before serialization (inline + modal) so the clipboard is always fully corrected, without mutating the visible document
+    - [x] Task 1.4: Tests: unit rule/guard tables + integration (create, sort both sides, manual override survives, copy output)
   - [ ] **Task 2: Spacing Auto-Fix** - Punctuation-adjacent spacing in the preview (inline and modal)
     - [ ] Task 2.1: Implement the pure spacing pass: exactly one space between tokens, no space before `.,!;:`, no space after `(` / before `)`, collapse double spaces, trim spaces around line breaks (line breaks themselves preserved)
     - [ ] Task 2.2: Wire the pass into the same trigger points (creation, sort, copy); frozen tokens skipped
     - [ ] Task 2.3: Tests: unit rule tables + integration (creation, sort and copy outputs)
+  - [ ] **Task 3: Undo auto-corrections** - Let the user undo/review auto-corrections (deferred, user decision 2026-10-22 — see `.specs/features/preview-area-auto-fix/tasks/case-auto-fix/`)
 - [ ] **Feature 5: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar (including third text input support)
   - [ ] "Start Over" button (reset page without reload)
   - [ ] "Add Text" button (add new text input, up to 4 total)

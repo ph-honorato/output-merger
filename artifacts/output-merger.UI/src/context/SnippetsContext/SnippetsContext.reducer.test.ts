@@ -191,7 +191,10 @@ describe('MOVE_TOKEN randomized edited-document sweep (multiset + uniqueness)', 
     for (let iter = 0; iter < 400; iter += 1) {
       const tokens = randomTokens();
       const base = stateWith(tokens);
-      const baseChars = serialize(tokens).split('').sort().join('');
+      // The case pass may flip first letters to fit the merged
+      // context, so the multiset guard compares case-insensitively —
+      // content is still only relocated.
+      const baseChars = serialize(tokens).toLowerCase().split('').sort().join('');
 
       for (let from = 0; from < base.tokens.length; from += 1) {
         if (!isSnippetToken(base.tokens[from])) continue;
@@ -202,24 +205,32 @@ describe('MOVE_TOKEN randomized edited-document sweep (multiset + uniqueness)', 
             toIndex: to,
           });
           const label = `iter=${iter} from=${from} to=${to} doc=[${serialize(tokens)}]`;
-          // 1. Character multiset preserved — a move only relocates.
+          // 1. Character multiset preserved (case-insensitively — the
+          // case pass may re-case a chip's first letter) — a move
+          // only relocates.
           expect(
-            serialize(next.tokens).split('').sort().join(''),
+            serialize(next.tokens).toLowerCase().split('').sort().join(''),
             label,
           ).toBe(baseChars);
           // 2. No duplicate token ids.
           const ids = next.tokens.map((token) => token.tokenId);
           expect(new Set(ids).size, label).toBe(ids.length);
-          // 3. Non-inert moves actually change the chip's position.
+          // 3. A reference change means a real change: the chip's
+          // position among snippets changed, or the case pass
+          // corrected stale casing (the serialization then differs
+          // only in letter case).
           if (next !== base) {
             const position = (state: SnippetsState, id: string) =>
               state.tokens
                 .filter(isSnippetToken)
                 .findIndex((token) => token.tokenId === id);
             const movedId = base.tokens[from].tokenId;
-            expect(position(next, movedId), label).not.toBe(
-              position(base, movedId),
-            );
+            const positionChanged =
+              position(next, movedId) !== position(base, movedId);
+            const caseOnly =
+              serialize(next.tokens).toLowerCase() ===
+              serialize(base.tokens).toLowerCase();
+            expect(positionChanged || caseOnly, label).toBe(true);
           }
           // 4. Two-move sequences (every 7th document): chars + ids.
           if (iter % 7 === 0 && next !== base) {
@@ -233,7 +244,7 @@ describe('MOVE_TOKEN randomized edited-document sweep (multiset + uniqueness)', 
                 });
                 const label2 = `${label} m2:${f2}->${t2}`;
                 expect(
-                  serialize(second.tokens).split('').sort().join(''),
+                  serialize(second.tokens).toLowerCase().split('').sort().join(''),
                   label2,
                 ).toBe(baseChars);
                 const ids2 = second.tokens.map((token) => token.tokenId);
@@ -267,8 +278,13 @@ describe('MOVE_TOKEN regression seams', () => {
     state = snippetsReducer(state, { type: 'MOVE_TOKEN', fromIndex: 1, toIndex: 5 });
 
     const after = serialize(state.tokens);
-    expect(after.split('').sort().join('')).toBe(before.split('').sort().join(''));
-    expect(after).toBe('\nA Bee ');
+    // The case pass may flip a first letter to fit the merged context
+    // ("Bee" reads mid-sentence after the move), so the multiset guard
+    // compares case-insensitively — content is still only relocated.
+    expect(after.split('').sort().join('').toLowerCase()).toBe(
+      before.split('').sort().join('').toLowerCase(),
+    );
+    expect(after).toBe('\nA bee ');
   });
 
   it('keeps token ids unique through the two-move sequence (two-move id uniqueness) with full join parity', () => {

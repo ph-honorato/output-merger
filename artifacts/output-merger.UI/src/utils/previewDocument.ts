@@ -430,6 +430,271 @@ export function tokensEqualIgnoringEdited(
   });
 }
 
+// ---------------------------------------------------------------------------
+// The case-fix pass. A snippet token's casing follows its merged
+// context: the first letter of the first word is capitalized at a
+// sentence start and lowercased mid-sentence, subject to guards for
+// words whose casing carries meaning. Only snippet tokens transform —
+// own-text tokens, line-break tokens, and user-edited (frozen) tokens
+// are never touched — and the transform is case-only: it replaces the
+// first character with its upper/lowercase counterpart of the same
+// length, never a longer mapping.
+// ---------------------------------------------------------------------------
+
+/**
+ * The rule set the case-fix pass runs with, selected by the active UI
+ * language tag. All languages share the same engine; the table is the
+ * per-language extension point.
+ */
+export interface CaseFixRuleSet {
+  /**
+   * The locale tag forwarded to the per-character casing transforms.
+   */
+  locale: string;
+  /**
+   * First words the all-caps guard does NOT protect: each listed
+   * word follows the general contextual rules instead of staying
+   * frozen in its all-caps form.
+   */
+  allCapsExceptions: readonly string[];
+  /**
+   * Characters that classify a sentence end when they are the
+   * predecessor's last MEANINGFUL character (after trailing
+   * whitespace and closing wrappers strip).
+   */
+  sentenceEndChars: readonly string[];
+  /**
+   * Trailing closing quotes/brackets/parentheses — stripped together
+   * with trailing whitespace before the sentence-end check reads the
+   * predecessor's last meaningful character.
+   */
+  closingWrapperChars: readonly string[];
+}
+
+const buildCaseFixRuleSet = (
+  locale: string,
+  allCapsExceptions: readonly string[],
+): CaseFixRuleSet => ({
+  locale,
+  allCapsExceptions,
+  sentenceEndChars: ['.', '!', '?', '…'],
+  closingWrapperChars: [')', ']', '}', '"', "'", '”', '’', '»'],
+});
+
+// Keyed by the language tag's primary subtag ("en" from "en-US",
+// "pt" from "pt-BR" — the i18n instance exposes both forms).
+const CASE_FIX_RULE_SETS: Record<string, CaseFixRuleSet> = {
+  en: buildCaseFixRuleSet('en-US', ['I']),
+  pt: buildCaseFixRuleSet('pt-BR', ['I']),
+};
+
+const DEFAULT_CASE_FIX_RULE_SET = CASE_FIX_RULE_SETS.en;
+
+/**
+ * The rule set for a UI language tag. An unknown or missing tag falls
+ * back to the default rule set.
+ */
+export function caseFixRuleSetFor(
+  languageTag: string | undefined,
+): CaseFixRuleSet {
+  if (!languageTag) {
+    return DEFAULT_CASE_FIX_RULE_SET;
+  }
+  const primary = languageTag.split('-')[0];
+  return CASE_FIX_RULE_SETS[primary] ?? DEFAULT_CASE_FIX_RULE_SET;
+}
+
+const isWhitespaceChar = (char: string): boolean => /\s/.test(char);
+const isLetterChar = (char: string): boolean => /\p{L}/u.test(char);
+const isCasedChar = (char: string): boolean => /\p{Cased}/u.test(char);
+const isUppercaseChar = (char: string): boolean => /\p{Uppercase}/u.test(char);
+
+/**
+ * The merged-context classification of the token at `index`:
+ * - `sentence-start`: the document start, a line-break predecessor,
+ *   or a predecessor whose last meaningful character is a sentence
+ *   end;
+ * - `glued`: the token directly abuts non-whitespace content (no
+ *   whitespace boundary) — mid-word casing is context-free, so the
+ *   token is left alone;
+ * - `mid-sentence`: anything else.
+ *
+ * The look-back walks past separator/whitespace-only tokens (and
+ * tokens whose text is empty) to the last meaningful content; a
+ * line-break token found on the walk classifies a sentence start.
+ */
+export type TokenCaseContext = 'sentence-start' | 'mid-sentence' | 'glued';
+
+export function classifyTokenContext(
+  tokens: PreviewToken[],
+  index: number,
+  ruleSet: CaseFixRuleSet = DEFAULT_CASE_FIX_RULE_SET,
+): TokenCaseContext {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const predecessor = tokens[cursor];
+    if (predecessor.kind === 'line-break') {
+      return 'sentence-start';
+    }
+    const text = predecessor.text;
+    if (cursor === index - 1 && text.length > 0) {
+      const lastChar = text[text.length - 1];
+      if (!isWhitespaceChar(lastChar)) {
+        return 'glued';
+      }
+    }
+    // Strip trailing whitespace and closing wrapper characters until
+    // the last meaningful character stands at the end.
+    let end = text.length;
+    while (
+      end > 0 &&
+      (isWhitespaceChar(text[end - 1]) ||
+        ruleSet.closingWrapperChars.includes(text[end - 1]))
+    ) {
+      end -= 1;
+    }
+    if (end === 0) {
+      continue; // whitespace-only/empty token: keep looking back
+    }
+    const lastMeaningful = text[end - 1];
+    return ruleSet.sentenceEndChars.includes(lastMeaningful)
+      ? 'sentence-start'
+      : 'mid-sentence';
+  }
+  return 'sentence-start'; // only whitespace (or nothing) precedes
+}
+
+/**
+ * The first word of `text` — the leading run of non-whitespace
+ * characters (starts at index 0).
+ */
+const firstWordOf = (text: string): string => {
+  let end = 0;
+  while (end < text.length && !isWhitespaceChar(text[end])) {
+    end += 1;
+  }
+  return text.slice(0, end);
+};
+
+/**
+ * True when the word carries at least one cased character and every
+ * cased character is uppercase — acronyms ("NASA", "API") and single
+ * initials ("A", "B").
+ */
+const isAllCapsWord = (word: string): boolean => {
+  let sawCased = false;
+  for (const char of word) {
+    if (isCasedChar(char)) {
+      sawCased = true;
+      if (!isUppercaseChar(char)) {
+        return false;
+      }
+    }
+  }
+  return sawCased;
+};
+
+/**
+ * True when the word has an uppercase cased character AFTER its first
+ * character ("iPhone", "eBay", "McDonald's") — an interior uppercase
+ * is part of the word's written form, so re-casing the first letter
+ * would corrupt it.
+ */
+const hasInteriorUppercase = (word: string): boolean => {
+  for (let index = 1; index < word.length; index += 1) {
+    if (isUppercaseChar(word[index])) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * The case-fix pass over a whole document: every non-edited snippet
+ * token's first character is re-derived from its merged context —
+ * `toLocaleUpperCase` at a sentence start, `toLocaleLowerCase`
+ * mid-sentence — under the guards:
+ * - frozen tokens (`edited === true`) never transform;
+ * - an empty text or a non-letter first character never transforms;
+ * - a glued token (no whitespace boundary before it) never
+ *   transforms;
+ * - an all-caps first word never transforms, except a word the
+ *   rule set's allCapsExceptions list exempts (it follows the
+ *   general contextual rules like any other word);
+ * - a first word with an interior uppercase never transforms.
+ *
+ * The replacement must be a single character of the same length — a
+ * casing mapping that expands ("ß" → "SS") is skipped so token
+ * lengths (and the document's serialized length) never change.
+ *
+ * Pure and reference-stable: untouched tokens keep their object
+ * references, and a document where nothing transforms returns the
+ * SAME array reference. Re-running the pass over its own output
+ * yields content-identical tokens (idempotent) — the classification
+ * reads only predecessor characters (whitespace/wrapper/sentence-end
+ * identity), so a corrected token classifies its successors exactly
+ * as the original did.
+ */
+export function applyCaseFix(
+  tokens: PreviewToken[],
+  languageTag?: string,
+): PreviewToken[] {
+  const ruleSet = caseFixRuleSetFor(languageTag);
+  let result: PreviewToken[] | null = null;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!isSnippetToken(token) || token.edited) {
+      continue;
+    }
+    const firstChar = token.text[0];
+    if (firstChar === undefined || !isLetterChar(firstChar)) {
+      continue;
+    }
+    const context = classifyTokenContext(tokens, index, ruleSet);
+    if (context === 'glued') {
+      continue;
+    }
+    const firstWord = firstWordOf(token.text);
+    if (!ruleSet.allCapsExceptions.includes(firstWord) && isAllCapsWord(firstWord)) {
+      continue;
+    }
+    if (hasInteriorUppercase(firstWord)) {
+      continue;
+    }
+    const fixed =
+      context === 'sentence-start'
+        ? firstChar.toLocaleUpperCase(ruleSet.locale)
+        : firstChar.toLocaleLowerCase(ruleSet.locale);
+    if (fixed.length !== 1 || fixed === firstChar) {
+      continue;
+    }
+    if (result === null) {
+      result = [...tokens];
+    }
+    result[index] = { ...token, text: fixed + token.text.slice(1) };
+  }
+  return result ?? tokens;
+}
+
+/**
+ * Content equality of two token arrays in their case-fix-canonical
+ * forms: both sides run through the pass (idempotent — an already
+ * canonical array returns itself) before the exact content
+ * comparison, so two documents that differ only in pass-correctable
+ * case compare equal. The no-op guard of snippet reconciliation — a
+ * re-emission whose texts differ from the stored tokens only in case
+ * is "no change", while a genuine text difference is not.
+ */
+export function tokensEqualCanonicalCase(
+  a: PreviewToken[],
+  b: PreviewToken[],
+  languageTag?: string,
+): boolean {
+  return tokensEqual(
+    applyCaseFix(a, languageTag),
+    applyCaseFix(b, languageTag),
+  );
+}
+
 /**
  * Parses the editable flow's DOM back into document tokens (the pure
  * DOM→tokens half of the per-input sync). Rules:

@@ -1,7 +1,10 @@
 import type { PreviewToken, SnippetToken } from '../context/SnippetsContext';
 import {
+  applyCaseFix,
   buildLandingId,
   buildSnippetTokenId,
+  caseFixRuleSetFor,
+  classifyTokenContext,
   clampDocumentToLimit,
   enumerateLandingAnchors,
   isDocumentAtLimit,
@@ -18,6 +21,7 @@ import {
   serialize,
   snippetSlotToTokenIndex,
   tokensEqual,
+  tokensEqualCanonicalCase,
   tokensEqualIgnoringEdited,
   truncateToUtf16Budget,
   wordBoundaryOffsets,
@@ -842,5 +846,383 @@ describe('clampDocumentToLimit', () => {
         }
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The case-fix pass: rule-table lookup, classification × transform
+// tables, guard tables, reference stability/idempotence, and the
+// case-canonical comparison.
+// ---------------------------------------------------------------------------
+
+describe('caseFixRuleSetFor (the language-keyed rule table)', () => {
+  it('resolves each set from both tag forms (full and primary subtag)', () => {
+    expect(caseFixRuleSetFor('en-US').locale).toBe('en-US');
+    expect(caseFixRuleSetFor('en').locale).toBe('en-US');
+    expect(caseFixRuleSetFor('pt-BR').locale).toBe('pt-BR');
+    expect(caseFixRuleSetFor('pt').locale).toBe('pt-BR');
+  });
+
+  it('falls back to the default set for unknown and missing tags', () => {
+    expect(caseFixRuleSetFor('fr')).toBe(caseFixRuleSetFor('en-US'));
+    expect(caseFixRuleSetFor('')).toBe(caseFixRuleSetFor('en-US'));
+    expect(caseFixRuleSetFor(undefined)).toBe(caseFixRuleSetFor('en-US'));
+  });
+
+  it('keeps the en-US and pt-BR rule content identical (each set carries its own locale tag)', () => {
+    expect(caseFixRuleSetFor('pt-BR').sentenceEndChars).toEqual(
+      caseFixRuleSetFor('en-US').sentenceEndChars,
+    );
+    expect(caseFixRuleSetFor('pt-BR').closingWrapperChars).toEqual(
+      caseFixRuleSetFor('en-US').closingWrapperChars,
+    );
+    expect(caseFixRuleSetFor('pt-BR').allCapsExceptions).toEqual(
+      caseFixRuleSetFor('en-US').allCapsExceptions,
+    );
+  });
+
+  it('exempts the exact word "I" from the all-caps guard in both language sets (the table owns the carve-out)', () => {
+    expect(caseFixRuleSetFor('en-US').allCapsExceptions).toEqual(['I']);
+    expect(caseFixRuleSetFor('en').allCapsExceptions).toEqual(['I']);
+    expect(caseFixRuleSetFor('pt-BR').allCapsExceptions).toEqual(['I']);
+    expect(caseFixRuleSetFor('pt').allCapsExceptions).toEqual(['I']);
+  });
+
+  it('produces identical pass outputs under both language tags', () => {
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:a', 'Done.'),
+      makeSeparatorToken('sep'),
+      snippetToken('s2:b', 'next one'),
+      lineBreak('br1'),
+      snippetToken('s3:c', 'third'),
+    ];
+    expect(serialize(applyCaseFix(tokens, 'en-US'))).toBe(
+      serialize(applyCaseFix(tokens, 'pt-BR')),
+    );
+    expect(serialize(applyCaseFix(tokens, 'pt'))).toBe(
+      serialize(applyCaseFix(tokens, 'en')),
+    );
+  });
+});
+
+describe('applyCaseFix — classification × transform', () => {
+  const fixLast = (
+    predecessor: PreviewToken[],
+    text: string,
+    tag?: string,
+  ): string => {
+    const tokens = [...predecessor, snippetToken('s1:chip', text)];
+    const fixed = applyCaseFix(tokens, tag);
+    const last = fixed[fixed.length - 1];
+    return isSnippetToken(last) ? last.text : '';
+  };
+
+  it('classifies the merged context and transforms the first letter of the first word', () => {
+    const cases: Array<
+      [label: string, predecessor: PreviewToken[], text: string, expected: string]
+    > = [
+      ['document start', [], 'hello world', 'Hello world'],
+      ['after a period', [ownText('t', 'He said. ')], 'hello world', 'Hello world'],
+      ['after an exclamation', [ownText('t', 'Watch out! ')], 'hello', 'Hello'],
+      ['after a question mark', [ownText('t', 'Really? ')], 'hello', 'Hello'],
+      ['after an ellipsis', [ownText('t', 'Wait… ')], 'hello', 'Hello'],
+      ['after a colon — NOT a sentence end', [ownText('t', 'Note: ')], 'hello', 'hello'],
+      ['after a line break', [ownText('t', 'words'), lineBreak('br')], 'hello', 'Hello'],
+      ['mid-sentence', [ownText('t', 'just words ')], 'Hello', 'hello'],
+      [
+        'closing quote after the stripped whitespace',
+        [ownText('t', 'He said. " ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'closing quote stripped after the period',
+        [ownText('t', 'The end." ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'paren closes mid-sentence content',
+        [ownText('t', '(see above) ')],
+        'hello',
+        'hello',
+      ],
+      [
+        'paren closes a sentence end',
+        [ownText('t', 'Ready?) ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'bracket closes a sentence end',
+        [ownText('t', 'Done.] ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'the strip peels interleaved whitespace and closers',
+        [ownText('t', 'He said. ) ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'chip glued directly after a period-ending chip — no whitespace boundary, left alone',
+        [snippetToken('s0:x', 'Done.')],
+        'hello',
+        'hello',
+      ],
+      [
+        'chip predecessor with a trailing space after the period',
+        [snippetToken('s0:x', 'Done. ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'separator token between the chips',
+        [snippetToken('s0:x', 'Done.'), makeSeparatorToken('sep')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'the look-back walks past every whitespace-only token',
+        [
+          snippetToken('s0:x', 'Done.'),
+          ownText('w1', ' '),
+          ownText('w2', '  '),
+        ],
+        'hello',
+        'Hello',
+      ],
+      [
+        'only whitespace precedes — the first content reads as a sentence start',
+        [ownText('w', '  ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'a line break behind a whitespace token still classifies a sentence start',
+        [ownText('t', 'words'), lineBreak('br'), ownText('w', ' ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'glued to non-whitespace own text — left alone even after a period',
+        [ownText('t', 're')],
+        'run',
+        'run',
+      ],
+      [
+        'glued to non-whitespace own text — an all-lowercase chip stays',
+        [ownText('t', 're')],
+        'Run',
+        'Run',
+      ],
+      [
+        'glued directly after a closing quote — no whitespace boundary, left alone',
+        [ownText('t', 'The end."')],
+        'hello',
+        'hello',
+      ],
+      [
+        'glued directly after another chip — left alone',
+        [snippetToken('s0:x', 'run')],
+        'Ning',
+        'Ning',
+      ],
+    ];
+    for (const [label, predecessor, text, expected] of cases) {
+      expect(fixLast(predecessor, text), label).toBe(expected);
+    }
+  });
+
+  it('classifies through the exported classifier with the resolved rule set', () => {
+    const ruleSet = caseFixRuleSetFor('en-US');
+    const sentenceEnd = [ownText('t', 'Done. '), snippetToken('s1:a', 'x')];
+    expect(classifyTokenContext(sentenceEnd, 1, ruleSet)).toBe('sentence-start');
+    const mid = [ownText('t', 'words '), snippetToken('s1:a', 'x')];
+    expect(classifyTokenContext(mid, 1, ruleSet)).toBe('mid-sentence');
+    const glued = [ownText('t', 're'), snippetToken('s1:a', 'x')];
+    expect(classifyTokenContext(glued, 1, ruleSet)).toBe('glued');
+    const afterBreak = [lineBreak('br'), snippetToken('s1:a', 'x')];
+    expect(classifyTokenContext(afterBreak, 1, ruleSet)).toBe('sentence-start');
+    expect(classifyTokenContext([snippetToken('s1:a', 'x')], 0, ruleSet)).toBe(
+      'sentence-start',
+    );
+  });
+
+  it('transforms only snippet tokens — own text and line breaks are byte-unchanged', () => {
+    const text = ownText('t', 'all lowercase');
+    const br = lineBreak('br');
+    const tokens: PreviewToken[] = [text, br, snippetToken('s1:a', 'hello')];
+    const fixed = applyCaseFix(tokens);
+    expect(fixed[0]).toBe(text);
+    expect(fixed[1]).toBe(br);
+    expect((fixed[2] as SnippetToken).text).toBe('Hello');
+    expect((text as { text: string }).text).toBe('all lowercase');
+  });
+
+  it('transforms only the FIRST letter of the FIRST word — the rest of the text is untouched', () => {
+    expect(fixLast([ownText('t', 'Done. ')], 'hello WORLD')).toBe('Hello WORLD');
+    expect(fixLast([ownText('t', 'words ')], 'Hello WORLD')).toBe('hello WORLD');
+  });
+});
+
+describe('applyCaseFix — guards', () => {
+  const fixLast = (predecessor: PreviewToken[], text: string): string => {
+    const tokens = [...predecessor, snippetToken('s1:chip', text)];
+    const fixed = applyCaseFix(tokens);
+    const last = fixed[fixed.length - 1];
+    return isSnippetToken(last) ? last.text : '';
+  };
+
+  it('leaves all-caps first words (acronyms and single initials) untouched in every context', () => {
+    expect(fixLast([ownText('t', 'words ')], 'NASA launches')).toBe('NASA launches');
+    expect(fixLast([], 'NASA launches')).toBe('NASA launches');
+    expect(fixLast([ownText('t', 'words ')], 'API')).toBe('API');
+    expect(fixLast([ownText('t', 'Done. ')], 'API')).toBe('API');
+    expect(fixLast([ownText('t', 'words ')], 'A')).toBe('A');
+    expect(fixLast([ownText('t', 'words ')], 'B')).toBe('B');
+    expect(fixLast([ownText('t', 'Done. ')], 'A')).toBe('A');
+  });
+
+  it('applies the general contextual rules to the exact word "I" (the all-caps carve-out)', () => {
+    // Mid-sentence "I" lowercases (wrong by English orthography —
+    // accepted; the user fixes it by hand).
+    expect(fixLast([ownText('t', 'words ')], 'I am here')).toBe('i am here');
+    expect(fixLast([ownText('t', 'words ')], 'I')).toBe('i');
+    // At a sentence start "i" capitalizes.
+    expect(fixLast([ownText('t', 'Done. ')], 'i am here')).toBe('I am here');
+    expect(fixLast([ownText('t', 'words'), lineBreak('br')], 'i')).toBe('I');
+    expect(fixLast([], 'i')).toBe('I');
+    expect(fixLast([ownText('t', 'Done. ')], 'I')).toBe('I');
+  });
+
+  it('protects mixed-case first words in every context', () => {
+    expect(fixLast([ownText('t', 'words ')], 'iPhone rocks')).toBe('iPhone rocks');
+    expect(fixLast([ownText('t', 'Done. ')], 'iPhone rocks')).toBe('iPhone rocks');
+    expect(fixLast([ownText('t', 'words ')], 'eBay sells')).toBe('eBay sells');
+    expect(fixLast([ownText('t', "words ")], "McDonald's")).toBe("McDonald's");
+  });
+
+  it('leaves non-letter first characters and empty/whitespace-only tokens alone', () => {
+    expect(fixLast([], '123 results')).toBe('123 results');
+    expect(fixLast([ownText('t', 'Done. ')], '(Note')).toBe('(Note');
+    expect(fixLast([], '')).toBe('');
+    expect(fixLast([ownText('t', 'Done. ')], '   padded')).toBe('   padded');
+  });
+
+  it('always skips frozen (edited) tokens, on every transform side', () => {
+    const frozenMid = applyCaseFix([
+      ownText('t', 'words '),
+      snippetToken('s1:a', 'Fixed', { edited: true }),
+    ]);
+    expect((frozenMid[1] as SnippetToken).text).toBe('Fixed');
+
+    const frozenStart = applyCaseFix([
+      ownText('t', 'Done. '),
+      snippetToken('s1:a', 'still', { edited: true }),
+    ]);
+    expect((frozenStart[1] as SnippetToken).text).toBe('still');
+  });
+
+  it('never consults the source casing: a mid-merge proper name is lowercased (accepted)', () => {
+    expect(fixLast([ownText('t', 'I visited ')], 'Paris')).toBe('paris');
+    expect(fixLast([ownText('t', 'I visited ')], 'London in spring')).toBe(
+      'london in spring',
+    );
+  });
+
+  it('applies the general rules to a single lowercase letter ("a" → "A" at a sentence start)', () => {
+    expect(fixLast([lineBreak('br')], 'a test')).toBe('A test');
+    expect(fixLast([ownText('t', 'words ')], 'a test')).toBe('a test');
+  });
+
+  it('never changes token lengths: casing mappings that expand are skipped', () => {
+    // "ß" uppercases to the two-character "SS" — the length-preserving
+    // contract wins, the chip stays as authored.
+    expect(fixLast([], 'ßeta')).toBe('ßeta');
+    // "İ" lowercases to the two-character "i̇" — skipped mid-sentence.
+    expect(fixLast([ownText('t', 'words ')], 'İstanbul')).toBe('İstanbul');
+  });
+});
+
+describe('applyCaseFix — reference stability and idempotence', () => {
+  it('returns the SAME array reference when nothing transforms', () => {
+    const guarded = [
+      snippetToken('s1:a', 'NASA'),
+      makeSeparatorToken('sep'),
+      snippetToken('s2:b', 'API'),
+    ];
+    expect(applyCaseFix(guarded)).toBe(guarded);
+    const frozen = [
+      ownText('t', 'words '),
+      snippetToken('s1:a', 'Fixed', { edited: true }),
+    ];
+    expect(applyCaseFix(frozen)).toBe(frozen);
+    const ownOnly = [ownText('t', 'just words'), lineBreak('br')];
+    expect(applyCaseFix(ownOnly)).toBe(ownOnly);
+    const empty: PreviewToken[] = [];
+    expect(applyCaseFix(empty)).toBe(empty);
+  });
+
+  it('keeps untouched token object references and replaces only transformed tokens', () => {
+    const done = ownText('t', 'Done. ');
+    const nasa = snippetToken('s1:a', 'NASA');
+    const sep = makeSeparatorToken('sep');
+    const hello = snippetToken('s2:b', 'Hello');
+    const tokens: PreviewToken[] = [done, nasa, sep, hello];
+    const fixed = applyCaseFix(tokens);
+    expect(fixed).not.toBe(tokens);
+    expect(fixed[0]).toBe(done);
+    expect(fixed[1]).toBe(nasa);
+    expect(fixed[2]).toBe(sep);
+    expect(fixed[3]).not.toBe(hello);
+    expect((fixed[3] as SnippetToken).text).toBe('hello');
+    // Pure: the input array and its tokens are untouched.
+    expect(hello.text).toBe('Hello');
+    expect(tokens[3]).toBe(hello);
+  });
+
+  it('is idempotent: a second application is content-identical and reference-stable', () => {
+    const documents: PreviewToken[][] = [
+      [],
+      [ownText('t', 'just own text'), lineBreak('br')],
+      [snippetToken('s1:a', 'Done.'), makeSeparatorToken('s'), snippetToken('s2:b', 'next')],
+      [ownText('t', 're'), snippetToken('s1:a', 'run')],
+      [snippetToken('s1:a', 'x'.repeat(30))],
+      [snippetToken('s1:a', 'hello', { edited: true })],
+    ];
+    for (const tokens of documents) {
+      const once = applyCaseFix(tokens);
+      const twice = applyCaseFix(once);
+      expect(twice).toBe(once);
+      expect(serialize(twice)).toBe(serialize(once));
+      // Case-only: the serialized length never changes.
+      expect(serialize(once).length).toBe(serialize(tokens).length);
+    }
+  });
+});
+
+describe('tokensEqualCanonicalCase (the case-canonical comparison)', () => {
+  it('treats a pass-correctable case difference as equal', () => {
+    const corrected = [snippetToken('s1:a', 'Hello'), ownText('t', ' world')];
+    const sourceCase = [snippetToken('s1:a', 'hello'), ownText('t', ' world')];
+    expect(tokensEqualCanonicalCase(corrected, sourceCase)).toBe(true);
+    expect(tokensEqualCanonicalCase(sourceCase, corrected)).toBe(true);
+    expect(tokensEqualCanonicalCase(corrected, corrected)).toBe(true);
+  });
+
+  it('still detects genuine differences', () => {
+    const corrected = [snippetToken('s1:a', 'Hello')];
+    expect(tokensEqualCanonicalCase(corrected, [snippetToken('s1:a', 'Hello there')])).toBe(
+      false,
+    );
+    expect(tokensEqualCanonicalCase(corrected, [snippetToken('s1:b', 'Hello')])).toBe(false);
+    expect(tokensEqualCanonicalCase(corrected, [])).toBe(false);
+    // A case difference the pass cannot correct (all-caps guard) is a
+    // real difference.
+    expect(tokensEqualCanonicalCase(corrected, [snippetToken('s1:a', 'HELLO')])).toBe(
+      false,
+    );
   });
 });

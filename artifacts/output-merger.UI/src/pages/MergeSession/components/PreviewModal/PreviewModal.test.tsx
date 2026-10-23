@@ -11,6 +11,7 @@ import {
   useSnippets,
 } from '../../../../context/SnippetsContext';
 import type { Snippet } from '@components';
+import type { PreviewToken } from '../../../../context/SnippetsContext';
 import type {
   DragCancelEvent,
   DragEndEvent,
@@ -33,13 +34,24 @@ const makeSnippet = (id: string, text: string, color = '#0080FF'): Snippet => ({
 // the suite exercises the real duplicate-testid situation
 // and its within(dialog) scoping, exactly like the page integration
 // does.
-const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
-  const { setSourceSnippets } = useSnippets();
+const Harness = ({
+  updates,
+  document: parsed,
+}: {
+  updates: Array<[string, Snippet[]]>;
+  document?: PreviewToken[];
+}) => {
+  const { setSourceSnippets, syncDocument } = useSnippets();
   useEffect(() => {
     updates.forEach(([sourceId, snippets]) =>
       setSourceSnippets(sourceId, snippets),
     );
   }, [updates, setSourceSnippets]);
+  useEffect(() => {
+    if (parsed) {
+      syncDocument(parsed);
+    }
+  }, [parsed, syncDocument]);
   return (
     <>
       <PreviewArea />
@@ -52,13 +64,16 @@ const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
   );
 };
 
-const renderWithProviders = (updates: Array<[string, Snippet[]]>) =>
+const renderWithProviders = (
+  updates: Array<[string, Snippet[]]>,
+  options: { document?: PreviewToken[] } = {},
+) =>
   render(
     <I18nextProvider i18n={i18n}>
       <MuiThemeProvider theme={theme}>
         <StyledThemeProvider theme={theme}>
           <SnippetsProvider>
-            <Harness updates={updates} />
+            <Harness updates={updates} document={options.document} />
           </SnippetsProvider>
         </StyledThemeProvider>
       </MuiThemeProvider>
@@ -354,11 +369,11 @@ describe('PreviewModal dialog', () => {
 
     expect(
       within(dialog).getAllByTestId('preview-snippet').map((s) => s.textContent),
-    ).toEqual(['Alpha', 'Beta', 'Gamma']);
+    ).toEqual(['Alpha', 'beta', 'gamma']);
     // Byte-identity with the old join for an unedited session
     // (model-migration parity assertion).
     expect(within(dialog).getByTestId('preview-segment-flow')).toHaveTextContent(
-      'Alpha Beta Gamma',
+      'Alpha beta gamma',
     );
 
     // Duplicate data-testids exist by design while open:
@@ -434,10 +449,51 @@ describe('PreviewModal dialog', () => {
 
     fireEvent.click(within(dialog).getByTestId('preview-copy-button'));
     await act(() => clipboardWriteText.mock.results[0]?.value ?? Promise.resolve());
-    expect(clipboardWriteText).toHaveBeenCalledWith('Hello Alpha');
+    expect(clipboardWriteText).toHaveBeenCalledWith('Hello alpha');
 
     const toast = await within(dialog).findByTestId('preview-copy-toast');
     expect(toast).toHaveTextContent('Text copied to clipboard');
+  });
+
+  it('writes the fully corrected payload from inside the dialog while both surfaces hold stale case (the shared copy fix)', async () => {
+    // A mid-typing document: the unedited chip sits lowercase at the
+    // document start — the per-input sync never corrects it, so both
+    // the inline flow and the modal's flow render the stale case.
+    renderWithProviders([], {
+      document: [
+        {
+          kind: 'snippet',
+          tokenId: 'text-1:a1',
+          sourceSnippetId: 'a1',
+          sourceId: 'text-1',
+          color: '#0080FF',
+          text: 'hello and more',
+          edited: false,
+        },
+      ],
+    });
+    fireEvent.click(screen.getByTestId('preview-modal-open-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Preview' });
+    const inlineFlow = screen.getAllByTestId('preview-segment-flow').find(
+      (flow) => !dialog.contains(flow),
+    );
+    expect(inlineFlow?.textContent).toBe('hello and more');
+    expect(
+      within(dialog).getByTestId('preview-segment-flow').textContent,
+    ).toBe('hello and more');
+
+    // The modal's copy button (the rail instance of the one shared
+    // component) writes the pass-corrected serialization.
+    fireEvent.click(within(dialog).getByTestId('preview-copy-button'));
+    await act(() => clipboardWriteText.mock.results[0]?.value ?? Promise.resolve());
+    expect(clipboardWriteText).toHaveBeenCalledWith('Hello and more');
+
+    // Copying never mutates the shared document: both surfaces keep
+    // the stale case until the next trigger.
+    expect(inlineFlow?.textContent).toBe('hello and more');
+    expect(
+      within(dialog).getByTestId('preview-segment-flow').textContent,
+    ).toBe('hello and more');
   });
 
   it('closes via the rail close button, unmounting the content and restoring focus to the trigger', async () => {
@@ -505,7 +561,7 @@ describe('PreviewModal dialog', () => {
     ).toBeNull();
     expect(
       within(dialog).getAllByTestId('preview-snippet').map((s) => s.textContent),
-    ).toEqual(['Alpha', 'Beta', 'Gamma']);
+    ).toEqual(['Alpha', 'beta', 'gamma']);
     expect(within(dialog).getByRole('status')).toHaveTextContent(
       'Snippet reorder cancelled.',
     );
@@ -567,7 +623,7 @@ describe('PreviewModal dialog', () => {
     const reopened = screen.getByRole('dialog', { name: 'Preview' });
     expect(
       within(reopened).getByTestId('preview-segment-flow'),
-    ).toHaveTextContent('Alpha Beta Gamma');
+    ).toHaveTextContent('Alpha beta gamma');
   });
 });
 
@@ -875,7 +931,7 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
         within(dialog)
           .getAllByTestId('preview-snippet')
           .map((chip) => chip.textContent),
-      ).toEqual(['Alpha', 'Beta', 'Gamma']);
+      ).toEqual(['Alpha', 'beta', 'gamma']);
       expect(screen.getByRole('dialog', { name: 'Preview' })).toBeInTheDocument();
     });
 
@@ -905,9 +961,9 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
         within(dialog)
           .getAllByTestId('preview-snippet')
           .map((chip) => chip.textContent),
-      ).toEqual(['Beta', 'Alpha', 'Gamma']);
+      ).toEqual(['Beta', 'alpha', 'gamma']);
       // …and so does the INLINE twin (the shared document).
-      expect(inlineFlow(dialog).textContent).toBe('Beta Alpha Gamma');
+      expect(inlineFlow(dialog).textContent).toBe('Beta alpha gamma');
     });
 
     it('drops the raised snippet at a word boundary inside the modal and the inline twin reflects it', async () => {
@@ -957,12 +1013,12 @@ describe('PreviewModal edit gating and inline↔modal typing sync', () => {
       // re-planted on the left, the boundary's own run on the right —
       // zero characters added or removed)…
       expect(inlineFlow(dialog).textContent).toBe(
-        'Alpha text Beta entered_by_user Gamma',
+        'Alpha text beta entered_by_user gamma',
       );
       // …and the modal's own flow shows the same shared document.
       expect(
         within(dialog).getByTestId('preview-segment-flow').textContent,
-      ).toBe('Alpha text Beta entered_by_user Gamma');
+      ).toBe('Alpha text beta entered_by_user gamma');
     });
   });
 });
@@ -1116,9 +1172,9 @@ describe('bounded height and the document limit inside the modal', () => {
     renderWithProviders(seedInterleaved());
     fireEvent.click(screen.getByTestId('preview-edit-toggle'));
     const inlineFlow = screen.getByTestId('preview-segment-flow');
-    // "Alpha Beta Gamma" serializes to 16 characters.
+    // "Alpha beta gamma" serializes to 16 characters.
     inlineFlow.appendChild(
-      document.createTextNode('x'.repeat(2000 - 'Alpha Beta Gamma'.length)),
+      document.createTextNode('x'.repeat(2000 - 'Alpha beta gamma'.length)),
     );
     fireEvent.input(inlineFlow);
     fireEvent.click(screen.getByTestId('preview-edit-toggle')); // OFF — commit
@@ -1164,11 +1220,11 @@ describe('bounded height and the document limit inside the modal', () => {
   it('the shared document limit caps the modal editor: the next printable keystroke is prevented at 2000', async () => {
     renderWithProviders(seedInterleaved());
     // Build the shared document to exactly 2000 characters inline
-    // ("Alpha Beta Gamma" serializes to 16).
+    // ("Alpha beta gamma" serializes to 16).
     fireEvent.click(screen.getByTestId('preview-edit-toggle'));
     const inlineFlow = screen.getByTestId('preview-segment-flow');
     inlineFlow.appendChild(
-      document.createTextNode('x'.repeat(2000 - 'Alpha Beta Gamma'.length)),
+      document.createTextNode('x'.repeat(2000 - 'Alpha beta gamma'.length)),
     );
     fireEvent.input(inlineFlow);
     fireEvent.click(screen.getByTestId('preview-edit-toggle')); // OFF — commit
@@ -1198,7 +1254,7 @@ describe('bounded height and the document limit inside the modal', () => {
     const probe = flows.find((flow) => !dialog.contains(flow));
     expect(probe).toBeDefined();
     expect(within(dialog).getByTestId('preview-segment-flow')).toHaveTextContent(
-      `Alpha Beta Gamma${'x'.repeat(2000 - 'Alpha Beta Gamma'.length)}`,
+      `Alpha beta gamma${'x'.repeat(2000 - 'Alpha beta gamma'.length)}`,
     );
   });
 });
