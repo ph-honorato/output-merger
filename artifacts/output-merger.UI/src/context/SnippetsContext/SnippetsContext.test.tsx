@@ -734,6 +734,241 @@ describe("snippetsReducer — case-aware reconciliation", () => {
   });
 });
 
+describe("snippetsReducer — spacing-fix triggers", () => {
+  it("collapses a chip-edge + separator seam at creation (SET_SOURCE_SNIPPETS)", () => {
+    let state = snippetsReducer(
+      initialSnippetsState,
+      setSource("text-1", [makeSnippet("a1", "brave ")]),
+    );
+    state = snippetsReducer(state, setSource("text-2", [makeSnippet("b1", "today")]));
+
+    // The chip cut with a trailing space lands beside a separator: the
+    // two spaces collapse to one, and the document-start chip
+    // capitalizes.
+    expect(serialize(state.tokens)).toBe("Brave today");
+    expect(kindSignature(state)).toEqual(["snippet", "text", "snippet"]);
+  });
+
+  it("drops the separator before a punctuation-initial chip at creation", () => {
+    let state = snippetsReducer(
+      initialSnippetsState,
+      setSource("text-1", [makeSnippet("a1", "The end")]),
+    );
+    state = snippetsReducer(state, setSource("text-2", [makeSnippet("b1", "...")]));
+
+    expect(serialize(state.tokens)).toBe("The end...");
+    expect(kindSignature(state)).toEqual(["snippet", "snippet"]);
+  });
+
+  it("skips the pass while the focused surface owns its DOM (SYNC_DOCUMENT keeps stale spacing), then corrects on the next trigger — a no-op move", () => {
+    let state = snippetsReducer(
+      initialSnippetsState,
+      syncDocument([
+        ownText("  A ,B  C "),
+        chipToken("text-1:a1", "x"),
+      ]),
+    );
+    // The mid-typing sync never corrects: the document holds the
+    // typed spacing verbatim (chip interiors included).
+    expect(serialize(state.tokens)).toBe("  A ,B  C x");
+
+    // An inert move (the chip's own gap) still runs the whole-document
+    // recompute: the leading run trims, the interior run collapses,
+    // the space before "," drops, and the seam before the chip keeps
+    // its one space.
+    state = snippetsReducer(state, moveToken(1, 1));
+    expect(serialize(state.tokens)).toBe("A,B C x");
+
+    // Once corrected, the same no-op is reference-identical.
+    const corrected = state;
+    expect(snippetsReducer(state, moveToken(1, 1))).toBe(corrected);
+  });
+
+  it("corrects stale spacing through both move actions (moves both sides)", () => {
+    // MOVE_TOKEN: a real reorder (B to the leading gap, carrying its
+    // separator) — the stale doubled/trailing spacing settles with it.
+    let state = snippetsReducer(
+      initialSnippetsState,
+      syncDocument([
+        chipToken("text-1:a1", "A"),
+        ownText(" "),
+        chipToken("text-2:b1", "B"),
+        ownText("  tail  "),
+      ]),
+    );
+    expect(serialize(state.tokens)).toBe("A B  tail  ");
+    state = snippetsReducer(state, moveToken(2, 0));
+    expect(serialize(state.tokens)).toBe("B A tail");
+
+    // MOVE_TOKEN_TO_LANDING (text-split): the chip drops inside the
+    // own text and the whole-document recompute settles the boundary
+    // runs (the carried separator plants one side, the boundary's own
+    // run pads the other, the doubled runs collapse).
+    state = snippetsReducer(
+      initialSnippetsState,
+      syncDocument([
+        chipToken("text-1:a1", "A"),
+        ownText(" "),
+        chipToken("text-2:b1", "B"),
+        ownText("  tail  "),
+      ]),
+    );
+    state = snippetsReducer(state, {
+      type: "MOVE_TOKEN_TO_LANDING",
+      fromIndex: 2,
+      landing: { kind: "text-split", tokenIndex: 3, boundaryOffset: 6 },
+    });
+    expect(serialize(state.tokens)).toBe("A tail B");
+  });
+
+  it("re-runs the composed pass on SET_CASE_FIX_LANGUAGE (the spacing stage is language-independent)", () => {
+    let state = snippetsReducer(
+      initialSnippetsState,
+      syncDocument([ownText("  Hi  there ")]),
+    );
+    expect(serialize(state.tokens)).toBe("  Hi  there ");
+
+    state = snippetsReducer(state, setCaseFixLanguage("pt"));
+    expect(state.caseFixLanguage).toBe("pt");
+    expect(serialize(state.tokens)).toBe("Hi there");
+
+    // The same language again, over the settled document: a
+    // reference-identical no-op.
+    const corrected = state;
+    expect(snippetsReducer(state, setCaseFixLanguage("pt"))).toBe(corrected);
+  });
+
+  it("corrects the seams around a frozen chip while its text and edges stay untouched", () => {
+    let state = snippetsReducer(
+      initialSnippetsState,
+      syncDocument([
+        chipToken("text-1:a1", "Stop ", true),
+        ownText(" !"),
+      ]),
+    );
+    expect(serialize(state.tokens)).toBe("Stop  !");
+
+    state = snippetsReducer(state, moveToken(0, 0));
+    // The own-side space before "!" strips; the frozen chip's trailing
+    // edge survives (frozen wins).
+    expect(serialize(state.tokens)).toBe("Stop !");
+    const frozen = state.tokens.filter(isSnippetToken)[0] as SnippetToken;
+    expect(frozen.text).toBe("Stop ");
+    expect(frozen.edited).toBe(true);
+
+    // The next trigger keeps it settled — reference-identical.
+    const corrected = state;
+    expect(snippetsReducer(state, moveToken(0, 0))).toBe(corrected);
+  });
+
+  it("keeps glued seams byte-identical through a trigger (the pinned glue shapes)", () => {
+    // A chip glued to own text with a non-trigger ending: no insertion.
+    let state = snippetsReducer(
+      initialSnippetsState,
+      syncDocument([chipToken("text-1:a1", "Alpha"), ownText("mytext")]),
+    );
+    expect(serialize(state.tokens)).toBe("Alphamytext");
+    state = snippetsReducer(state, setEditEnabled(true));
+    expect(serialize(state.tokens)).toBe("Alphamytext");
+
+    // Own text carrying the single space before a frozen chip.
+    state = snippetsReducer(
+      initialSnippetsState,
+      syncDocument([ownText("mytext "), chipToken("text-1:a1", "XBeta", true)]),
+    );
+    expect(serialize(state.tokens)).toBe("mytext XBeta");
+    state = snippetsReducer(state, setEditEnabled(true));
+    expect(serialize(state.tokens)).toBe("mytext XBeta");
+
+    // A follower starting with a before-set character keeps the seam
+    // zero-space: the removal rule wins, nothing is inserted.
+    state = snippetsReducer(
+      initialSnippetsState,
+      syncDocument([chipToken("text-1:a1", "Hello,"), ownText(",more")]),
+    );
+    expect(serialize(state.tokens)).toBe("Hello,,more");
+    state = snippetsReducer(state, setEditEnabled(true));
+    expect(serialize(state.tokens)).toBe("Hello,,more");
+  });
+});
+
+describe("snippetsReducer — spacing-aware reconciliation", () => {
+  it("treats a spacing-only source re-emission as a no-op (the reference-identical state)", () => {
+    // Creation: the chip cut with a trailing space lands beside a
+    // separator — the stored chip's edge is stripped beside it.
+    let state = snippetsReducer(
+      initialSnippetsState,
+      setSource("text-1", [makeSnippet("a1", "WordA ")]),
+    );
+    state = snippetsReducer(state, setSource("text-2", [makeSnippet("b1", "x")]));
+    expect(serialize(state.tokens)).toBe("WordA x");
+    const before = state;
+
+    // The source re-sends its original text with the trailing space:
+    // the stored chip was edge-stripped; the canonical comparison
+    // absorbs the spacing-only difference — reference-identical.
+    state = snippetsReducer(state, setSource("text-1", [makeSnippet("a1", "WordA ")]));
+    expect(state).toBe(before);
+
+    // A genuine text difference still transitions.
+    state = snippetsReducer(state, setSource("text-1", [makeSnippet("a1", "WordB ")]));
+    expect(serialize(state.tokens)).toBe("WordB x");
+    expect(state).not.toBe(before);
+  });
+
+  it("keeps the edited-detection comparison exact: a spacing-only retyping inside a chip freezes it", () => {
+    let state = snippetsReducer(
+      initialSnippetsState,
+      setSource("text-1", [makeSnippet("a1", "WordA")]),
+    );
+    expect(serialize(state.tokens)).toBe("WordA");
+
+    // The user retypes a trailing space into the chip: the sync
+    // compares texts EXACTLY, so the chip freezes — and its frozen
+    // edge then survives the document-end trim.
+    state = snippetsReducer(state, syncDocument([chipToken("text-1:a1", "WordA ")]));
+    const frozen = state.tokens[0] as SnippetToken;
+    expect(frozen.text).toBe("WordA ");
+    expect(frozen.edited).toBe(true);
+
+    state = snippetsReducer(state, setEditEnabled(true));
+    const stillFrozen = state.tokens[0] as SnippetToken;
+    expect(stillFrozen.text).toBe("WordA ");
+    expect(stillFrozen.edited).toBe(true);
+  });
+
+  it("keeps a spacing-only source re-emission churn-free through the provider: the same document reference, zero re-renders", () => {
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useSnippets();
+    }, {
+      wrapper: SnippetsProvider,
+    });
+
+    act(() => {
+      result.current.setSourceSnippets("text-1", [makeSnippet("a1", "WordA ")]);
+    });
+    act(() => {
+      result.current.setSourceSnippets("text-2", [makeSnippet("b1", "x")]);
+    });
+    expect(serialize(result.current.document)).toBe("WordA x");
+    const documentBefore = result.current.document;
+    const rendersBefore = renders;
+
+    // The stored chip was edge-stripped at creation; the source
+    // re-sends its original text with the trailing space: the
+    // reconciliation no-op guard returns the reference-identical
+    // state — no re-render.
+    act(() => {
+      result.current.setSourceSnippets("text-1", [makeSnippet("a1", "WordA ")]);
+    });
+
+    expect(result.current.document).toBe(documentBefore);
+    expect(renders).toBe(rendersBefore);
+  });
+});
+
 describe("snippetsReducer — the case-fix language rides in state", () => {
   it("updates the state's language and re-derives the document casing through the pass", () => {
     // A mid-typing sync leaves stale casing (the focused surface

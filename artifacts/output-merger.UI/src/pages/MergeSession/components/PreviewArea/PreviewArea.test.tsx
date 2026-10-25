@@ -336,9 +336,11 @@ describe("PreviewArea", () => {
   });
 
   it("renders the flow text exactly as the serialized document (WYSIWYG invariant)", () => {
-    // 'b1' ends with a space: the resulting double space in the join is
-    // by-design (clipboard parity — join semantics preserved by the
-    // explicit separator tokens).
+    // 'b1' ends with a space: the old join produced a double space at
+    // the chip-edge + separator seam. The spacing pass collapses that
+    // seam to exactly one space (the separator survives as the
+    // carried material), so the rendered flow and the model both read
+    // the corrected single-space seam.
     renderWithProviders([
       ["text-1", [makeSnippet("a1", "Hello")]],
       ["text-2", [makeSnippet("b1", "brave ")]],
@@ -348,10 +350,8 @@ describe("PreviewArea", () => {
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
       screen.getByTestId("document-probe").textContent,
     );
-    // Byte-identity with the old buildMergedText join for an unedited
-    // session (model-migration parity assertion).
     expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-      "Hello brave  world today",
+      "Hello brave world today",
     );
   });
 
@@ -2791,6 +2791,10 @@ describe("PreviewArea editing workflows", () => {
 
       typeRealistic(flow, myText, myText.data.length, "X");
 
+      // "mytext XBeta" is a DELIBERATE spacing oracle: the single
+      // space at the seam is exactly what the rules keep, and the
+      // chip's leading edge is never touched (a frozen follower is no
+      // obstacle for corrections around it).
       expect(chip.textContent).toBe("XBeta");
       expect(screen.getByTestId("document-probe").textContent).toBe(
         "mytext XBeta",
@@ -2812,6 +2816,9 @@ describe("PreviewArea editing workflows", () => {
       const myText = document.createTextNode("mytext");
       flow.appendChild(myText);
       fireEvent.input(flow);
+      // "Alphamytext" is a DELIBERATE spacing oracle: letter-ending
+      // glue never gains a space (no trigger character ends the
+      // chip), mid-typing and through every later trigger alike.
       expect(screen.getByTestId("document-probe").textContent).toBe(
         "Alphamytext",
       );
@@ -3048,7 +3055,10 @@ describe("PreviewArea editing workflows", () => {
       realisticInput(flow, { inputType: "insertText", data: "X" });
 
       // The run redirected into chipB (prepend) and one space parts
-      // the own text from the grown chip.
+      // the own text from the grown chip. The "Alphatext Xbeta" seam
+      // is a DELIBERATE spacing oracle: "text" ends in a non-trigger
+      // letter, so the spacing pass never inserts after it — the
+      // single space is exactly what the seam rules keep.
       expect(
         screen.getAllByTestId("preview-snippet")[1].textContent,
       ).toBe("Xbeta");
@@ -4507,12 +4517,13 @@ describe("PreviewArea word-boundary landings", () => {
       // The text token split around the chip: one space each side
       // (the boundary's own run pads the right side, the planted
       // space — no separator was carried — the left; the documented
-      // multiset exception). Alpha lands between the words.
+      // multiset exception). Alpha lands between the words, and the
+      // text's leading run — now at the document start — trims.
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        " text alpha entered_by_user beta",
+        "text alpha entered_by_user beta",
       );
       expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
-        " text alpha entered_by_user beta",
+        "text alpha entered_by_user beta",
       );
       expect(screen.queryByTestId("preview-drop-indicator")).toBeNull();
     });
@@ -4525,7 +4536,7 @@ describe("PreviewArea word-boundary landings", () => {
       expect(needleLandingOf()).toBe("preview-landing:s:1:22");
       fireEvent.pointerUp(document, { pointerId: 1, clientX: 204, clientY: 10 });
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        " text entered_by_user alpha beta",
+        "text entered_by_user alpha beta",
       );
 
       // Reset: drain dnd-kit's delayed click-suppression removal
@@ -4544,7 +4555,7 @@ describe("PreviewArea word-boundary landings", () => {
       expect(needleLandingOf()).toBe("preview-landing:g:3");
       fireEvent.pointerUp(document, { pointerId: 1, clientX: 324, clientY: 10 });
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        " text entered_by_user betaAlpha",
+        "text entered_by_user betaAlpha",
       );
     });
 
@@ -4676,8 +4687,10 @@ describe("PreviewArea word-boundary landings", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
+      // Alpha drops between the words: the text's leading run — now at
+      // the document start — trims.
       expect(screen.getByTestId("document-probe").textContent).toBe(
-        " text alpha entered_by_user beta",
+        "text alpha entered_by_user beta",
       );
       expect(screen.getByRole("status")).toHaveTextContent(
         "Snippet dropped at position 1 of 2.",
@@ -6224,5 +6237,167 @@ describe("case-fix pass — creation and sort flips (inline)", () => {
     expect(screen.getByTestId("document-probe").textContent).toBe("Paris hello");
     const [frozen] = screen.getAllByTestId("preview-snippet");
     expect(frozen.textContent).toBe("Paris");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The spacing-fix pass on the visible document: creation-time and
+// sort-time corrections land through the wrapper's whole-document
+// recompute, the surfaces re-render from the settled model (WYSIWYG
+// parity), and deliberately glued seams survive every trigger.
+// ---------------------------------------------------------------------------
+
+describe("spacing-fix pass — visible corrections (inline)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("collapses a chip-edge + separator seam at creation (the flow renders the settled model)", () => {
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "brave ")]],
+      ["text-2", [makeSnippet("b1", "today")]],
+    ]);
+    // The chip cut with a trailing space lands beside a separator:
+    // the two spaces collapse to one, and the document-start chip
+    // capitalizes — the probe (model) and the flow (DOM) agree.
+    expect(screen.getByTestId("document-probe").textContent).toBe("Brave today");
+    expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+      screen.getByTestId("document-probe").textContent,
+    );
+  });
+
+  it("keeps a deliberately glued seam through a trigger (the pinned glue shape stays byte-identical)", () => {
+    renderWithProviders([["text-1", [makeSnippet("a1", "Alpha")]]]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    // Own text glued directly after the chip: letter-ending glue is
+    // deliberate user intent.
+    flow.appendChild(document.createTextNode("mytext"));
+    fireEvent.input(flow);
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alphamytext");
+
+    // Toggling edit OFF commits the focused DOM and runs the composed
+    // pass: the glue gains no space (no trigger character ends the
+    // chip) — the seam stays byte-identical, the escape hatch for
+    // deliberately joined text.
+    enableEditing();
+    expect(screen.getByTestId("document-probe").textContent).toBe("Alphamytext");
+    expect(screen.getByTestId("preview-segment-flow").textContent).toBe("Alphamytext");
+  });
+
+  it("settles stale spacing through a keyboard sort — the drop's whole-document recompute corrects the mid-typing document", async () => {
+    installSegmentRects({
+      chips: {
+        alpha: SEGMENT_RECTS.Alpha,
+      },
+      landings: {
+        "preview-landing:s:1:0": 104,
+        "preview-landing:s:1:5": 150,
+        "preview-landing:s:1:12": 204,
+        "preview-landing:g:3": 224,
+      },
+    });
+    renderWithProviders([
+      ["text-1", [makeSnippet("a1", "Alpha")]],
+      ["text-2", [makeSnippet("b1", "Beta")]],
+    ]);
+    enableEditing();
+    const flow = screen.getByTestId("preview-segment-flow");
+    act(() => {
+      flow.focus();
+    });
+    // The user retypes the separator into own words carrying a
+    // doubled interior run: the mid-typing sync keeps the stale
+    // spacing while the focused surface owns its DOM.
+    const separator = Array.from(flow.childNodes).find(
+      (node) => node.nodeType === Node.TEXT_NODE,
+    ) as Text;
+    separator.data = " text  more ";
+    fireEvent.input(flow);
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "Alpha text  more beta",
+    );
+
+    // Thaw and re-focus so the words' landing anchors re-render from
+    // the synced model before lifting (the blur remounts the flow —
+    // re-query the live node).
+    act(() => {
+      fireEvent.blur(flow);
+    });
+    const liveFlow = screen.getByTestId("preview-segment-flow");
+    expect(liveFlow).not.toBe(flow);
+    act(() => {
+      liveFlow.focus();
+    });
+
+    const hostKey = (key: string, code: string) => {
+      const keydown = new KeyboardEvent("keydown", {
+        key,
+        code,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        liveFlow.dispatchEvent(keydown);
+      });
+      return keydown;
+    };
+    const setCaretInNode = (node: Node, offset: number) => {
+      const range = document.createRange();
+      range.setStart(node, offset);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    };
+    const needleLandingOf = () =>
+      (screen.getByTestId("preview-drop-indicator")
+        .previousSibling as HTMLElement).dataset.landing;
+
+    const [alpha] = screen.getAllByTestId("preview-snippet");
+    setCaretInNode(alpha.firstChild as Text, 2);
+    act(() => {
+      liveFlow.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: " ",
+          code: "Space",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByTestId("preview-snippet-overlay")).toBeInTheDocument();
+    expect(needleLandingOf()).toBe("preview-landing:g:0");
+
+    // Walk to the word boundary at the doubled run's start and drop
+    // there: the move runs the whole-document recompute, so the
+    // doubled run collapses and the document-start run trims — the
+    // surface re-renders from the settled model.
+    hostKey("ArrowRight", "ArrowRight");
+    expect(needleLandingOf()).toBe("preview-landing:s:1:0");
+    hostKey("ArrowRight", "ArrowRight");
+    expect(needleLandingOf()).toBe("preview-landing:s:1:5");
+    const enter = hostKey("Enter", "Enter");
+    expect(enter.defaultPrevented).toBe(true);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByTestId("document-probe").textContent).toBe(
+      "text alpha more beta",
+    );
+    expect(screen.getByTestId("preview-segment-flow").textContent).toBe(
+      screen.getByTestId("document-probe").textContent,
+    );
   });
 });

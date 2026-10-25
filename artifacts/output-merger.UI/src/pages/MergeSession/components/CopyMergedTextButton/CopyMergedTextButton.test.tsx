@@ -272,6 +272,66 @@ describe('CopyMergedTextButton', () => {
     });
   });
 
+  it('writes the fully settled payload while the visible document holds stale spacing (the copy closes the stale window)', async () => {
+    // Mid-typing shape: a punctuation-ending chip glued to word
+    // content plus doubled/trailing spaces — the per-input sync never
+    // corrects while the focused surface owns its DOM, so the visible
+    // document is stale-spaced.
+    renderWithProviders(
+      [],
+      {
+        document: [
+          chipToken('text-1:a1', 'Hello,'),
+          ownText('world'),
+          ownText(' tail  end '),
+        ],
+      },
+    );
+    expect(screen.getByTestId('harness-document-probe').textContent).toBe(
+      'Hello,world tail  end ',
+    );
+
+    fireEvent.click(screen.getByTestId('preview-copy-button'));
+    await act(() => writeText.mock.results[0]?.value ?? Promise.resolve());
+    // The composed pass inserts the space after ",", collapses the
+    // doubled run, and trims the trailing edge.
+    expect(writeText).toHaveBeenCalledWith('Hello, world tail end');
+
+    // Copying never mutates the context document: the visible text
+    // keeps the stale spacing until the next trigger.
+    expect(screen.getByTestId('harness-document-probe').textContent).toBe(
+      'Hello,world tail  end ',
+    );
+  });
+
+  it('never mutates the context document when the copy applies spacing corrections', async () => {
+    const holder: { tokens: PreviewToken[] | null } = { tokens: null };
+    renderWithProviders(
+      [],
+      {
+        document: [chipToken('text-1:a1', 'Hello,'), ownText('world')],
+        onDocument: (document) => {
+          holder.tokens = document;
+        },
+      },
+    );
+    const before = holder.tokens;
+    expect(before).not.toBeNull();
+    const beforeSerialized = serialize(before!);
+
+    fireEvent.click(screen.getByTestId('preview-copy-button'));
+    await act(() => writeText.mock.results[0]?.value ?? Promise.resolve());
+    expect(writeText).toHaveBeenCalledWith('Hello, world');
+
+    // The pass prepends the space to a transformed copy of the
+    // follower — the context tokens keep their references and text.
+    expect(holder.tokens).toBe(before);
+    expect(serialize(holder.tokens!)).toBe(beforeSerialized);
+    holder.tokens!.forEach((token, index) => {
+      expect(token).toBe(before![index]);
+    });
+  });
+
   it("re-derives the corrected payload when the UI language changes — the memo keyed on the store's language field (the rule sets are content-identical today)", async () => {
     renderWithProviders(
       [],

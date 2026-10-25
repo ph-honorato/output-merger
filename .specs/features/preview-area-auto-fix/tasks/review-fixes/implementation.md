@@ -193,3 +193,83 @@ const mergedText = useMemo(
 - **The two same-language reference-identity tests** cover the transition's no-op safety over the empty initial state and over a corrected document; the wrapper's no-op-transition pass behavior means a same-language dispatch over a STALE document still corrects it — that is the established every-transition-except-SYNC contract, not a leak.
 - **The `data-case-fix-language` probe attribute** is test-harness DOM (same category as the pre-existing `DocumentProbe`); no production component renders it.
 - The ADR amendments are mechanism-only inline edits (three sentences); every decision, trigger, guard, and policy in ADR 0005 is untouched.
+
+---
+
+# Review Round 2 — Spacing Auto-Fix (internal review — 2026-10-25)
+
+**Implemented:** 2026-10-25
+**Spec:** internal — the internal review of the completed Spacing Auto-Fix implementation (roadmap Feature 4 Task 2), commissioned by the user after the external review of the spacing task timed out on `src/utils/previewDocument.ts` and returned 0 findings for the other two reviewed files. 7 findings, all `minor`/`low`, no blockers: 5 fixed (1, 2, 3, 4, 6), 2 deferred with documentation (5, 7). Fix-only task per this record's precedent — the findings are the specification; the governing spec for every value decision is the locked Spacing Auto-Fix spec (`.specs/features/preview-area-auto-fix/tasks/spacing-auto-fix/spec.md`), as implemented in its `implementation.md`. The findings' behavior/reachability analyses were reviewer-verified before handoff.
+**Code:** `artifacts/output-merger.UI/src/`
+**Status:** Implemented — both correctness findings resolved with zero behavior change for every current caller; both test gaps pinned; the false comment corrected; the dead code dropped. 569 automated tests pass (565 before + 4 new; every pre-existing test passed unmodified), `npx tsc -b`, `npm run lint` (oxlint), and `npm run build` all clean.
+
+## 1. Findings and dispositions
+
+| # | Finding (severity) | Disposition |
+| - | ----------------- | ----------- |
+| 1 | The minted `${rightChipTokenId}:separator` id is not "free": reconciliation mints the same pattern for appended chips and the move-carry path relocates a separator with its object and id intact, so a mint at a glued seam can duplicate a relocated one (reviewer probe: two tokens sharing `src2:bee:separator`). No consequence today — only snippet tokens render `data-token-id`, the parser re-mints own-text ids, and no comparison is id-keyed for own text. The `applySpacingInsertions` docblock claimed the id was free. (minor, correctness + comment) | **Fixed** — the comment corrected to the truthful mechanism; a unit row pins the duplicate shape so any future id-keying fails loudly. The id pattern itself is spec-locked and unchanged |
+| 2 | `tokensEqualCanonicalCase` violated its documented contract on un-normalized input: adjacent own-text arrays that settle to identical serialization compared UNEQUAL (the survivor ladder lands the surviving space in different tokens; the pass never merges adjacent runs). Latent only — the wrapper normalizes before the pass — but a contract trap for future callers. (minor, correctness) | **Fixed** — the guard now normalizes both sides before the composed pass, making the contract unconditional; unit rows added for the previously-breaking shape and a genuinely-different pair |
+| 3 | NBSP rows missing although the spec's edge-case list names "tabs, non-breaking spaces". The `/\s` predicate matches U+00A0 and the behavior is probe-verified correct (interior collapse, edge strip/carry, NBSP-only material drops) — but nothing pinned it. (minor, test) | **Fixed** — NBSP rows added: interior run collapse, a seam edge carrying the one space as U+0020, a zero-space-seam edge strip, and NBSP-only material dropping at the document edge |
+| 4 | Chip trailing-`"\n"` edge stripping is production-reachable (chips keep trailing whitespace including `"\n"`; `trimRangeStart` trims only leading) and unpinned: a non-frozen chip's trailing newline strips at the doc end, before punctuation followers, and beside line-break tokens (the token itself surviving); a frozen chip keeps it. Follows the locked rules — but user-visible and unpinned. (minor, test) | **Fixed** — rows added pinning all four shapes, putting the spec-consistent behavior on record as a decision, not an accident |
+| 5 | Naming/micro-duplication in the seam walk: `pending` vs `passed` one letter apart; the drop-all tail triplicated across the walk's exits; the `-1` no-survivor sentinel. (low, maintainability) | **Deferred** — documented in §3 |
+| 6 | Dead `?? ['']` fallbacks after always-matching regexes (`/^\s*/` and `/\s*$/` always match, zero-width allowed) — unreachable and misleading. (low, maintainability) | **Fixed** — the three fallbacks dropped |
+| 7 | `tokensEqualCanonicalCase` undersells its case+spacing scope (rename candidate `tokensEqualCanonical` — a cross-file change). (low, maintainability) | **Deferred** — documented in §3 |
+
+## 2. What changed per fix
+
+### Fix 1 — the minted id: truthful comment + the duplicate pinned
+
+- `applySpacingInsertions`'s docblock now states the mechanism truthfully: the mint is deterministic, and the id is not unique by construction — reconciliation mints the same pattern for appended chips, a move relocates a separator token with its id intact, so a mint can duplicate a relocated one; inert, because nothing keys own-text tokens by id (the parse re-mints their ids). The false "free because the glue only exists after the original separator was deleted" claim is gone from the code.
+- New unit row (the reviewer's probe shape): `applySpacingFix([frozen "End."][chip "src2:bee" "b"][sep "src2:bee:separator"][chip "x"])` → serialized `'End. b x'`, five tokens, with the minted token at index 1 and the relocated separator at index 3 both asserted (structure + text) to carry `tokenId: 'src2:bee:separator'` — the duplicate is the point: any future id-keying of own text fails loudly at this row instead of silently.
+- Provenance note: the "free" claim traces to the spec's own SPACING-15 criterion wording (2026-10-23). The spec is a locked, dated record and stays untouched; the code comment is where the mechanism must be truthful, and now is. (The Task 2 implementation record never carried the claim — its §2 phrasing already said only "deterministic".)
+
+### Fix 2 — the canonical comparison: unconditional contract
+
+```ts
+export function tokensEqualCanonicalCase(
+  a: PreviewToken[],
+  b: PreviewToken[],
+  languageTag?: string,
+): boolean {
+  return tokensEqual(
+    applyAutoFix(normalizeTextTokens(a), languageTag),
+    applyAutoFix(normalizeTextTokens(b), languageTag),
+  );
+}
+```
+
+- Both sides are normalized (adjacent own-text runs merged) BEFORE the composed pass, making the docblock's "differ only in pass-correctable case or spacing compare equal" unconditional: the pass resolves seams per token shape, so differently shaped documents can settle to the same serialization with the surviving space carried by different tokens. The docblock now documents the normalization step at the definition site.
+- Behavior-neutral for every current caller (the wrapper normalizes before the pass; `normalizeTextTokens` returns the same reference for already-normalized input, so normalized callers pay ~nothing — the reviewer verified the composition pure/idempotent/reference-stable/O(n)). Empirically confirmed: all 565 pre-existing tests passed unmodified after the change.
+- New unit rows: `[own "a  "][own "b"]` vs `[own "a"][own " b"]` → equal (both directions — the previously-breaking pair), and `[own "a"][own "c"]` → still unequal.
+
+### Fix 3 — NBSP rows (the `/\s` identity made visible)
+
+- New `it` in the collapse-and-edges describe: `a\u00A0\u00A0b` → `a b` (interior NBSP run collapses to one U+0020); `[chip "A"][own "\u00A0b"]` → `A b` (an NBSP edge run carries the seam's one space as U+0020); `[own "a\u00A0"][chip ",x"]` → `a,x` (an NBSP edge strips at a zero-space seam); `[chip "A"][own "\u00A0"]` → the NBSP-only material token drops at the document edge (the chip survives); `[own "\u00A0\u00A0"]` → the empty document.
+
+### Fix 4 — chip trailing-newline edge rows (a decision on record)
+
+- New `it` in the line-breaks describe, pinning: `[chip "A\n"]` → `'A'` (the doc-end trim strips a non-frozen chip's trailing newline); `[chip "A\n"][own ",x"]` → `'A,x'` (the zero-space seam before a punctuation follower strips it); `[chip "A\n"][line-break]` → `'A\n'` with the line-break TOKEN count preserved (the chip's edge newline strips, the token does not); `[chip "A\n" frozen]` → `'A\n'` (a frozen chip's edge survives every trim). Pinning rationale: the strips follow the locked rules (edges-are-seams with the `/\s` identity; "line breaks preserved" governs line-break tokens, not newlines inside chip text) and are production-reachable and user-visible — the rows make the behavior a recorded decision rather than an accident of the `/\s` predicate.
+
+### Fix 6 — dead fallbacks dropped
+
+- The three `?? ['']` fallbacks in `decomposeSpacingSlice` are gone: `/^\s*/` and `/\s*$/` always match (zero-width allowed), so the extractions index the exec result directly (`/\s*$/.exec(text)![0]`), with a one-line comment above the pair stating why the index is safe. `tsc -b` and oxlint both accept the non-null assertions (no such precedent existed in the codebase — the reducer's equivalent always-match sites use dead-branch ternaries — but the finding asked for the dead code to go, and the assertion is the minimal honest form).
+
+## 3. Deferred findings (documented, not applied)
+
+- **Finding 5 — seam-walk naming/micro-duplication** (`pending` vs `passed` one letter apart; the triplicated drop-all tail; the `-1` no-survivor sentinel). Deferred per the reviewer's rationale: the seam walk is the pass's hardest-to-verify code — its determinism and idempotence are what the canonical comparison and the oracle sweeps depend on — and the zero-core transparency fix already touched it once; a cosmetic rename/refactor risks behavior drift for zero observable gain. If ever applied, it deserves its own round verified against the full reducer oracle sweep.
+- **Finding 7 — `tokensEqualCanonicalCase` name undersells case+spacing** (rename candidate `tokensEqualCanonical`). Deferred: the rename is a cross-file change (utils export + the reducer import + the three suites importing it), and the updated docblock (this round's Fix 2 rewrite) states the case+spacing scope at the definition site; the reducer's call site comment already says "canonical through the composed auto-fix pass (case and spacing)".
+
+## 4. Verification (2026-10-25, Git Bash, `artifacts/output-merger.UI`)
+
+- `npx vitest run` — **569/569 across 19 files** (was 565; +4 new, all in `previewDocument.test.ts`: the duplicate-mint pin, the normalized-comparison rows, the NBSP rows, the chip-trailing-newline rows). Every one of the 565 pre-existing tests passed WITHOUT modification — the constraint's tripwire; a failure would have meant a fix was wrong.
+- `npx tsc -b` — clean.
+- `npm run lint` (oxlint) — clean.
+- `npm run build` (`tsc -b && vite build`) — clean; the >500 kB chunk-size note is informational and pre-existing.
+
+## 5. Notes for the Tester
+
+- **Fix 2 is the one to re-derive by hand**: the guard now composes `normalizeTextTokens` → `applyAutoFix` on both sides. Confirm the no-op guard behavior is unchanged on normalized inputs (the spacing-only re-emission tests and the provider render-count pin all passed unmodified) and that the `normalizeTextTokens` reference-identity fast path keeps the already-normalized callers at ~zero cost.
+- **Fix 1's new row deliberately asserts id DUPLICATION** — the row must not be "fixed" by uniquifying the mint; the id pattern is spec-locked and the duplicate's inertness (nothing id-keys own text) is the pinned fact.
+- **Fix 4's rows put a user-visible behavior on record**: confirm you read edges-are-seams + the `/\s` identity the same way (chip-text newlines strip as edge whitespace; line-break tokens survive; frozen chips keep everything).
+- **Fix 6's non-null assertions** are a new idiom for this codebase (the pre-existing always-match sites used dead-branch ternaries) — flag if you'd rather see the `replace`-slice idiom instead.
+- Findings 5 and 7 are documented in §3; if you want them applied, give them their own round (the seam-walk rename especially deserves the full oracle sweep).

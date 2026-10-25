@@ -496,6 +496,48 @@ describe('PreviewModal dialog', () => {
     ).toBe('hello and more');
   });
 
+  it('writes the settled payload from inside the dialog while both surfaces hold stale spacing (the shared copy fix)', async () => {
+    // Mid-typing: a punctuation-ending chip glued to word content plus
+    // doubled/trailing spaces — the per-input sync keeps both the
+    // inline flow and the modal's flow stale-spaced.
+    renderWithProviders([], {
+      document: [
+        {
+          kind: 'snippet',
+          tokenId: 'text-1:a1',
+          sourceSnippetId: 'a1',
+          sourceId: 'text-1',
+          color: '#0080FF',
+          text: 'Hello,',
+          edited: false,
+        },
+        { kind: 'text', tokenId: 'own-1', text: 'world' },
+        { kind: 'text', tokenId: 'own-2', text: ' tail  end ' },
+      ],
+    });
+    fireEvent.click(screen.getByTestId('preview-modal-open-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Preview' });
+    const inlineFlow = screen.getAllByTestId('preview-segment-flow').find(
+      (flow) => !dialog.contains(flow),
+    );
+    expect(inlineFlow?.textContent).toBe('Hello,world tail  end ');
+    expect(
+      within(dialog).getByTestId('preview-segment-flow').textContent,
+    ).toBe('Hello,world tail  end ');
+
+    // The rail copy writes the composed pass's settled serialization.
+    fireEvent.click(within(dialog).getByTestId('preview-copy-button'));
+    await act(() => clipboardWriteText.mock.results[0]?.value ?? Promise.resolve());
+    expect(clipboardWriteText).toHaveBeenCalledWith('Hello, world tail end');
+
+    // Nothing mutates: both surfaces stay stale until the next
+    // trigger.
+    expect(inlineFlow?.textContent).toBe('Hello,world tail  end ');
+    expect(
+      within(dialog).getByTestId('preview-segment-flow').textContent,
+    ).toBe('Hello,world tail  end ');
+  });
+
   it('closes via the rail close button, unmounting the content and restoring focus to the trigger', async () => {
     renderWithProviders(seedInterleaved());
     const trigger = screen.getByTestId('preview-modal-open-button');

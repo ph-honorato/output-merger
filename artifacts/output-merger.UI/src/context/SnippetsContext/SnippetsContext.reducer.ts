@@ -1,6 +1,6 @@
 import { i18n } from '@translation';
 import {
-  applyCaseFix,
+  applyAutoFix,
   buildSnippetTokenId,
   isSeparatorToken,
   isSnippetToken,
@@ -129,11 +129,12 @@ function reconcileSourceSnippets(
     (key) => !key.startsWith(prefix) || incomingIds.has(key.slice(prefix.length)),
   );
 
-  // No-op guard, case-aware: the would-be tokens are compared to the
-  // stored ones in their case-fix-canonical forms, so a re-emission
-  // whose snippet texts differ from the stored ones only in
-  // pass-correctable case is "no change" and keeps the
-  // reference-identical state (no re-render, no focused-surface
+  // No-op guard, canonical through the composed auto-fix pass: the
+  // would-be tokens are compared to the stored ones in their
+  // pass-canonical forms (case and spacing), so a re-emission whose
+  // snippet texts differ from the stored ones only in what the pass
+  // corrects — case, or seam/edge spacing — is "no change" and keeps
+  // the reference-identical state (no re-render, no focused-surface
   // remount). A genuine text difference still transitions.
   if (
     tokensEqualCanonicalCase(tokens, state.tokens, state.caseFixLanguage) &&
@@ -571,23 +572,25 @@ export const snippetsReducer = (
     }
   }
   // SYNC_DOCUMENT is the mid-typing sync: the focused surface owns
-  // its DOM, so the case pass never runs there (a correction between
-  // keystrokes would fight the editor) — the copy path closes the
-  // stale window.
+  // its DOM, so the auto-fix pass never runs there (a correction
+  // between keystrokes would fight the editor) — the copy path closes
+  // the stale window.
   if (action.type === 'SYNC_DOCUMENT') {
     return next === state ? state : base;
   }
-  // Whole-document case recompute on every other transition —
-  // creation, both moves, the edit toggle, the language update, and
-  // no-op transitions included: a state that enters this transition
-  // with stale casing (left by a SYNC) is corrected by the next
-  // trigger, whatever it is. The pass runs after the transition's
-  // text rewrite and the eager normalization, so it only sees
-  // canonical shapes, and derives under the state's own language
-  // field — so the SET_CASE_FIX_LANGUAGE transition (the provider's
-  // languageChanged dispatch) re-derives the whole document under
-  // the new language through this same path.
-  const tokens = applyCaseFix(base.tokens, base.caseFixLanguage);
+  // Whole-document auto-fix recompute (case → spacing → case) on
+  // every other transition — creation, both moves, the edit toggle,
+  // the language update, and no-op transitions included: a state that
+  // enters this transition with stale case or spacing (left by a
+  // SYNC) is corrected by the next trigger, whatever it is. The pass
+  // runs after the transition's text rewrite and the eager
+  // normalization, so it only sees canonical shapes, and derives
+  // under the state's own language field — so the
+  // SET_CASE_FIX_LANGUAGE transition (the provider's languageChanged
+  // dispatch) re-derives the whole document under the new language
+  // through this same path (the spacing stage is language-independent
+  // and an idempotent no-op there).
+  const tokens = applyAutoFix(base.tokens, base.caseFixLanguage);
   if (tokens === base.tokens) {
     return next === state ? state : base;
   }

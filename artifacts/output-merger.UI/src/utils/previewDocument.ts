@@ -676,13 +676,17 @@ export function applyCaseFix(
 }
 
 /**
- * Content equality of two token arrays in their case-fix-canonical
- * forms: both sides run through the pass (idempotent — an already
- * canonical array returns itself) before the exact content
- * comparison, so two documents that differ only in pass-correctable
- * case compare equal. The no-op guard of snippet reconciliation — a
- * re-emission whose texts differ from the stored tokens only in case
- * is "no change", while a genuine text difference is not.
+ * Content equality of two token arrays in their auto-fix-canonical
+ * forms: both sides are normalized first (adjacent own-text runs
+ * merged — the pass resolves seams per token shape, so differently
+ * shaped documents can settle to the same serialization with the
+ * surviving space carried by different tokens), then run through
+ * the composed pass (idempotent — an already canonical array returns
+ * itself) before the exact content comparison, so two documents that
+ * differ only in pass-correctable case or spacing compare equal. The
+ * no-op guard of snippet reconciliation — a re-emission whose texts
+ * differ from the stored tokens only in what the pass corrects is
+ * "no change", while a genuine text difference is not.
  */
 export function tokensEqualCanonicalCase(
   a: PreviewToken[],
@@ -690,8 +694,459 @@ export function tokensEqualCanonicalCase(
   languageTag?: string,
 ): boolean {
   return tokensEqual(
-    applyCaseFix(a, languageTag),
-    applyCaseFix(b, languageTag),
+    applyAutoFix(normalizeTextTokens(a), languageTag),
+    applyAutoFix(normalizeTextTokens(b), languageTag),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The spacing-fix pass. Whitespace at the seams between the document's
+// atoms follows the merged document: no space before the punctuation
+// characters, no space after "(", exactly one space between content
+// atoms, ALL whitespace adjacent to a line break trimmed (line-break
+// tokens are never added or removed), and leading/trailing document
+// whitespace trimmed. Own-text token text is rewriteable (interior
+// runs and edges); a NON-frozen chip's trailing-whitespace edge is
+// seam material; chip interiors and frozen (edited) chips — edges
+// included — are never rewritten, though the seams around them are
+// corrected. A missing space after a punctuation-ending token is
+// inserted at zero-whitespace seams, under the document-length budget.
+// ---------------------------------------------------------------------------
+
+/**
+ * The characters before which no space is kept at a seam, and after
+ * which one space is inserted at a zero-whitespace seam when word
+ * content follows.
+ */
+const SPACING_PUNCTUATION_CHARS: readonly string[] = [
+  '.',
+  ',',
+  '!',
+  '?',
+  ';',
+  ':',
+  '…',
+  ')',
+];
+
+/** The lone opposite: no space is kept after an opening parenthesis. */
+const SPACING_OPENING_PAREN = '(';
+
+/**
+ * How one token participates in the seam walk:
+ * - line-break tokens, own-text tokens with content, and chips with
+ *   text left after their strippable edge runs are ATOMS;
+ * - a whitespace-only own-text token is pure seam MATERIAL between
+ *   the atoms around it;
+ * - a ZERO-CORE chip (empty, or nothing but its trailing edge) is
+ *   seam-TRANSPARENT: the walk passes over it like material, so the
+ *   seams and the document-edge trims resolve across it — but it is
+ *   never dropped and never carries the surviving space (it is a
+ *   real chip with a real id; only its seam-blocking effect is
+ *   suspended).
+ *
+ * `core` is the atom's text with its strippable edge runs removed
+ * (own-text interior runs already resolved; chip text kept verbatim
+ * — chip interiors are never rewritten). A frozen chip keeps its
+ * FULL text as the core: its edges are never stripped, and trailing
+ * whitespace inside the core counts as unstrippable seam material.
+ */
+interface SpacingSlice {
+  isLineBreak: boolean;
+  isMaterial: boolean;
+  isTransparent: boolean;
+  core: string;
+  /** Strippable whitespace at the atom's left edge (own text only). */
+  leftStrippable: string;
+  /** Strippable whitespace at the atom's right edge (own text, or a non-frozen chip's trailing edge). */
+  rightStrippable: string;
+}
+
+/**
+ * Collapses the whitespace runs inside an own-text token's middle
+ * (the part between its strippable edge runs): a run immediately
+ * before one of the punctuation characters, or immediately after an
+ * opening parenthesis, is removed; every other run collapses to
+ * exactly one space.
+ */
+const resolveSpacingInterior = (middle: string): string => {
+  let resolved = '';
+  let index = 0;
+  while (index < middle.length) {
+    const char = middle[index];
+    if (!isWhitespaceChar(char)) {
+      resolved += char;
+      index += 1;
+      continue;
+    }
+    let end = index;
+    while (end < middle.length && isWhitespaceChar(middle[end])) {
+      end += 1;
+    }
+    const beforePunctuation =
+      end < middle.length &&
+      SPACING_PUNCTUATION_CHARS.includes(middle[end]);
+    const afterOpeningParen =
+      resolved.length > 0 &&
+      resolved[resolved.length - 1] === SPACING_OPENING_PAREN;
+    if (!beforePunctuation && !afterOpeningParen) {
+      resolved += ' ';
+    }
+    index = end;
+  }
+  return resolved;
+};
+
+const decomposeSpacingSlice = (token: PreviewToken): SpacingSlice => {
+  if (token.kind === 'line-break') {
+    return {
+      isLineBreak: true,
+      isMaterial: false,
+      isTransparent: false,
+      core: '',
+      leftStrippable: '',
+      rightStrippable: '',
+    };
+  }
+  const text = token.text;
+  if (token.kind === 'snippet') {
+    if (token.edited) {
+      return {
+        isLineBreak: false,
+        isMaterial: false,
+        isTransparent: text.length === 0,
+        core: text,
+        leftStrippable: '',
+        rightStrippable: '',
+      };
+    }
+    // /^\s*/ and /\s*$/ always match (zero-width allowed), so the
+    // extracted run is safe to index directly.
+    const trailing = /\s*$/.exec(text)![0];
+    const core = text.slice(0, text.length - trailing.length);
+    return {
+      isLineBreak: false,
+      isMaterial: false,
+      isTransparent: core.length === 0,
+      core,
+      leftStrippable: '',
+      rightStrippable: trailing,
+    };
+  }
+  const leading = /^\s*/.exec(text)![0];
+  const rest = text.slice(leading.length);
+  const trailing = /\s*$/.exec(rest)![0];
+  const middle = rest.slice(0, rest.length - trailing.length);
+  if (middle.length === 0) {
+    return {
+      isLineBreak: false,
+      isMaterial: true,
+      isTransparent: false,
+      core: '',
+      leftStrippable: text,
+      rightStrippable: '',
+    };
+  }
+  return {
+    isLineBreak: false,
+    isMaterial: false,
+    isTransparent: false,
+    core: resolveSpacingInterior(middle),
+    leftStrippable: leading,
+    rightStrippable: trailing,
+  };
+};
+
+/**
+ * The insertion stage of the spacing pass: a token ending with one of
+ * the punctuation characters directly abutting word content gains
+ * exactly one space at the seam. The space lives in the own-text side
+ * whenever one exists (prepended to the follower, appended to the
+ * predecessor); at a chip↔chip seam it appends to the preceding
+ * chip's trailing edge when the chip is not frozen, else a separator
+ * token is minted with the reconciliation id pattern
+ * (`${rightChipTokenId}:separator` — deterministic). The id is not
+ * unique by construction: reconciliation mints the same pattern for
+ * appended chips, and a move relocates a separator token with its id
+ * intact, so a mint can duplicate a relocated one — inert, because
+ * nothing keys own-text tokens by id (the parse re-mints their ids).
+ * Insertions never fire inside token interiors, before a line break,
+ * or at the document end, and a follower starting with a
+ * no-space-before character keeps the seam zero-space (the removal
+ * rule wins the conflict). Each insertion consumes one serialized
+ * character of the document budget; over-budget insertions are
+ * skipped, evaluated in document order — the pass never trims user
+ * content to make room.
+ */
+const applySpacingInsertions = (tokens: PreviewToken[]): PreviewToken[] => {
+  let working = tokens;
+  let cloned = false;
+  let length = serialize(tokens).length;
+  let index = 0;
+  while (index + 1 < working.length) {
+    const left = working[index];
+    const right = working[index + 1];
+    if (
+      left.kind === 'line-break' ||
+      right.kind === 'line-break' ||
+      left.text.length === 0 ||
+      right.text.length === 0 ||
+      isWhitespaceChar(left.text[left.text.length - 1]) ||
+      isWhitespaceChar(right.text[0]) ||
+      !SPACING_PUNCTUATION_CHARS.includes(left.text[left.text.length - 1]) ||
+      SPACING_PUNCTUATION_CHARS.includes(right.text[0]) ||
+      length + 1 > PREVIEW_DOCUMENT_MAX_LENGTH
+    ) {
+      index += 1;
+      continue;
+    }
+    if (!cloned) {
+      working = [...tokens];
+      cloned = true;
+    }
+    length += 1;
+    if (right.kind === 'text') {
+      working[index + 1] = { ...right, text: ` ${right.text}` };
+      index += 1;
+    } else if (left.kind === 'text') {
+      working[index] = { ...left, text: `${left.text} ` };
+      index += 1;
+    } else if (!left.edited) {
+      working[index] = { ...left, text: `${left.text} ` };
+      index += 1;
+    } else {
+      working.splice(
+        index + 1,
+        0,
+        makeSeparatorToken(`${right.tokenId}:separator`),
+      );
+      index += 2;
+    }
+  }
+  return cloned ? working : tokens;
+};
+
+/**
+ * The spacing-fix pass over a whole document. The seam between two
+ * consecutive atoms collapses to ZERO spaces when the following atom
+ * starts with a punctuation character, when the preceding atom ends
+ * with "(", or when either side is a line break; otherwise it holds
+ * exactly ONE space. The seam's strippable material is the following
+ * own text's leading run, the preceding own text's trailing run, any
+ * whitespace-only own-text tokens between the atoms, and a
+ * non-frozen chip's trailing edge; the one surviving space is carried
+ * by the first of these the seam offers, in that order. Whitespace
+ * the pass cannot strip (a frozen chip's edges, a chip's leading
+ * edge) satisfies the seam by itself and every strippable neighbor
+ * goes. Leading and trailing document whitespace is trimmed,
+ * own-text tokens the pass empties are dropped, and line-break tokens
+ * are never added or removed.
+ *
+ * Pure and reference-stable: untouched tokens keep their object
+ * references, and a document where nothing changes returns the SAME
+ * array reference. Re-running the pass over its own output yields
+ * content-identical tokens (idempotent) — the removal stage never
+ * leaves a seam it would rewrite again, and an inserted space makes
+ * its seam non-glued so the insertion stage never re-fires.
+ *
+ * A zero-core chip (empty, or nothing but its trailing edge) is
+ * seam-transparent: the walk passes over it like material, so seams
+ * and the document-edge trims resolve across it — but it is never
+ * dropped and never the surviving material (only its strippable
+ * edge goes with the surrounding seam, like any pending whitespace).
+ */
+export function applySpacingFix(tokens: PreviewToken[]): PreviewToken[] {
+  const count = tokens.length;
+  if (count === 0) {
+    return tokens;
+  }
+  const slices = tokens.map(decomposeSpacingSlice);
+  // Edge-run decisions per index, made seam by seam: null keeps the
+  // original run.
+  const leftRun: (string | null)[] = new Array(count).fill(null);
+  const rightRun: (string | null)[] = new Array(count).fill(null);
+  const dropped: boolean[] = new Array(count).fill(false);
+
+  const stripSeamMaterial = (
+    previous: number,
+    next: number,
+    pending: number[],
+    survivor: number,
+  ): void => {
+    if (previous !== survivor && slices[previous].rightStrippable !== '') {
+      rightRun[previous] = '';
+    }
+    if (next !== survivor && slices[next].leftStrippable !== '') {
+      leftRun[next] = '';
+    }
+    for (const pendingIndex of pending) {
+      if (pendingIndex !== survivor) {
+        dropped[pendingIndex] = true;
+      }
+    }
+  };
+
+  // A zero-core chip's strippable edge goes with the surrounding
+  // seam's material like any pending whitespace, but the chip itself
+  // is never dropped and never carries the surviving space.
+  const stripPassed = (passed: number[]): void => {
+    for (const index of passed) {
+      if (slices[index].rightStrippable !== '') {
+        rightRun[index] = '';
+      }
+    }
+  };
+
+  const resolveSeam = (
+    previous: number,
+    next: number,
+    pending: number[],
+    passed: number[],
+  ) => {
+    const leftSlice = slices[previous];
+    const rightSlice = slices[next];
+    const zero =
+      leftSlice.isLineBreak ||
+      rightSlice.isLineBreak ||
+      (rightSlice.core.length > 0 &&
+        SPACING_PUNCTUATION_CHARS.includes(rightSlice.core[0])) ||
+      (leftSlice.core.length > 0 &&
+        leftSlice.core[leftSlice.core.length - 1] === SPACING_OPENING_PAREN);
+    // Whitespace the pass cannot strip already separates the atoms:
+    // the seam is as settled as it can be, and every strippable
+    // neighbor goes.
+    const unstrippable =
+      (leftSlice.core.length > 0 &&
+        isWhitespaceChar(leftSlice.core[leftSlice.core.length - 1])) ||
+      (rightSlice.core.length > 0 && isWhitespaceChar(rightSlice.core[0]));
+    if (zero || unstrippable) {
+      stripSeamMaterial(previous, next, pending, -1);
+      stripPassed(passed);
+      return;
+    }
+    let survivor = -1;
+    if (
+      tokens[next].kind === 'text' &&
+      rightSlice.leftStrippable !== ''
+    ) {
+      leftRun[next] = ' ';
+      survivor = next;
+    } else if (
+      tokens[previous].kind === 'text' &&
+      leftSlice.rightStrippable !== ''
+    ) {
+      rightRun[previous] = ' ';
+      survivor = previous;
+    } else if (pending.length > 0) {
+      leftRun[pending[0]] = ' ';
+      survivor = pending[0];
+    } else if (leftSlice.rightStrippable !== '') {
+      rightRun[previous] = ' ';
+      survivor = previous;
+    }
+    stripSeamMaterial(previous, next, pending, survivor);
+    stripPassed(passed);
+  };
+
+  let sawAtom = false;
+  let previousAtom = -1;
+  let pending: number[] = [];
+  let passed: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    if (slices[index].isMaterial) {
+      pending.push(index);
+      continue;
+    }
+    if (slices[index].isTransparent) {
+      passed.push(index);
+      continue;
+    }
+    if (!sawAtom) {
+      // Document start: leading strippable whitespace is trimmed.
+      if (slices[index].leftStrippable !== '') {
+        leftRun[index] = '';
+      }
+      for (const pendingIndex of pending) {
+        dropped[pendingIndex] = true;
+      }
+      stripPassed(passed);
+      sawAtom = true;
+      previousAtom = index;
+      pending = [];
+      passed = [];
+      continue;
+    }
+    resolveSeam(previousAtom, index, pending, passed);
+    previousAtom = index;
+    pending = [];
+    passed = [];
+  }
+  if (sawAtom) {
+    // Document end: trailing strippable whitespace is trimmed.
+    if (slices[previousAtom].rightStrippable !== '') {
+      rightRun[previousAtom] = '';
+    }
+    for (const pendingIndex of pending) {
+      dropped[pendingIndex] = true;
+    }
+    stripPassed(passed);
+  } else {
+    // Only whitespace: the trims drop the whole document — the
+    // zero-core chips stay (never dropped), their strippable edges
+    // emptied with it.
+    for (const pendingIndex of pending) {
+      dropped[pendingIndex] = true;
+    }
+    stripPassed(passed);
+  }
+
+  const out: PreviewToken[] = [];
+  let changed = false;
+  for (let index = 0; index < count; index += 1) {
+    if (dropped[index]) {
+      changed = true;
+      continue;
+    }
+    const token = tokens[index];
+    if (token.kind === 'line-break') {
+      out.push(token);
+      continue;
+    }
+    const slice = slices[index];
+    const final = slice.isMaterial
+      ? leftRun[index] ?? token.text
+      : (leftRun[index] ?? slice.leftStrippable) +
+        slice.core +
+        (rightRun[index] ?? slice.rightStrippable);
+    if (final === token.text) {
+      out.push(token);
+    } else {
+      out.push({ ...token, text: final });
+      changed = true;
+    }
+  }
+  return applySpacingInsertions(changed ? out : tokens);
+}
+
+/**
+ * The composed auto-fix pass: case → spacing → case. The first case
+ * stage runs on the exact pre-spacing structure; the spacing stage
+ * corrects the seams (and non-frozen chips' trailing edges) around
+ * it; the final case stage re-cases only the chips the insertions
+ * un-glued — spacing only adds whitespace and strips whitespace, so a
+ * predecessor's last meaningful character never changes and earlier
+ * classifications are invariant (never reversed). One application
+ * reaches the settled document. Pure and reference-stable like its
+ * stages: a document nothing corrects returns the SAME array
+ * reference.
+ */
+export function applyAutoFix(
+  tokens: PreviewToken[],
+  languageTag?: string,
+): PreviewToken[] {
+  return applyCaseFix(
+    applySpacingFix(applyCaseFix(tokens, languageTag)),
+    languageTag,
   );
 }
 
