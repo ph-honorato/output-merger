@@ -1,13 +1,13 @@
-import { useTranslation } from 'react-i18next';
-import { useRef, useEffect } from 'react';
-import { Menu as MenuIcon, Language, Public } from '@mui/icons-material';
-import { useHeader } from './Header.hook';
-import { type HeaderProps } from './Header.types';
-import * as S from './Header.styles';
+import { useTranslation } from "react-i18next";
+import { useRef, useEffect } from "react";
+import { Menu as MenuIcon, Public } from "@mui/icons-material";
+import { useHeader } from "./Header.hook";
+import { type HeaderProps } from "./Header.types";
+import * as S from "./Header.styles";
 
-const LANGUAGE_FLAGS: Record<'en-US' | 'pt-BR', string> = {
-  'en-US': '🇺🇸',
-  'pt-BR': '🇧🇷',
+const LANGUAGE_FLAGS: Record<"en-US" | "pt-BR", string> = {
+  "en-US": "🇺🇸",
+  "pt-BR": "🇧🇷",
 };
 
 function Header(props: HeaderProps) {
@@ -30,25 +30,39 @@ function Header(props: HeaderProps) {
   // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (languageMenuRef.current && !languageMenuRef.current.contains(event.target as Node)) {
+      if (
+        languageMenuRef.current &&
+        !languageMenuRef.current.contains(event.target as Node)
+      ) {
         handleLanguageMenuClose();
       }
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+      if (
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(event.target as Node)
+      ) {
         handleMobileMenuClose();
       }
     };
 
     if (isLanguageMenuOpen || mobileMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isLanguageMenuOpen, mobileMenuOpen, handleLanguageMenuClose, handleMobileMenuClose]);
+  }, [
+    isLanguageMenuOpen,
+    mobileMenuOpen,
+    handleLanguageMenuClose,
+    handleMobileMenuClose,
+  ]);
 
-  const handleKeyDown = (event: React.KeyboardEvent, language: 'en-US' | 'pt-BR') => {
-    if (event.key === 'Enter' || event.key === ' ') {
+  const handleKeyDown = (
+    event: React.KeyboardEvent,
+    language: "en-US" | "pt-BR",
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       handleLanguageChange(language);
     }
@@ -59,12 +73,8 @@ function Header(props: HeaderProps) {
       <S.StyledToolbar>
         {/* Logo Section */}
         <S.LogoContainer>
-          <S.LogoIcon>
-            <Language fontSize="large" />
-          </S.LogoIcon>
-          <S.LogoText data-testid="header-title">
-            {t('app.title')}
-          </S.LogoText>
+          <S.LogoIcon />
+          <S.LogoText data-testid="header-title">{t("app.title")}</S.LogoText>
         </S.LogoContainer>
 
         {/* Desktop Actions */}
@@ -72,25 +82,25 @@ function Header(props: HeaderProps) {
           <S.LanguageSelectorContainer ref={languageMenuRef}>
             <S.LanguageMenuButton
               onClick={handleLanguageMenuOpen}
-              aria-label={t('language.selector')}
+              aria-label={t("language.selector")}
               aria-expanded={isLanguageMenuOpen}
               aria-haspopup="true"
               data-testid="language-selector-button"
             >
               <Public fontSize="large" color="action" />
             </S.LanguageMenuButton>
-            
+
             {isLanguageMenuOpen && (
               <S.LanguageMenu
                 id="language-menu"
                 role="menu"
-                aria-label={t('language.selector')}
+                aria-label={t("language.selector")}
                 data-testid="language-menu"
               >
                 {availableLanguages.map((lang) => (
                   <S.LanguageMenuItem
                     key={lang.code}
-                    className={currentLanguage === lang.code ? 'selected' : ''}
+                    className={currentLanguage === lang.code ? "selected" : ""}
                     onClick={() => handleLanguageChange(lang.code)}
                     onKeyDown={(e) => handleKeyDown(e, lang.code)}
                     role="menuitem"
@@ -109,7 +119,7 @@ function Header(props: HeaderProps) {
         {/* Mobile Menu Button */}
         <S.MobileMenuButton
           onClick={handleMobileMenuToggle}
-          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileMenuOpen}
           data-testid="mobile-menu-button"
         >
@@ -118,25 +128,31 @@ function Header(props: HeaderProps) {
       </S.StyledToolbar>
 
       {/* Mobile Menu */}
-      <S.MobileActions role="navigation" aria-label="Mobile menu" ref={mobileMenuRef}>
+      <S.MobileActions
+        role="navigation"
+        aria-label="Mobile menu"
+        ref={mobileMenuRef}
+      >
         {mobileMenuOpen && (
           <S.MobileMenu
             role="menu"
-            aria-label={t('language.selector')}
+            aria-label={t("language.selector")}
             data-testid="mobile-menu"
           >
-            <div style={{ padding: '8px 16px' }}>
-              <p style={{ 
-                fontSize: '0.75rem', 
-                color: 'var(--mui-palette-text-secondary)',
-                margin: '0 0 8px 0'
-              }}>
-                {t('language.selector')}
+            <div style={{ padding: "8px 16px" }}>
+              <p
+                style={{
+                  fontSize: "0.75rem",
+                  color: "var(--mui-palette-text-secondary)",
+                  margin: "0 0 8px 0",
+                }}
+              >
+                {t("language.selector")}
               </p>
               {availableLanguages.map((lang) => (
                 <S.LanguageMenuItem
                   key={lang.code}
-                  className={currentLanguage === lang.code ? 'selected' : ''}
+                  className={currentLanguage === lang.code ? "selected" : ""}
                   onClick={() => handleLanguageChange(lang.code)}
                   onKeyDown={(e) => handleKeyDown(e, lang.code)}
                   role="menuitem"
