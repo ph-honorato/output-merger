@@ -32,20 +32,13 @@ export const LogoContainer = styled.div`
   flex-shrink: 0;
 `;
 
-export const LogoIcon = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
-  background: linear-gradient(
-    135deg,
-    ${({ theme }) => (theme as StyledTheme).palette.primary.main},
-    ${({ theme }) => (theme as StyledTheme).palette.secondary.main}
-  );
-  color: white;
-  font-size: 1.5rem;
+export const LogoIcon = styled.img.attrs({
+  src: "/om-logo.svg",
+  alt: "Logo",
+})`
+  width: 30px;
+  height: auto;
+  object-fit: contain;
 `;
 
 export const LogoText = styled.h1`

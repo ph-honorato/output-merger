@@ -277,7 +277,7 @@ describe('MergeSessionPage', () => {
     const trigger = screen.getByTestId('preview-modal-open-button');
     expect(trigger).toBeEnabled();
     expect(screen.getByTestId('preview-segment-flow')).toHaveTextContent(
-      'beta gamma beta',
+      'Beta gamma beta',
     );
 
     await user.click(trigger);
@@ -307,8 +307,12 @@ describe('MergeSessionPage', () => {
           return { left: x, right: x, top: 18, bottom: 18, width: 0, height: 0, x, y: 18 } as DOMRect;
         }
         const rects: Record<string, object> = {
+          // The case-fix pass capitalizes the document-start chip, so
+          // both casings resolve to their geometry.
           'beta gamma': { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
+          'Beta gamma': { left: 0, top: 0, right: 100, bottom: 24, width: 100, height: 24, x: 0, y: 0 },
           'beta': { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
+          'Beta': { left: 120, top: 0, right: 220, bottom: 24, width: 100, height: 24, x: 120, y: 0 },
         };
         return { ...(rects[(this as HTMLElement).textContent ?? ''] ?? { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }) } as DOMRect;
       },
@@ -325,7 +329,7 @@ describe('MergeSessionPage', () => {
     // the second chip takes three hops — the arrows
     // walk through the separator's edge anchors first.
     const [first] = within(dialog).getAllByTestId('preview-snippet');
-    expect(first).toHaveTextContent('beta gamma');
+    expect(first).toHaveTextContent('Beta gamma');
     first.focus();
     await pressKey(first, 'Space');
     await pressKey(document, 'ArrowRight');
@@ -338,9 +342,9 @@ describe('MergeSessionPage', () => {
     const inlineFlow = flows.find((flow) => !dialog.contains(flow));
     expect(inlineFlow).toBeDefined();
     expect(within(dialog).getByTestId('preview-segment-flow')).toHaveTextContent(
-      'beta beta gamma',
+      'Beta beta gamma',
     );
-    expect(inlineFlow).toHaveTextContent('beta beta gamma');
+    expect(inlineFlow).toHaveTextContent('Beta beta gamma');
 
     await user.click(
       within(dialog).getByTestId('preview-modal-close-button'),
@@ -352,7 +356,7 @@ describe('MergeSessionPage', () => {
     // Only the inline instance remains, showing the reordered text.
     expect(screen.getAllByTestId('preview-area')).toHaveLength(1);
     expect(screen.getByTestId('preview-segment-flow')).toHaveTextContent(
-      'beta beta gamma',
+      'Beta beta gamma',
     );
   });
 
@@ -392,7 +396,7 @@ describe('MergeSessionPage', () => {
     dragFromTo(views[0], 41, 151); // 'beta gamma' (text-1)
     dragFromTo(views[1], 41, 95); // 'beta' (text-2)
     expect(screen.getByTestId('preview-segment-flow')).toHaveTextContent(
-      'beta gamma beta',
+      'Beta gamma beta',
     );
 
     // The OFF->ON toggle: the inline editor ends up focused with the
@@ -418,7 +422,7 @@ describe('MergeSessionPage', () => {
         }),
       );
     });
-    expect(flow.textContent).toBe('beta gamma beta!');
+    expect(flow.textContent).toBe('Beta gamma beta!');
 
     // The in-card counter (the default view's placement) shows the
     // maximum allowed characters: count/limit, live. The pin renders

@@ -188,10 +188,17 @@ describe('MOVE_TOKEN randomized edited-document sweep (multiset + uniqueness)', 
       tokens,
     });
 
+    // The auto-fix pass may correct case and seam spacing, so the
+    // content guards compare case-insensitively over everything EXCEPT
+    // line breaks (the pass never adds or removes those): non-newline
+    // whitespace is stripped before the comparison.
+    const contentKey = (text: string): string =>
+      text.replace(/[^\S\n]/g, '').toLowerCase();
+
     for (let iter = 0; iter < 400; iter += 1) {
       const tokens = randomTokens();
       const base = stateWith(tokens);
-      const baseChars = serialize(tokens).split('').sort().join('');
+      const baseChars = contentKey(serialize(tokens)).split('').sort().join('');
 
       for (let from = 0; from < base.tokens.length; from += 1) {
         if (!isSnippetToken(base.tokens[from])) continue;
@@ -202,24 +209,32 @@ describe('MOVE_TOKEN randomized edited-document sweep (multiset + uniqueness)', 
             toIndex: to,
           });
           const label = `iter=${iter} from=${from} to=${to} doc=[${serialize(tokens)}]`;
-          // 1. Character multiset preserved — a move only relocates.
+          // 1. Character multiset preserved (case-insensitive,
+          // whitespace-tolerant — the pass may re-case a chip's first
+          // letter and correct seam spacing) — a move only relocates.
           expect(
-            serialize(next.tokens).split('').sort().join(''),
+            contentKey(serialize(next.tokens)).split('').sort().join(''),
             label,
           ).toBe(baseChars);
           // 2. No duplicate token ids.
           const ids = next.tokens.map((token) => token.tokenId);
           expect(new Set(ids).size, label).toBe(ids.length);
-          // 3. Non-inert moves actually change the chip's position.
+          // 3. A reference change means a real change: the chip's
+          // position among snippets changed, or the pass corrected
+          // stale casing/spacing (the serialization then differs only
+          // in letter case or whitespace).
           if (next !== base) {
             const position = (state: SnippetsState, id: string) =>
               state.tokens
                 .filter(isSnippetToken)
                 .findIndex((token) => token.tokenId === id);
             const movedId = base.tokens[from].tokenId;
-            expect(position(next, movedId), label).not.toBe(
-              position(base, movedId),
-            );
+            const positionChanged =
+              position(next, movedId) !== position(base, movedId);
+            const caseOrSpacingOnly =
+              contentKey(serialize(next.tokens)) ===
+              contentKey(serialize(base.tokens));
+            expect(positionChanged || caseOrSpacingOnly, label).toBe(true);
           }
           // 4. Two-move sequences (every 7th document): chars + ids.
           if (iter % 7 === 0 && next !== base) {
@@ -233,7 +248,7 @@ describe('MOVE_TOKEN randomized edited-document sweep (multiset + uniqueness)', 
                 });
                 const label2 = `${label} m2:${f2}->${t2}`;
                 expect(
-                  serialize(second.tokens).split('').sort().join(''),
+                  contentKey(serialize(second.tokens)).split('').sort().join(''),
                   label2,
                 ).toBe(baseChars);
                 const ids2 = second.tokens.map((token) => token.tokenId);
@@ -267,8 +282,19 @@ describe('MOVE_TOKEN regression seams', () => {
     state = snippetsReducer(state, { type: 'MOVE_TOKEN', fromIndex: 1, toIndex: 5 });
 
     const after = serialize(state.tokens);
-    expect(after.split('').sort().join('')).toBe(before.split('').sort().join(''));
-    expect(after).toBe('\nA Bee ');
+    // The auto-fix pass may flip a first letter to fit the merged
+    // context ("Bee" reads mid-sentence after the move) and trim the
+    // trailing document edge, so the multiset guard compares
+    // case-insensitively over everything except line breaks — content
+    // is still only relocated.
+    expect(
+      after.replace(/[^\S\n]/g, '').toLowerCase().split('').sort().join(''),
+    ).toBe(
+      before.replace(/[^\S\n]/g, '').toLowerCase().split('').sort().join(''),
+    );
+    // The carried " " is re-inserted (never dropped), and the
+    // trailing document whitespace trims: "\nA bee", not "\nA bee ".
+    expect(after).toBe('\nA bee');
   });
 
   it('keeps token ids unique through the two-move sequence (two-move id uniqueness) with full join parity', () => {
@@ -433,7 +459,24 @@ const expectedLanding = (
   return coreL + beforePad + chip.text + afterPad + coreR;
 };
 
-/** Character-multiset delta: only spaces may be added, never removed. */
+/**
+ * The string-level spacing-settled form of a landing expectation:
+ * the wrapper's spacing pass runs after every move, so the move
+ * oracle's string-level expectations are corrected the same way —
+ * whitespace adjacent to a line break is trimmed on both sides (line
+ * breaks themselves are never removed), leading/trailing document
+ * whitespace is trimmed, and every remaining run of two or more
+ * collapses to one space. The landing documents carry no punctuation,
+ * so the zero-space rules and the insertion stage never fire on them.
+ */
+const spacingSettled = (text: string): string =>
+  text
+    .replace(/[^\S\n]*\n[^\S\n]*/g, '\n')
+    .replace(/^[^\S\n]+/, '')
+    .replace(/[^\S\n]+$/, '')
+    .replace(/[^\S\n]{2,}/g, ' ');
+
+/** Character-multiset delta: only spaces may be added or removed. */
 const multisetDelta = (
   before: string,
   after: string
@@ -547,24 +590,35 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
       });
       for (let fromIndex = 0; fromIndex < doc.length; fromIndex += 1) {
         if (!isSnippetToken(doc[fromIndex])) {
+          // The origin guard rejects the move, but the wrapper still
+          // runs the whole-document recompute on the no-op — an
+          // unsettled seeded document settles exactly like on any
+          // other no-op trigger (a bounds-guarded move).
+          const viaNoOp = snippetsReducer(state, {
+            type: 'MOVE_TOKEN',
+            fromIndex: -1,
+            toIndex: -1,
+          });
           expect(
             landingMove(state, fromIndex, landings[0]),
-            `${label} from=${fromIndex}`
-          ).toBe(state);
+            `${label} from=${fromIndex}`,
+          ).toStrictEqual(viaNoOp);
           continue;
         }
         for (const landing of landings) {
           const tag = `${label} from=${fromIndex} landing=${JSON.stringify(landing)}`;
           const next = landingMove(state, fromIndex, landing);
           expect(serialize(next.tokens), tag).toBe(
-            expectedLanding(doc, fromIndex, landing)
+            spacingSettled(expectedLanding(doc, fromIndex, landing))
           );
           expect(idsUnique(next.tokens), tag).toBeNull();
           const { added, removed } = multisetDelta(
             serialize(state.tokens),
             serialize(next.tokens)
           );
-          expect(removed, tag).toEqual([]);
+          // The move plants at most two spaces; the spacing pass may
+          // remove misplaced ones — never any other character.
+          expect(removed.every((ch) => ch === ' '), tag).toBe(true);
           expect(added.every((ch) => ch === ' '), tag).toBe(true);
           expect(added.length, tag).toBeLessThanOrEqual(2);
           checks += 1;
@@ -801,7 +855,10 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
     // the never-invent no-carry rule, now shape-independent.
     const state = stateOf([chipTok(0), textTok('t1', ' hello'), chipTok(1)]);
     const next = move(state, 0, 3);
-    expect(serialize(next.tokens)).toBe(' helloBA');
+    // The merged own text starts the document, so its leading space
+    // trims at the document edge; no seam ends in a punctuation
+    // character, so nothing is inserted — the glue stays.
+    expect(serialize(next.tokens)).toBe('helloBA');
     // And the un-normalized hand-built array takes the same path
     // through one transition: normalize-then-move equals the move.
     const adjacent = stateOf([
@@ -814,26 +871,28 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
       type: 'SET_EDIT_ENABLED',
       editEnabled: true,
     });
-    expect(serialize(move(first, 0, 3).tokens)).toBe(' helloBA');
+    expect(serialize(move(first, 0, 3).tokens)).toBe('helloBA');
   });
 
-  it('source deletion keeps the space the user saw inside a merged text token (the former divergence, pinned)', () => {
-    // The former merge-history divergence (b): deleting chip B from
+  it('source deletion pops no separator from a merged text token (the trailing space settles at the document-edge trim)', () => {
+    // The former merge-history divergence: deleting chip B from
     // ["x"][" "][B] popped the separator ("x"), while the merged
-    // ["x "][B] kept it ("x "). Normalization makes the merged shape
-    // THE shape — WYSIWYG-honest: the chip vanishes, the space the
-    // user saw stays (it is content of the own-text token, not a
-    // reconciliation separator, so the cleanup never takes it).
+    // ["x "][B] kept it. Normalization makes the merged shape THE
+    // shape — the chip vanishes and the whitespace-only own text the
+    // user saw is never mistaken for a reconciliation separator (the
+    // cleanup only pops exact " " separators). The spacing pass then
+    // trims the trailing space: the document ends at its last
+    // content character.
     const state = stateOf([textTok('t1', 'x '), chipTok(1)]);
     const next = snippetsReducer(state, {
       type: 'SET_SOURCE_SNIPPETS',
       sourceId: 'src1',
       snippets: [],
     });
-    expect(serialize(next.tokens)).toBe('x ');
+    expect(serialize(next.tokens)).toBe('x');
     expect(next.tokens).toHaveLength(1);
     expect(next.tokens[0]).toEqual(
-      expect.objectContaining({ kind: 'text', text: 'x ' }),
+      expect.objectContaining({ kind: 'text', text: 'x' }),
     );
   });
 });

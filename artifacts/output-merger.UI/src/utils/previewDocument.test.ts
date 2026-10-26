@@ -1,7 +1,12 @@
-import type { PreviewToken, SnippetToken } from '../context/SnippetsContext';
+import type { OwnTextToken, PreviewToken, SnippetToken } from '../context/SnippetsContext';
 import {
+  applyAutoFix,
+  applyCaseFix,
+  applySpacingFix,
   buildLandingId,
   buildSnippetTokenId,
+  caseFixRuleSetFor,
+  classifyTokenContext,
   clampDocumentToLimit,
   enumerateLandingAnchors,
   isDocumentAtLimit,
@@ -18,6 +23,7 @@ import {
   serialize,
   snippetSlotToTokenIndex,
   tokensEqual,
+  tokensEqualCanonicalCase,
   tokensEqualIgnoringEdited,
   truncateToUtf16Budget,
   wordBoundaryOffsets,
@@ -842,5 +848,1112 @@ describe('clampDocumentToLimit', () => {
         }
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The case-fix pass: rule-table lookup, classification × transform
+// tables, guard tables, reference stability/idempotence, and the
+// case-canonical comparison.
+// ---------------------------------------------------------------------------
+
+describe('caseFixRuleSetFor (the language-keyed rule table)', () => {
+  it('resolves each set from both tag forms (full and primary subtag)', () => {
+    expect(caseFixRuleSetFor('en-US').locale).toBe('en-US');
+    expect(caseFixRuleSetFor('en').locale).toBe('en-US');
+    expect(caseFixRuleSetFor('pt-BR').locale).toBe('pt-BR');
+    expect(caseFixRuleSetFor('pt').locale).toBe('pt-BR');
+  });
+
+  it('falls back to the default set for unknown and missing tags', () => {
+    expect(caseFixRuleSetFor('fr')).toBe(caseFixRuleSetFor('en-US'));
+    expect(caseFixRuleSetFor('')).toBe(caseFixRuleSetFor('en-US'));
+    expect(caseFixRuleSetFor(undefined)).toBe(caseFixRuleSetFor('en-US'));
+  });
+
+  it('keeps the en-US and pt-BR rule content identical (each set carries its own locale tag)', () => {
+    expect(caseFixRuleSetFor('pt-BR').sentenceEndChars).toEqual(
+      caseFixRuleSetFor('en-US').sentenceEndChars,
+    );
+    expect(caseFixRuleSetFor('pt-BR').closingWrapperChars).toEqual(
+      caseFixRuleSetFor('en-US').closingWrapperChars,
+    );
+    expect(caseFixRuleSetFor('pt-BR').allCapsExceptions).toEqual(
+      caseFixRuleSetFor('en-US').allCapsExceptions,
+    );
+  });
+
+  it('exempts the exact word "I" from the all-caps guard in both language sets (the table owns the carve-out)', () => {
+    expect(caseFixRuleSetFor('en-US').allCapsExceptions).toEqual(['I']);
+    expect(caseFixRuleSetFor('en').allCapsExceptions).toEqual(['I']);
+    expect(caseFixRuleSetFor('pt-BR').allCapsExceptions).toEqual(['I']);
+    expect(caseFixRuleSetFor('pt').allCapsExceptions).toEqual(['I']);
+  });
+
+  it('produces identical pass outputs under both language tags', () => {
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:a', 'Done.'),
+      makeSeparatorToken('sep'),
+      snippetToken('s2:b', 'next one'),
+      lineBreak('br1'),
+      snippetToken('s3:c', 'third'),
+    ];
+    expect(serialize(applyCaseFix(tokens, 'en-US'))).toBe(
+      serialize(applyCaseFix(tokens, 'pt-BR')),
+    );
+    expect(serialize(applyCaseFix(tokens, 'pt'))).toBe(
+      serialize(applyCaseFix(tokens, 'en')),
+    );
+  });
+});
+
+describe('applyCaseFix — classification × transform', () => {
+  const fixLast = (
+    predecessor: PreviewToken[],
+    text: string,
+    tag?: string,
+  ): string => {
+    const tokens = [...predecessor, snippetToken('s1:chip', text)];
+    const fixed = applyCaseFix(tokens, tag);
+    const last = fixed[fixed.length - 1];
+    return isSnippetToken(last) ? last.text : '';
+  };
+
+  it('classifies the merged context and transforms the first letter of the first word', () => {
+    const cases: Array<
+      [label: string, predecessor: PreviewToken[], text: string, expected: string]
+    > = [
+      ['document start', [], 'hello world', 'Hello world'],
+      ['after a period', [ownText('t', 'He said. ')], 'hello world', 'Hello world'],
+      ['after an exclamation', [ownText('t', 'Watch out! ')], 'hello', 'Hello'],
+      ['after a question mark', [ownText('t', 'Really? ')], 'hello', 'Hello'],
+      ['after an ellipsis', [ownText('t', 'Wait… ')], 'hello', 'Hello'],
+      ['after a colon — NOT a sentence end', [ownText('t', 'Note: ')], 'hello', 'hello'],
+      ['after a line break', [ownText('t', 'words'), lineBreak('br')], 'hello', 'Hello'],
+      ['mid-sentence', [ownText('t', 'just words ')], 'Hello', 'hello'],
+      [
+        'closing quote after the stripped whitespace',
+        [ownText('t', 'He said. " ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'closing quote stripped after the period',
+        [ownText('t', 'The end." ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'paren closes mid-sentence content',
+        [ownText('t', '(see above) ')],
+        'hello',
+        'hello',
+      ],
+      [
+        'paren closes a sentence end',
+        [ownText('t', 'Ready?) ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'bracket closes a sentence end',
+        [ownText('t', 'Done.] ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'the strip peels interleaved whitespace and closers',
+        [ownText('t', 'He said. ) ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'chip glued directly after a period-ending chip — no whitespace boundary, left alone',
+        [snippetToken('s0:x', 'Done.')],
+        'hello',
+        'hello',
+      ],
+      [
+        'chip predecessor with a trailing space after the period',
+        [snippetToken('s0:x', 'Done. ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'separator token between the chips',
+        [snippetToken('s0:x', 'Done.'), makeSeparatorToken('sep')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'the look-back walks past every whitespace-only token',
+        [
+          snippetToken('s0:x', 'Done.'),
+          ownText('w1', ' '),
+          ownText('w2', '  '),
+        ],
+        'hello',
+        'Hello',
+      ],
+      [
+        'only whitespace precedes — the first content reads as a sentence start',
+        [ownText('w', '  ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'a line break behind a whitespace token still classifies a sentence start',
+        [ownText('t', 'words'), lineBreak('br'), ownText('w', ' ')],
+        'hello',
+        'Hello',
+      ],
+      [
+        'glued to non-whitespace own text — left alone even after a period',
+        [ownText('t', 're')],
+        'run',
+        'run',
+      ],
+      [
+        'glued to non-whitespace own text — an all-lowercase chip stays',
+        [ownText('t', 're')],
+        'Run',
+        'Run',
+      ],
+      [
+        'glued directly after a closing quote — no whitespace boundary, left alone',
+        [ownText('t', 'The end."')],
+        'hello',
+        'hello',
+      ],
+      [
+        'glued directly after another chip — left alone',
+        [snippetToken('s0:x', 'run')],
+        'Ning',
+        'Ning',
+      ],
+    ];
+    for (const [label, predecessor, text, expected] of cases) {
+      expect(fixLast(predecessor, text), label).toBe(expected);
+    }
+  });
+
+  it('classifies through the exported classifier with the resolved rule set', () => {
+    const ruleSet = caseFixRuleSetFor('en-US');
+    const sentenceEnd = [ownText('t', 'Done. '), snippetToken('s1:a', 'x')];
+    expect(classifyTokenContext(sentenceEnd, 1, ruleSet)).toBe('sentence-start');
+    const mid = [ownText('t', 'words '), snippetToken('s1:a', 'x')];
+    expect(classifyTokenContext(mid, 1, ruleSet)).toBe('mid-sentence');
+    const glued = [ownText('t', 're'), snippetToken('s1:a', 'x')];
+    expect(classifyTokenContext(glued, 1, ruleSet)).toBe('glued');
+    const afterBreak = [lineBreak('br'), snippetToken('s1:a', 'x')];
+    expect(classifyTokenContext(afterBreak, 1, ruleSet)).toBe('sentence-start');
+    expect(classifyTokenContext([snippetToken('s1:a', 'x')], 0, ruleSet)).toBe(
+      'sentence-start',
+    );
+  });
+
+  it('transforms only snippet tokens — own text and line breaks are byte-unchanged', () => {
+    const text = ownText('t', 'all lowercase');
+    const br = lineBreak('br');
+    const tokens: PreviewToken[] = [text, br, snippetToken('s1:a', 'hello')];
+    const fixed = applyCaseFix(tokens);
+    expect(fixed[0]).toBe(text);
+    expect(fixed[1]).toBe(br);
+    expect((fixed[2] as SnippetToken).text).toBe('Hello');
+    expect((text as { text: string }).text).toBe('all lowercase');
+  });
+
+  it('transforms only the FIRST letter of the FIRST word — the rest of the text is untouched', () => {
+    expect(fixLast([ownText('t', 'Done. ')], 'hello WORLD')).toBe('Hello WORLD');
+    expect(fixLast([ownText('t', 'words ')], 'Hello WORLD')).toBe('hello WORLD');
+  });
+});
+
+describe('applyCaseFix — guards', () => {
+  const fixLast = (predecessor: PreviewToken[], text: string): string => {
+    const tokens = [...predecessor, snippetToken('s1:chip', text)];
+    const fixed = applyCaseFix(tokens);
+    const last = fixed[fixed.length - 1];
+    return isSnippetToken(last) ? last.text : '';
+  };
+
+  it('leaves all-caps first words (acronyms and single initials) untouched in every context', () => {
+    expect(fixLast([ownText('t', 'words ')], 'NASA launches')).toBe('NASA launches');
+    expect(fixLast([], 'NASA launches')).toBe('NASA launches');
+    expect(fixLast([ownText('t', 'words ')], 'API')).toBe('API');
+    expect(fixLast([ownText('t', 'Done. ')], 'API')).toBe('API');
+    expect(fixLast([ownText('t', 'words ')], 'A')).toBe('A');
+    expect(fixLast([ownText('t', 'words ')], 'B')).toBe('B');
+    expect(fixLast([ownText('t', 'Done. ')], 'A')).toBe('A');
+  });
+
+  it('applies the general contextual rules to the exact word "I" (the all-caps carve-out)', () => {
+    // Mid-sentence "I" lowercases (wrong by English orthography —
+    // accepted; the user fixes it by hand).
+    expect(fixLast([ownText('t', 'words ')], 'I am here')).toBe('i am here');
+    expect(fixLast([ownText('t', 'words ')], 'I')).toBe('i');
+    // At a sentence start "i" capitalizes.
+    expect(fixLast([ownText('t', 'Done. ')], 'i am here')).toBe('I am here');
+    expect(fixLast([ownText('t', 'words'), lineBreak('br')], 'i')).toBe('I');
+    expect(fixLast([], 'i')).toBe('I');
+    expect(fixLast([ownText('t', 'Done. ')], 'I')).toBe('I');
+  });
+
+  it('protects mixed-case first words in every context', () => {
+    expect(fixLast([ownText('t', 'words ')], 'iPhone rocks')).toBe('iPhone rocks');
+    expect(fixLast([ownText('t', 'Done. ')], 'iPhone rocks')).toBe('iPhone rocks');
+    expect(fixLast([ownText('t', 'words ')], 'eBay sells')).toBe('eBay sells');
+    expect(fixLast([ownText('t', "words ")], "McDonald's")).toBe("McDonald's");
+  });
+
+  it('leaves non-letter first characters and empty/whitespace-only tokens alone', () => {
+    expect(fixLast([], '123 results')).toBe('123 results');
+    expect(fixLast([ownText('t', 'Done. ')], '(Note')).toBe('(Note');
+    expect(fixLast([], '')).toBe('');
+    expect(fixLast([ownText('t', 'Done. ')], '   padded')).toBe('   padded');
+  });
+
+  it('always skips frozen (edited) tokens, on every transform side', () => {
+    const frozenMid = applyCaseFix([
+      ownText('t', 'words '),
+      snippetToken('s1:a', 'Fixed', { edited: true }),
+    ]);
+    expect((frozenMid[1] as SnippetToken).text).toBe('Fixed');
+
+    const frozenStart = applyCaseFix([
+      ownText('t', 'Done. '),
+      snippetToken('s1:a', 'still', { edited: true }),
+    ]);
+    expect((frozenStart[1] as SnippetToken).text).toBe('still');
+  });
+
+  it('never consults the source casing: a mid-merge proper name is lowercased (accepted)', () => {
+    expect(fixLast([ownText('t', 'I visited ')], 'Paris')).toBe('paris');
+    expect(fixLast([ownText('t', 'I visited ')], 'London in spring')).toBe(
+      'london in spring',
+    );
+  });
+
+  it('applies the general rules to a single lowercase letter ("a" → "A" at a sentence start)', () => {
+    expect(fixLast([lineBreak('br')], 'a test')).toBe('A test');
+    expect(fixLast([ownText('t', 'words ')], 'a test')).toBe('a test');
+  });
+
+  it('never changes token lengths: casing mappings that expand are skipped', () => {
+    // "ß" uppercases to the two-character "SS" — the length-preserving
+    // contract wins, the chip stays as authored.
+    expect(fixLast([], 'ßeta')).toBe('ßeta');
+    // "İ" lowercases to the two-character "i̇" — skipped mid-sentence.
+    expect(fixLast([ownText('t', 'words ')], 'İstanbul')).toBe('İstanbul');
+  });
+});
+
+describe('applyCaseFix — reference stability and idempotence', () => {
+  it('returns the SAME array reference when nothing transforms', () => {
+    const guarded = [
+      snippetToken('s1:a', 'NASA'),
+      makeSeparatorToken('sep'),
+      snippetToken('s2:b', 'API'),
+    ];
+    expect(applyCaseFix(guarded)).toBe(guarded);
+    const frozen = [
+      ownText('t', 'words '),
+      snippetToken('s1:a', 'Fixed', { edited: true }),
+    ];
+    expect(applyCaseFix(frozen)).toBe(frozen);
+    const ownOnly = [ownText('t', 'just words'), lineBreak('br')];
+    expect(applyCaseFix(ownOnly)).toBe(ownOnly);
+    const empty: PreviewToken[] = [];
+    expect(applyCaseFix(empty)).toBe(empty);
+  });
+
+  it('keeps untouched token object references and replaces only transformed tokens', () => {
+    const done = ownText('t', 'Done. ');
+    const nasa = snippetToken('s1:a', 'NASA');
+    const sep = makeSeparatorToken('sep');
+    const hello = snippetToken('s2:b', 'Hello');
+    const tokens: PreviewToken[] = [done, nasa, sep, hello];
+    const fixed = applyCaseFix(tokens);
+    expect(fixed).not.toBe(tokens);
+    expect(fixed[0]).toBe(done);
+    expect(fixed[1]).toBe(nasa);
+    expect(fixed[2]).toBe(sep);
+    expect(fixed[3]).not.toBe(hello);
+    expect((fixed[3] as SnippetToken).text).toBe('hello');
+    // Pure: the input array and its tokens are untouched.
+    expect(hello.text).toBe('Hello');
+    expect(tokens[3]).toBe(hello);
+  });
+
+  it('is idempotent: a second application is content-identical and reference-stable', () => {
+    const documents: PreviewToken[][] = [
+      [],
+      [ownText('t', 'just own text'), lineBreak('br')],
+      [snippetToken('s1:a', 'Done.'), makeSeparatorToken('s'), snippetToken('s2:b', 'next')],
+      [ownText('t', 're'), snippetToken('s1:a', 'run')],
+      [snippetToken('s1:a', 'x'.repeat(30))],
+      [snippetToken('s1:a', 'hello', { edited: true })],
+    ];
+    for (const tokens of documents) {
+      const once = applyCaseFix(tokens);
+      const twice = applyCaseFix(once);
+      expect(twice).toBe(once);
+      expect(serialize(twice)).toBe(serialize(once));
+      // Case-only: the serialized length never changes.
+      expect(serialize(once).length).toBe(serialize(tokens).length);
+    }
+  });
+});
+
+describe('tokensEqualCanonicalCase (the case-canonical comparison)', () => {
+  it('treats a pass-correctable case difference as equal', () => {
+    const corrected = [snippetToken('s1:a', 'Hello'), ownText('t', ' world')];
+    const sourceCase = [snippetToken('s1:a', 'hello'), ownText('t', ' world')];
+    expect(tokensEqualCanonicalCase(corrected, sourceCase)).toBe(true);
+    expect(tokensEqualCanonicalCase(sourceCase, corrected)).toBe(true);
+    expect(tokensEqualCanonicalCase(corrected, corrected)).toBe(true);
+  });
+
+  it('still detects genuine differences', () => {
+    const corrected = [snippetToken('s1:a', 'Hello')];
+    expect(tokensEqualCanonicalCase(corrected, [snippetToken('s1:a', 'Hello there')])).toBe(
+      false,
+    );
+    expect(tokensEqualCanonicalCase(corrected, [snippetToken('s1:b', 'Hello')])).toBe(false);
+    expect(tokensEqualCanonicalCase(corrected, [])).toBe(false);
+    // A case difference the pass cannot correct (all-caps guard) is a
+    // real difference.
+    expect(tokensEqualCanonicalCase(corrected, [snippetToken('s1:a', 'HELLO')])).toBe(
+      false,
+    );
+  });
+
+  it('treats a pass-correctable spacing difference as equal (and still detects genuine differences)', () => {
+    // A re-emission re-sends the chip text with its trailing edge
+    // while the stored chip was edge-stripped beside the separator
+    // (reconciliation preserves the stored separator's id, so the
+    // canonical forms agree structurally).
+    const stored = [
+      snippetToken('s1:a', 'wordA'),
+      makeSeparatorToken('wordA:separator'),
+      snippetToken('s2:b', 'x'),
+    ];
+    const reemitted = [
+      snippetToken('s1:a', 'wordA '),
+      makeSeparatorToken('wordA:separator'),
+      snippetToken('s2:b', 'x'),
+    ];
+    expect(tokensEqualCanonicalCase(stored, reemitted)).toBe(true);
+    expect(tokensEqualCanonicalCase(reemitted, stored)).toBe(true);
+    // A doubled seam (the chip edge plus the separator) collapses in
+    // the canonical form.
+    const doubled = [
+      snippetToken('s1:a', 'wordA '),
+      ownText('wordA:separator', ' '),
+      snippetToken('s2:b', 'x'),
+    ];
+    expect(tokensEqualCanonicalCase(stored, doubled)).toBe(true);
+    // A genuine text difference is not absorbed.
+    expect(
+      tokensEqualCanonicalCase(stored, [
+        snippetToken('s1:a', 'wordB'),
+        makeSeparatorToken('wordA:separator'),
+        snippetToken('s2:b', 'x'),
+      ]),
+    ).toBe(false);
+  });
+
+  it('compares adjacent own-text inputs by their normalized forms (the surviving space may live in different tokens)', () => {
+    // The pass resolves seams per token shape: these two settle to
+    // the same serialization with the space carried by different
+    // tokens, so the comparison normalizes both sides first.
+    const splitLeft = [ownText('t1', 'a  '), ownText('t2', 'b')];
+    const splitRight = [ownText('t1', 'a'), ownText('t2', ' b')];
+    expect(tokensEqualCanonicalCase(splitLeft, splitRight)).toBe(true);
+    expect(tokensEqualCanonicalCase(splitRight, splitLeft)).toBe(true);
+    // A genuine content difference still compares unequal.
+    expect(
+      tokensEqualCanonicalCase(splitLeft, [ownText('t1', 'a'), ownText('t2', 'c')]),
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The spacing-fix pass: the before-set removals wherever the space
+// lives, the line-break trims, the collapse and document-edge rules,
+// the insertion mechanics (placement, minting, conflicts, the
+// length budget), and the composed pass's fixpoint.
+// ---------------------------------------------------------------------------
+
+const BEFORE_SET_CHARS = ['.', ',', '!', '?', ';', ':', '…', ')'];
+
+describe('applySpacingFix — removal rules (the before-set, wherever the space lives)', () => {
+  it('removes the space before each before-set character inside own text', () => {
+    for (const punctuation of BEFORE_SET_CHARS) {
+      const tokens: PreviewToken[] = [ownText('t1', `Hello ${punctuation}world`)];
+      expect(serialize(applySpacingFix(tokens)), punctuation).toBe(
+        `Hello${punctuation}world`,
+      );
+    }
+  });
+
+  it('fires the removal at every seam kind: own-text edge, separator token, non-frozen chip edge', () => {
+    // An own-text trailing edge before a punctuation-initial chip.
+    expect(
+      serialize(
+        applySpacingFix([ownText('t1', 'Hello '), snippetToken('s1:a', ',more')]),
+      ),
+    ).toBe('Hello,more');
+    // A separator token before a punctuation-initial chip is dropped.
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'The end'),
+          makeSeparatorToken('sep'),
+          snippetToken('s2:b', '...'),
+        ]),
+      ),
+    ).toBe('The end...');
+    // A non-frozen chip's trailing-whitespace edge is seam material.
+    expect(
+      serialize(
+        applySpacingFix([snippetToken('s1:a', 'word '), snippetToken('s2:b', '...')]),
+      ),
+    ).toBe('word...');
+  });
+
+  it('removes the space after "(" at every seam kind; "(" is never a removal target', () => {
+    // Inside own text: the run after "(" drops; the single space
+    // before "(" stays ("(" is not in the before-set).
+    expect(serialize(applySpacingFix([ownText('t1', 'foo ( bar)')]))).toBe('foo (bar)');
+    // An own-text trailing run after "(" before another own-text token.
+    expect(
+      serialize(applySpacingFix([ownText('t1', 'foo( '), ownText('t2', 'bar)')])),
+    ).toBe('foo(bar)');
+    // A chip ending with "(" drops the following separator.
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'foo('),
+          makeSeparatorToken('sep'),
+          snippetToken('s2:b', 'x)'),
+        ]),
+      ),
+    ).toBe('foo(x)');
+    // A space before "(" is not removed ("a ( b" → "a (b").
+    expect(serialize(applySpacingFix([ownText('t1', 'a ( b')]))).toBe('a (b');
+  });
+
+  it('never rewrites chip interiors, and a frozen chip keeps its edge before a punctuation-initial follower', () => {
+    const messy = snippetToken('s1:a', 'a  b ,c');
+    const fixed = applySpacingFix([messy]);
+    expect((fixed[0] as SnippetToken).text).toBe('a  b ,c');
+    expect(fixed[0]).toBe(messy);
+    // The frozen edge cannot strip; the zero-space seam keeps it.
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'Stop ', { edited: true }),
+          snippetToken('s2:b', '...'),
+        ]),
+      ),
+    ).toBe('Stop ...');
+  });
+});
+
+describe('applySpacingFix — line breaks', () => {
+  it('trims ALL whitespace adjacent to a line break on both sides ("A \\n B" → "A\\nB")', () => {
+    expect(
+      serialize(
+        applySpacingFix([ownText('t1', 'A '), lineBreak('br1'), ownText('t2', ' B')]),
+      ),
+    ).toBe('A\nB');
+    // A non-frozen chip's trailing edge beside a line break strips too
+    // (a chip's leading edge is never touched).
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'A '),
+          lineBreak('br1'),
+          ownText('t2', ' B'),
+        ]),
+      ),
+    ).toBe('A\nB');
+    // Separator tokens adjacent to a line break drop on both sides.
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'A'),
+          makeSeparatorToken('sep'),
+          lineBreak('br1'),
+          makeSeparatorToken('sep2'),
+          snippetToken('s2:b', 'B'),
+        ]),
+      ),
+    ).toBe('A\nB');
+  });
+
+  it('never adds or removes line-break tokens; a trailing break survives the document-end trim', () => {
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:a', 'A'),
+      lineBreak('br1'),
+      lineBreak('br2'),
+      ownText('t1', ' B '),
+      lineBreak('br3'),
+    ];
+    const fixed = applySpacingFix(tokens);
+    expect(
+      fixed
+        .filter((token) => token.kind === 'line-break')
+        .map((token) => token.tokenId),
+    ).toEqual(['br1', 'br2', 'br3']);
+    expect(serialize(fixed)).toBe('A\n\nB\n');
+  });
+
+  it('keeps a frozen chip\'s trailing edge before a line break, and chip interiors with line breaks untouched', () => {
+    expect(
+      serialize(
+        applySpacingFix([snippetToken('s1:a', 'A ', { edited: true }), lineBreak('br1')]),
+      ),
+    ).toBe('A \n');
+    const multiline = snippetToken('s1:b', 'First  line\nSecond  part');
+    const fixed = applySpacingFix([multiline, ownText('t1', ' tail')]);
+    expect((fixed[0] as SnippetToken).text).toBe('First  line\nSecond  part');
+    expect(fixed[0]).toBe(multiline);
+  });
+
+  it('strips a non-frozen chip\'s trailing-newline edge like any whitespace seam material (a frozen chip keeps it)', () => {
+    // Chips can carry a trailing "\n" from the source selection; the
+    // edge is seam material. The pass preserves line-break TOKENS —
+    // a newline inside chip text is edge whitespace, not a token.
+    expect(serialize(applySpacingFix([snippetToken('s1:a', 'A\n')]))).toBe('A');
+    expect(
+      serialize(applySpacingFix([snippetToken('s1:a', 'A\n'), ownText('t1', ',x')])),
+    ).toBe('A,x');
+    const besideBreak = applySpacingFix([snippetToken('s1:a', 'A\n'), lineBreak('br1')]);
+    expect(serialize(besideBreak)).toBe('A\n');
+    expect(besideBreak.filter((token) => token.kind === 'line-break')).toHaveLength(1);
+    // A frozen chip's edge survives every trim.
+    expect(
+      serialize(applySpacingFix([snippetToken('s1:a', 'A\n', { edited: true })])),
+    ).toBe('A\n');
+  });
+});
+
+describe('applySpacingFix — collapse and document edges', () => {
+  it('collapses every interior whitespace run of two or more inside own text to exactly one space', () => {
+    expect(serialize(applySpacingFix([ownText('t1', 'a  b')]))).toBe('a b');
+    expect(serialize(applySpacingFix([ownText('t1', 'a \t b')]))).toBe('a b');
+    expect(serialize(applySpacingFix([ownText('t1', 'a   b   c')]))).toBe('a b c');
+    // A single space stays; a single non-space whitespace character
+    // normalizes to U+0020.
+    expect(serialize(applySpacingFix([ownText('t1', 'a b')]))).toBe('a b');
+    expect(serialize(applySpacingFix([ownText('t1', 'a\tb')]))).toBe('a b');
+  });
+
+  it('reduces multi-space seam material to exactly one space, deterministically', () => {
+    // A separator survives at a chip↔chip seam; the non-frozen chip's
+    // edge strips.
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'wordA '),
+          makeSeparatorToken('sep'),
+          snippetToken('s2:b', 'x'),
+        ]),
+      ),
+    ).toBe('wordA x');
+    // The chip's edge is the seam's only material: it carries the one
+    // space (trimmed to one).
+    expect(
+      serialize(
+        applySpacingFix([snippetToken('s1:a', 'wordA  '), snippetToken('s2:b', 'x')]),
+      ),
+    ).toBe('wordA x');
+    // The own-text side wins over the chip edge.
+    expect(
+      serialize(
+        applySpacingFix([snippetToken('s1:a', 'wordA '), ownText('t1', '  x')]),
+      ),
+    ).toBe('wordA x');
+    // The following own text's leading run wins over the preceding own
+    // text's trailing run.
+    expect(
+      serialize(applySpacingFix([ownText('t1', 'a  '), ownText('t2', '  b')])),
+    ).toBe('a b');
+  });
+
+  it('trims leading and trailing document whitespace wherever it lives', () => {
+    expect(serialize(applySpacingFix([ownText('t1', '  hi')]))).toBe('hi');
+    expect(serialize(applySpacingFix([ownText('t1', 'hi  ')]))).toBe('hi');
+    // A leading whitespace-only own-text token before the first atom.
+    expect(
+      serialize(applySpacingFix([ownText('t1', ' '), snippetToken('s1:a', 'A')])),
+    ).toBe('A');
+    // A trailing chip edge plus a trailing token, both trimmed.
+    expect(
+      serialize(applySpacingFix([snippetToken('s1:a', 'A '), ownText('t1', ' ')])),
+    ).toBe('A');
+    // A trailing line break is preserved, the chip edge before it
+    // still trims.
+    expect(
+      serialize(applySpacingFix([snippetToken('s1:a', 'word '), lineBreak('br1')])),
+    ).toBe('word\n');
+  });
+
+  it('keeps a frozen chip\'s trailing edge at the document end (frozen wins over the trims)', () => {
+    expect(
+      serialize(applySpacingFix([snippetToken('s1:a', 'wordA ', { edited: true })])),
+    ).toBe('wordA ');
+  });
+
+  it('drops own-text tokens the pass empties; a whitespace-only document settles to the empty document', () => {
+    const fixed = applySpacingFix([
+      snippetToken('s1:a', 'The end'),
+      makeSeparatorToken('sep'),
+      snippetToken('s2:b', '.next'),
+    ]);
+    expect(fixed.map((token) => token.kind)).toEqual(['snippet', 'snippet']);
+    expect(serialize(fixed)).toBe('The end.next');
+    expect(applySpacingFix([ownText('t1', '   ')])).toEqual([]);
+    expect(applySpacingFix([ownText('t1', ' '), ownText('t2', '\t')])).toEqual([]);
+  });
+
+  it('treats non-breaking spaces like the whitespace predicate everywhere (interior runs, seam edges, material drops)', () => {
+    // U+00A0 matches /\s: an interior run collapses to one U+0020.
+    expect(serialize(applySpacingFix([ownText('t1', 'a\u00A0\u00A0b')]))).toBe('a b');
+    // An NBSP edge run carries the seam's one space as U+0020.
+    expect(
+      serialize(
+        applySpacingFix([snippetToken('s1:a', 'A'), ownText('t1', '\u00A0b')]),
+      ),
+    ).toBe('A b');
+    // An NBSP edge strips at a zero-space seam.
+    expect(
+      serialize(
+        applySpacingFix([ownText('t1', 'a\u00A0'), snippetToken('s1:a', ',x')]),
+      ),
+    ).toBe('a,x');
+    // An NBSP-only own-text token is pure seam material: it drops at
+    // the document edge.
+    expect(
+      applySpacingFix([snippetToken('s1:a', 'A'), ownText('t1', '\u00A0')]),
+    ).toEqual([expect.objectContaining({ kind: 'snippet', text: 'A' })]);
+    expect(applySpacingFix([ownText('t1', '\u00A0\u00A0')])).toEqual([]);
+  });
+});
+
+describe('applySpacingFix — zero-core chips (seam-transparent)', () => {
+  it('lets the document-edge trims resolve across a zero-core chip (the chip survives, never dropped)', () => {
+    // An emptied chip trailing the document: the trim lands on the
+    // last own-text atom, not on the empty chip.
+    const trailing = applySpacingFix([
+      ownText('t1', 'a '),
+      snippetToken('s1:a', ''),
+    ]);
+    expect(serialize(trailing)).toBe('a');
+    expect(trailing).toHaveLength(2);
+    expect(trailing[1]).toEqual(
+      expect.objectContaining({ kind: 'snippet', tokenId: 's1:a', text: '' }),
+    );
+    // The doc-start mirror: a leading zero-core chip.
+    expect(
+      serialize(applySpacingFix([snippetToken('s1:a', ''), ownText('t1', ' a')])),
+    ).toBe('a');
+    // An all-whitespace non-frozen chip is zero-core too: its edge is
+    // seam material, so the trim empties it (the chip stays).
+    const stripped = applySpacingFix([
+      ownText('t1', 'a '),
+      snippetToken('s1:a', '  '),
+    ]);
+    expect(serialize(stripped)).toBe('a');
+    expect(stripped).toHaveLength(2);
+    expect((stripped[1] as SnippetToken).text).toBe('');
+    // Line-break-adjacent material resolves across a zero-core chip.
+    expect(
+      serialize(
+        applySpacingFix([
+          ownText('t1', 'A '),
+          lineBreak('br1'),
+          snippetToken('s1:a', ''),
+        ]),
+      ),
+    ).toBe('A\n');
+  });
+
+  it('carries the fix through the composed pass (the copy/wrapper path)', () => {
+    expect(
+      serialize(applyAutoFix([ownText('t1', 'a '), snippetToken('s1:a', '')])),
+    ).toBe('a');
+    // A trailing chip edge trims through a following zero-core chip.
+    expect(
+      serialize(
+        applyAutoFix([snippetToken('s1:a', 'One. '), snippetToken('s2:b', '')]),
+      ),
+    ).toBe('One.');
+  });
+
+  it('is idempotent and reference-stable over the fixed shape', () => {
+    const tokens: PreviewToken[] = [ownText('t1', 'a '), snippetToken('s1:a', '')];
+    const once = applySpacingFix(tokens);
+    const twice = applySpacingFix(once);
+    expect(twice).toBe(once);
+    expect(serialize(twice)).toBe('a');
+    // The emptied chip keeps its object reference through the fix
+    // (nothing about it changes) and is never dropped.
+    expect(once[1]).toBe(tokens[1]);
+    expect(once[1].kind).toBe('snippet');
+  });
+});
+
+describe('applySpacingFix — frozen chips (boundary corrections)', () => {
+  it('never rewrites a frozen chip\'s text or edges, while the seams around it are corrected', () => {
+    const frozen = snippetToken('s1:a', 'a  b ,c ', { edited: true });
+    // The own-side material before the punctuation strips; the frozen
+    // text — edges included — stays byte-identical.
+    const fixed = applySpacingFix([frozen, ownText('t1', ' !')]);
+    expect(fixed[0]).toBe(frozen);
+    expect(serialize(fixed)).toBe('a  b ,c !');
+    // A separator before a punctuation-initial frozen chip drops.
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'The end'),
+          makeSeparatorToken('sep'),
+          snippetToken('s2:b', '.next', { edited: true }),
+        ]),
+      ),
+    ).toBe('The end.next');
+    // The frozen edge providing the one space absorbs the redundant
+    // separator.
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'wordA ', { edited: true }),
+          makeSeparatorToken('sep'),
+          snippetToken('s2:b', 'x'),
+        ]),
+      ),
+    ).toBe('wordA x');
+  });
+});
+
+describe('applySpacingFix — insertion after punctuation', () => {
+  it('inserts one space at every seam kind for every trigger character', () => {
+    for (const trigger of BEFORE_SET_CHARS) {
+      // chip → own text: the space prepends to the follower.
+      expect(
+        serialize(
+          applySpacingFix([
+            snippetToken('s1:a', `Hello${trigger}`),
+            ownText('t1', 'world'),
+          ]),
+        ),
+        trigger,
+      ).toBe(`Hello${trigger} world`);
+      // own text → chip: the space appends to the predecessor.
+      expect(
+        serialize(
+          applySpacingFix([ownText('t1', `Note${trigger}`), snippetToken('s1:a', 'world')]),
+        ),
+        trigger,
+      ).toBe(`Note${trigger} world`);
+      // chip ↔ chip: the space lands in the non-frozen preceding
+      // chip's trailing edge.
+      expect(
+        serialize(
+          applySpacingFix([
+            snippetToken('s1:a', `Hello${trigger}`),
+            snippetToken('s2:b', 'world'),
+          ]),
+        ),
+        trigger,
+      ).toBe(`Hello${trigger} world`);
+    }
+  });
+
+  it('places the space in the own-text side whenever one exists (a frozen follower is no obstacle)', () => {
+    // chip → own text with a frozen predecessor: the own text carries
+    // the space.
+    const frozenLeft = applySpacingFix([
+      snippetToken('s1:a', 'Hello,', { edited: true }),
+      ownText('t1', 'world'),
+    ]);
+    expect((frozenLeft[0] as SnippetToken).text).toBe('Hello,');
+    expect((frozenLeft[1] as OwnTextToken).text).toBe(' world');
+    // own text → chip with a frozen follower: the own text carries the
+    // space (the chip's leading edge is never touched).
+    const frozenRight = applySpacingFix([
+      ownText('t1', 'Note:'),
+      snippetToken('s1:a', 'world', { edited: true }),
+    ]);
+    expect((frozenRight[0] as OwnTextToken).text).toBe('Note: ');
+    expect((frozenRight[1] as SnippetToken).text).toBe('world');
+  });
+
+  it('mints the chip↔chip separator for a frozen preceding chip — deterministic, no double-mint', () => {
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:a', 'Hello,', { edited: true }),
+      snippetToken('s2:b', 'world'),
+    ];
+    const once = applySpacingFix(tokens);
+    expect(once).toHaveLength(3);
+    expect(once[1]).toEqual({
+      kind: 'text',
+      tokenId: 's2:b:separator',
+      text: ' ',
+    });
+    expect(serialize(once)).toBe('Hello, world');
+    // The inserted space makes the seam non-glued: a second
+    // application is a no-op.
+    expect(applySpacingFix(once)).toBe(once);
+    // Re-minting after the separator is deleted reproduces the same
+    // id.
+    const deleted = [once[0], once[2]];
+    expect(applySpacingFix(deleted)[1]).toEqual(
+      expect.objectContaining({ tokenId: 's2:b:separator', text: ' ' }),
+    );
+  });
+
+  it('pins the minted id duplicating a relocated reconciliation separator (the duplicate is inert)', () => {
+    // A separator relocated by a move keeps its object and id, so the
+    // mint at the glued frozen seam can reproduce an id the document
+    // already carries. Nothing keys own-text tokens by id (the parse
+    // re-mints them), so the duplicate is inert — pinned so any
+    // future id-keying fails loudly.
+    const tokens: PreviewToken[] = [
+      snippetToken('src1:end', 'End.', { edited: true }),
+      snippetToken('src2:bee', 'b'),
+      makeSeparatorToken('src2:bee:separator'),
+      snippetToken('src2:x', 'x'),
+    ];
+    const fixed = applySpacingFix(tokens);
+    expect(serialize(fixed)).toBe('End. b x');
+    expect(fixed).toHaveLength(5);
+    expect(fixed[1]).toEqual({
+      kind: 'text',
+      tokenId: 'src2:bee:separator',
+      text: ' ',
+    });
+    expect(fixed[3]).toEqual({
+      kind: 'text',
+      tokenId: 'src2:bee:separator',
+      text: ' ',
+    });
+  });
+
+  it('never inserts before a line break or at the document end, and "(" is never a trigger', () => {
+    expect(
+      serialize(
+        applySpacingFix([
+          snippetToken('s1:a', 'Hello,'),
+          lineBreak('br1'),
+          ownText('t1', 'world'),
+        ]),
+      ),
+    ).toBe('Hello,\nworld');
+    // The document ends with the punctuation-ending token: no
+    // follower, no insertion.
+    expect(
+      serialize(applySpacingFix([ownText('t1', 'Hi '), snippetToken('s1:a', 'done.')])),
+    ).toBe('Hi done.');
+    // A "(" ending token glues its follower — never an insertion
+    // trigger.
+    expect(
+      serialize(
+        applySpacingFix([snippetToken('s1:a', 'foo('), snippetToken('s2:b', 'bar')]),
+      ),
+    ).toBe('foo(bar');
+  });
+
+  it('keeps zero-space seams before before-set followers (removal wins) and never inserts inside token interiors', () => {
+    // The follower starts with a before-set character: the seam stays
+    // zero-space.
+    expect(
+      serialize(applySpacingFix([snippetToken('s1:a', 'Hello,'), ownText('t1', ',more')])),
+    ).toBe('Hello,,more');
+    // Interiors are the user's: glue inside one material is never
+    // broken.
+    expect(serialize(applySpacingFix([ownText('t1', 'Hello,world')]))).toBe('Hello,world');
+    expect(serialize(applySpacingFix([snippetToken('s1:a', 'Hello,world')]))).toBe(
+      'Hello,world',
+    );
+    // Decimals, URLs, and abbreviations live inside materials: safe.
+    expect(
+      serialize(applySpacingFix([ownText('t1', '3.14 and example.com and e.g. demo')])),
+    ).toBe('3.14 and example.com and e.g. demo');
+    // A non-punctuation glued seam stays glued.
+    expect(
+      serialize(applySpacingFix([snippetToken('s1:a', 'Alpha'), ownText('t1', 'mytext')])),
+    ).toBe('Alphamytext');
+  });
+
+  it('skips over-budget insertions in document order; removals free room within one application', () => {
+    const head = 'Hi there,';
+    // Exactly at the limit with one glued seam: the insertion is
+    // skipped — user content is never trimmed.
+    const atLimit: PreviewToken[] = [
+      ownText('t1', head),
+      ownText('t2', 'w'.repeat(PREVIEW_DOCUMENT_MAX_LENGTH - head.length)),
+    ];
+    expect(serialize(atLimit)).toHaveLength(PREVIEW_DOCUMENT_MAX_LENGTH);
+    expect(serialize(applySpacingFix(atLimit))).toBe(serialize(atLimit));
+    // One character below: the insertion lands exactly at the limit.
+    const below: PreviewToken[] = [
+      ownText('t1', head),
+      ownText('t2', 'w'.repeat(PREVIEW_DOCUMENT_MAX_LENGTH - head.length - 1)),
+    ];
+    const fired = applySpacingFix(below);
+    expect(serialize(fired)).toBe(
+      `Hi there, ${'w'.repeat(PREVIEW_DOCUMENT_MAX_LENGTH - head.length - 1)}`,
+    );
+    // Two glued seams, room for exactly one insertion: the earlier
+    // seam (document order) fires, the later stays glued.
+    const extra = PREVIEW_DOCUMENT_MAX_LENGTH - 'First,aSecond,'.length - 1;
+    const two: PreviewToken[] = [
+      ownText('t1', 'First,'),
+      ownText('t2', 'a'),
+      ownText('t3', 'Second,'),
+      ownText('t4', 'w'.repeat(extra)),
+    ];
+    expect(serialize(two)).toHaveLength(PREVIEW_DOCUMENT_MAX_LENGTH - 1);
+    expect(serialize(applySpacingFix(two))).toBe(
+      `First, aSecond,${'w'.repeat(extra)}`,
+    );
+    // A removal frees room inside one application: the collapsed run
+    // shrinks the document, then the insertion fits.
+    const collapseHead = 'Hi there,';
+    const collapseExtra = PREVIEW_DOCUMENT_MAX_LENGTH - collapseHead.length - 3;
+    const collapseDoc: PreviewToken[] = [
+      ownText('t1', collapseHead),
+      ownText('t2', `a  ${'w'.repeat(collapseExtra)}`),
+    ];
+    expect(serialize(collapseDoc)).toHaveLength(PREVIEW_DOCUMENT_MAX_LENGTH);
+    expect(serialize(applySpacingFix(collapseDoc))).toBe(
+      `Hi there, a ${'w'.repeat(collapseExtra)}`,
+    );
+  });
+});
+
+describe('applySpacingFix — reference stability and idempotence', () => {
+  it('returns the SAME array reference when nothing changes', () => {
+    const empty: PreviewToken[] = [];
+    expect(applySpacingFix(empty)).toBe(empty);
+    const clean = [
+      snippetToken('s1:a', 'Hello'),
+      makeSeparatorToken('sep'),
+      snippetToken('s2:b', 'world'),
+    ];
+    expect(applySpacingFix(clean)).toBe(clean);
+    const ownOnly = [ownText('t1', 'just words'), lineBreak('br1')];
+    expect(applySpacingFix(ownOnly)).toBe(ownOnly);
+    // A frozen chip with its trailing edge beside non-stripped
+    // material: nothing to correct.
+    const frozen = [
+      snippetToken('s1:a', 'a  b ', { edited: true }),
+      ownText('t1', 'tail'),
+    ];
+    expect(applySpacingFix(frozen)).toBe(frozen);
+    const glued = [snippetToken('s1:a', 'Alpha'), ownText('t1', 'mytext')];
+    expect(applySpacingFix(glued)).toBe(glued);
+  });
+
+  it('keeps untouched token object references and never mutates the input', () => {
+    const kept = snippetToken('s1:a', 'The end');
+    const stripped = snippetToken('s2:b', 'wordA  ');
+    const separator = makeSeparatorToken('sep');
+    const last = snippetToken('s3:c', 'x');
+    const tokens: PreviewToken[] = [kept, separator, stripped, last];
+    const fixed = applySpacingFix(tokens);
+    expect(fixed).not.toBe(tokens);
+    expect(fixed[0]).toBe(kept);
+    expect(fixed[1]).toBe(separator);
+    expect(fixed[2]).not.toBe(stripped);
+    expect((fixed[2] as SnippetToken).text).toBe('wordA ');
+    expect(fixed[3]).toBe(last);
+    // Purity: the input array and its tokens are untouched.
+    expect(tokens[2]).toBe(stripped);
+    expect(stripped.text).toBe('wordA  ');
+    expect(tokens).toHaveLength(4);
+  });
+
+  it('is idempotent: a second application is content-identical and reference-stable', () => {
+    const atLimit: PreviewToken[] = [
+      ownText('t1', 'Hi there,'),
+      ownText('t2', 'w'.repeat(PREVIEW_DOCUMENT_MAX_LENGTH - 'Hi there,'.length)),
+    ];
+    const documents: PreviewToken[][] = [
+      [],
+      [ownText('t1', 'just  own  text')],
+      [snippetToken('s1:a', 'Hello,'), snippetToken('s2:b', 'world')],
+      [snippetToken('s1:a', 'Hello,', { edited: true }), snippetToken('s2:b', 'world')],
+      [ownText('t1', '  A '), lineBreak('br1'), ownText('t2', ' .b  c ')],
+      [
+        snippetToken('s1:a', 'wordA '),
+        makeSeparatorToken('sep'),
+        snippetToken('s2:b', 'x'),
+      ],
+      atLimit,
+    ];
+    for (const tokens of documents) {
+      const once = applySpacingFix(tokens);
+      const twice = applySpacingFix(once);
+      expect(twice, serialize(tokens)).toBe(once);
+      expect(serialize(twice)).toBe(serialize(once));
+    }
+  });
+});
+
+describe('applyAutoFix — the composed pass (case → spacing → case)', () => {
+  it('settles an insertion-un-glued chip in ONE application — the final case stage re-cases it', () => {
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:a', 'Hello,'),
+      snippetToken('s2:b', 'World'),
+    ];
+    const settled = applyAutoFix(tokens);
+    expect(serialize(settled)).toBe('Hello, world');
+    // The fixpoint: the composed pass applied to its own output is
+    // content-identical and reference-stable.
+    expect(applyAutoFix(settled)).toBe(settled);
+  });
+
+  it('runs the first case stage on the exact pre-spacing structure (classifications never reversed)', () => {
+    // The chip's trailing edge space reads as the follower's
+    // whitespace boundary, so the FIRST case stage capitalizes it; the
+    // edge is the seam's only material and survives — the follower
+    // stays non-glued and keeps its correction.
+    const tokens: PreviewToken[] = [
+      snippetToken('s1:a', 'Done. '),
+      snippetToken('s2:b', 'x'),
+    ];
+    expect(serialize(applyAutoFix(tokens))).toBe('Done. X');
+  });
+
+  it('keeps glued seams glued and leaves newly-glued punctuation-initial chips un-cased', () => {
+    // Letter-ending glue never gains a space.
+    expect(
+      serialize(
+        applyAutoFix([snippetToken('s1:a', 'Alpha'), ownText('t1', 'mytext')]),
+      ),
+    ).toBe('Alphamytext');
+    expect(
+      serialize(
+        applyAutoFix([
+          ownText('t1', 'mytext '),
+          snippetToken('s1:a', 'XBeta', { edited: true }),
+        ]),
+      ),
+    ).toBe('mytext XBeta');
+    // The spacing stage's removal can newly glue a chip; a
+    // punctuation-initial first character is never case-transformed.
+    expect(
+      serialize(
+        applyAutoFix([
+          snippetToken('s1:a', 'The end'),
+          makeSeparatorToken('sep'),
+          snippetToken('s2:b', '...'),
+        ]),
+      ),
+    ).toBe('The end...');
   });
 });
