@@ -74,10 +74,10 @@
     - [x] Task 3.6: Tests: editing workflows, parse/serialize round-trips, inline-modal sync
 - [ ] **Feature 4: Preview Area Auto fix** - Auto-correct snippet case and spacing in the preview area to fit the merged context triggered on snippet creation, sorting and copy text:
   - [x] **Task 1: Case Auto-Fix** - Snippet capitalization follows its new context in the preview (inline and modal) -
-    - [ ] Task 1.1: Implement the pure case-fix pass in the preview document utils: predecessor classifier (document start, `.` `!` `?`, line break, mid-sentence) with capitalize-after-sentence-start and lowercase-after-mid-sentence rules, plus guards (acronyms/all-caps, camelCase brands, digit-leading snippets, frozen tokens) (the "standalone 'I'" and "capitals that were already mid-sentence in the source" guards were dropped, user decision 2026-10-22 — "I" follows the general contextual rules, corrections come purely from merged context and wrong ones are fixed by hand; see ADR 0005 and `.specs/features/preview-area-auto-fix/tasks/case-auto-fix`)
-    - [ ] Task 1.2: Wire the pass into snippet creation/reconciliation and sort (covers the moved snippet and the tokens whose predecessor changed); skip frozen tokens and make reconciliation comparisons case-aware so corrected tokens aren't misdetected as user-edited (the case-aware comparison is the reconcile no-op guard only — edited-detection and the focused-surface comparison stay exact so manual case overrides freeze the chip and survive sorts, user decision 2026-10-22; see ADR 0005 and `.specs/features/preview-area-auto-fix/tasks/case-auto-fix`). Text inputs are never modified Task 1.3: Apply the pass on the copy path before serialization (inline + modal) so the clipboard is always fully corrected, without mutating the visible document - [x] Task 1.4: Tests: unit rule/guard tables + integration (create, sort both sides, manual override survives, copy output)
+    - [x] Task 1.1: Implement the pure case-fix pass in the preview document utils: predecessor classifier (document start, `.` `!` `?`, line break, mid-sentence) with capitalize-after-sentence-start and lowercase-after-mid-sentence rules, plus guards (acronyms/all-caps, camelCase brands, digit-leading snippets, frozen tokens) (the "standalone 'I'" and "capitals that were already mid-sentence in the source" guards were dropped, user decision 2026-10-22 — "I" follows the general contextual rules, corrections come purely from merged context and wrong ones are fixed by hand; see ADR 0005 and `.specs/features/preview-area-auto-fix/tasks/case-auto-fix`)
+    - [x] Task 1.2: Wire the pass into snippet creation/reconciliation and sort (covers the moved snippet and the tokens whose predecessor changed); skip frozen tokens and make reconciliation comparisons case-aware so corrected tokens aren't misdetected as user-edited (the case-aware comparison is the reconcile no-op guard only — edited-detection and the focused-surface comparison stay exact so manual case overrides freeze the chip and survive sorts, user decision 2026-10-22; see ADR 0005 and `.specs/features/preview-area-auto-fix/tasks/case-auto-fix`). Text inputs are never modified Task 1.3: Apply the pass on the copy path before serialization (inline + modal) so the clipboard is always fully corrected, without mutating the visible document - [x] Task 1.4: Tests: unit rule/guard tables + integration (create, sort both sides, manual override survives, copy output)
 
-  - [ ] **Task 2: Spacing Auto-Fix** - Punctuation-adjacent spacing in the preview (inline and modal)
+  - [x] **Task 2: Spacing Auto-Fix** - Punctuation-adjacent spacing in the preview (inline and modal)
     - [x] Task 2.1: Implement the pure spacing pass: exactly one space between tokens, no space before `.,!;:`, no space after `(` / before `)`, collapse double spaces, trim spaces around line breaks (line breaks themselves preserved) (the before-set gains `?` — a roadmap omission — plus `…` and `)`; and the pass extends the removal-only wording with insertion: a missing space after a punctuation-ending token is inserted at token-boundary seams — chip↔own text, own text↔chip, chip↔chip — never inside token interiors, and non-punctuation glue stays glued; document edges trimmed; user decisions 2026-10-23; see ADR 0005 and `.specs/features/preview-area-auto-fix/tasks/spacing-auto-fix`)
     - [x] Task 2.2: Wire the pass into the same trigger points (creation, sort, copy); frozen tokens skipped (the auto-fix pass composes case → spacing → case so one application reaches the settled document; frozen chips' text — edges included — is untouched while the spacing around them is corrected; the reconcile no-op comparison canonicalizes through the composed pass; user decisions 2026-10-23; see ADR 0005 and `.specs/features/preview-area-auto-fix/tasks/spacing-auto-fix`)
     - [x] Task 2.3: Tests: unit rule tables + integration (creation, sort and copy outputs)
@@ -85,11 +85,28 @@
   - [ ] **Task 3: Undo auto-corrections** - Let the user undo/review auto-corrections (deferred, user decision 2026-10-22 — see `.specs/features/preview-area-auto-fix/tasks/case-auto-fix/`)
 
 - [ ] **Feature 5: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
-  - [ ] "Start Over" button (reset page without reload)
-  - [ ] "Add Text" button (add new text input, up to 4 total)
-  - [ ] Return
-  - [ ] Implement logic to handle three or more text inputs in the merge session
-- [ ] **Feature 6: Release Preparation** - Finalize and prepare for release
+  - [ ] **Task 1: Return Button** - Replace "Start Merge" with "Return" after merge starts
+    - [ ] Task 1.1: Add merge mode state to track whether merge has started (derived from inputs in view mode)
+    - [ ] Task 1.2: Conditionally render "Return" button (with MUI KeyboardReturn icon) instead of "Start Merge" when in merge mode
+    - [ ] Task 1.3: Create ReturnConfirmationModal component (MUI Dialog) in MergeSession/components/ with:
+      - Warning message about snippet removal and preview reset
+      - Checkbox "Don't show this again" (persisted to localStorage key: output-merger.return-confirmation-dismissed)
+      - Confirm/Cancel buttons with translations (en-US/pt-BR)
+    - [ ] Task 1.4: Implement return logic on confirmation:
+      - Dispatch RESET_ALL reducer action to clear all snippets/tokens (without resetting editEnabled)
+      - Reset inputs to input mode (editable textareas)
+      - Replace preview area content with plain merged text (follows editEnabled state)
+      - Switch ActionsBar back to showing "Start Merge" button
+    - [ ] Task 1.5: Wire modal open/close state to Return button click (disable button while modal open)
+    - [ ] Task 1.6: Add localStorage persistence for "don't show again" preference
+    - [ ] Task 1.7: Tests: modal open/close, confirmation flow, localStorage persistence, state reset
+  - [ ] **Task 2: "Start Over" Button** - Reset page without reload (to be planned later)
+  - [ ] **Task 3: "Add Text" Button** - Add new text input, up to 4 total (to be planned later)
+- [ ] **Feature 6: UI/UX Adjustments** - Minor improvements to polish user experience
+  - [ ] **Task 1: Styling Adjustments** - Visual polish and consistency
+  - [ ] **Task 2: Animations** - Subtle motion for better perceived performance
+  - [ ] **Task 3: Tools Adjustments** - Refine existing tool behavior
+  - [ ] **Task 4: Platform Adjustments** - Cross-platform/browser consistency
 
 ### v1: "Merges" CRUD
 
