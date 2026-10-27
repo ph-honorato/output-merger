@@ -505,10 +505,10 @@ describe('MergeSessionPage', () => {
     await user.click(returnButton);
 
     const dialog = screen.getByTestId('return-confirmation-dialog');
-    expect(within(dialog).getByText('Return to sources?')).toBeInTheDocument();
+    expect(within(dialog).getByText('Return to inputs?')).toBeInTheDocument();
     expect(
       within(dialog).getByText(
-        'This removes all snippets from the sources and turns the preview into plain text. Your source texts are kept.',
+        'This will remove all selected snippets from the inputs. Your actual inputs and preview texts are kept as plain texts.',
       ),
     ).toBeInTheDocument();
     expect(within(dialog).getByText("Don't show this again")).toBeInTheDocument();
