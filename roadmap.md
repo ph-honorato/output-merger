@@ -106,7 +106,7 @@
   - [ ] **Task 5.3: "Add Text" Button** - Add new text input, up to 4 total (to be planned later)
 - [ ] **Feature 6: UI/UX Adjustments** - Minor improvements to polish user experience
   - [ ] **Task 6.1: Styling Adjustments** - Visual polish and consistency
-  - [ ] **Task 6.2: Animations** - Subtle motion for better perceived performance
+  - [x] **Task 6.2: Animations** - Subtle motion for better perceived performance
   - [ ] **Task 6.3: Tools Adjustments** - Refine existing tool behavior
   - [ ] **Task 6.4: Platform Adjustments** - Cross-platform/browser consistency
 
