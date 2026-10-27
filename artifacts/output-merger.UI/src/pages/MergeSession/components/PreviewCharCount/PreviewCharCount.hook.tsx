@@ -4,7 +4,7 @@ import { useSnippets } from '../../../../context/SnippetsContext';
 import {
   PREVIEW_DOCUMENT_MAX_LENGTH,
   serialize,
-} from '../../../../utils/previewDocument';
+} from '@utils/previewDocument';
 
 /**
  * The counter's live values: the serialized document's current

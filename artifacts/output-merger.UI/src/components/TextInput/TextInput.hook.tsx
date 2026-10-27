@@ -18,7 +18,7 @@ import {
   trimRangeStart,
 } from './TextInput.snippets';
 import { computeNeedlePosition, resolvePointerAt, tokenize } from './TextInput.tokenize';
-import { readEnvNumber } from '../../utils/env';
+import { readEnvNumber } from '@utils/env';
 
 export type { CharRectLike, NeedleDescriptor, Segment, Token } from './TextInput.types';
 export {

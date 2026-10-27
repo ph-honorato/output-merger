@@ -36,7 +36,7 @@ import {
   serialize,
   tokensEqualIgnoringEdited,
   truncateToUtf16Budget,
-} from '../../../../utils/previewDocument';
+} from '@utils/previewDocument';
 
 /**
  * PointerSensor hold-to-drag activation (edit mode OFF — the

@@ -14,10 +14,10 @@ import {
   buildLandingId,
   enumerateLandingAnchors,
   isSnippetToken,
-} from '../../../../utils/previewDocument';
+} from '@utils/previewDocument';
 import type { Landing } from '../../../../context/SnippetsContext';
 import type { PreviewToken } from '../../../../context/SnippetsContext';
-import { withAlpha } from '../../../../utils/color';
+import { withAlpha } from '@utils/color';
 import type { PreviewAreaProps } from './PreviewArea.types';
 import * as S from './PreviewArea.styles';
 

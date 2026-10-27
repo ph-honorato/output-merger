@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { withAlpha } from '../../utils/color';
+import { withAlpha } from '@utils/color';
 import { TEXT_INPUT_MAX_CHARACTERS, TEXTAREA_BASELINE_ROWS, useTextInput } from './TextInput.hook';
 import { parseBoundary, serializeBoundary } from './TextInput.geometry';
 import { type TextInputProps } from './TextInput.types';

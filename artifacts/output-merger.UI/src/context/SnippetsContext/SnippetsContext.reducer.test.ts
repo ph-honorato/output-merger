@@ -8,7 +8,7 @@ import {
   normalizeTextTokens,
   serialize,
   snippetSlotToTokenIndex,
-} from '../../utils/previewDocument';
+} from '@utils/previewDocument';
 import type { Snippet } from '@components';
 
 // ---------------------------------------------------------------------------

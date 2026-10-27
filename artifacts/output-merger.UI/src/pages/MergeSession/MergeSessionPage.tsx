@@ -17,7 +17,7 @@ import {
   writeTutorialDismissed,
 } from "./components";
 import { SnippetsProvider, useSnippets } from "../../context/SnippetsContext";
-import { serialize } from "../../utils/previewDocument";
+import { serialize } from '@utils/previewDocument';
 
 /** Stagger delays for entrance animation (ms) */
 const ENTRANCE_DELAYS = {
