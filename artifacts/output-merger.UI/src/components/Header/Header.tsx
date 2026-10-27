@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useRef, useEffect } from "react";
 import { Menu as MenuIcon, Public } from "@mui/icons-material";
+import { Container } from "@mui/material";
 import { useHeader } from "./Header.hook";
 import { type HeaderProps } from "./Header.types";
 import * as S from "./Header.styles";
@@ -70,33 +71,89 @@ function Header(props: HeaderProps) {
 
   return (
     <S.StyledHeader className={className}>
-      <S.StyledToolbar>
-        {/* Logo Section */}
-        <S.LogoContainer>
-          <S.LogoIcon />
-          <S.LogoText data-testid="header-title">{t("app.title")}</S.LogoText>
-        </S.LogoContainer>
+      <Container maxWidth="xl">
+        <S.StyledToolbar>
+          {/* Logo Section */}
+          <S.LogoContainer>
+            <S.LogoIcon alt={t("app.title")} />
+          </S.LogoContainer>
 
-        {/* Desktop Actions */}
-        <S.DesktopActions>
-          <S.LanguageSelectorContainer ref={languageMenuRef}>
-            <S.LanguageMenuButton
-              onClick={handleLanguageMenuOpen}
-              aria-label={t("language.selector")}
-              aria-expanded={isLanguageMenuOpen}
-              aria-haspopup="true"
-              data-testid="language-selector-button"
-            >
-              <Public fontSize="large" color="action" />
-            </S.LanguageMenuButton>
-
-            {isLanguageMenuOpen && (
-              <S.LanguageMenu
-                id="language-menu"
-                role="menu"
+          {/* Desktop Actions */}
+          <S.DesktopActions>
+            <S.LanguageSelectorContainer ref={languageMenuRef}>
+              <S.LanguageMenuButton
+                onClick={handleLanguageMenuOpen}
                 aria-label={t("language.selector")}
-                data-testid="language-menu"
+                aria-expanded={isLanguageMenuOpen}
+                aria-haspopup="true"
+                data-testid="language-selector-button"
               >
+                <Public fontSize="large" color="action" />
+              </S.LanguageMenuButton>
+
+              {isLanguageMenuOpen && (
+                <S.LanguageMenu
+                  id="language-menu"
+                  role="menu"
+                  aria-label={t("language.selector")}
+                  data-testid="language-menu"
+                >
+                  {availableLanguages.map((lang) => (
+                    <S.LanguageMenuItem
+                      key={lang.code}
+                      className={
+                        currentLanguage === lang.code ? "selected" : ""
+                      }
+                      onClick={() => handleLanguageChange(lang.code)}
+                      onKeyDown={(e) => handleKeyDown(e, lang.code)}
+                      role="menuitem"
+                      tabIndex={-1}
+                      data-testid={`language-option-${lang.code}`}
+                    >
+                      <S.LanguageFlag>
+                        {LANGUAGE_FLAGS[lang.code]}
+                      </S.LanguageFlag>
+                      <S.LanguageName>{lang.label}</S.LanguageName>
+                    </S.LanguageMenuItem>
+                  ))}
+                </S.LanguageMenu>
+              )}
+            </S.LanguageSelectorContainer>
+          </S.DesktopActions>
+
+          {/* Mobile Menu Button */}
+          <S.MobileMenuButton
+            onClick={handleMobileMenuToggle}
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
+            data-testid="mobile-menu-button"
+          >
+            <MenuIcon fontSize="large" />
+          </S.MobileMenuButton>
+        </S.StyledToolbar>
+
+        {/* Mobile Menu */}
+        <S.MobileActions
+          role="navigation"
+          aria-label="Mobile menu"
+          ref={mobileMenuRef}
+        >
+          {mobileMenuOpen && (
+            <S.MobileMenu
+              role="menu"
+              aria-label={t("language.selector")}
+              data-testid="mobile-menu"
+            >
+              <div style={{ padding: "8px 16px" }}>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--mui-palette-text-secondary)",
+                    margin: "0 0 8px 0",
+                  }}
+                >
+                  {t("language.selector")}
+                </p>
                 {availableLanguages.map((lang) => (
                   <S.LanguageMenuItem
                     key={lang.code}
@@ -105,68 +162,17 @@ function Header(props: HeaderProps) {
                     onKeyDown={(e) => handleKeyDown(e, lang.code)}
                     role="menuitem"
                     tabIndex={-1}
-                    data-testid={`language-option-${lang.code}`}
+                    data-testid={`mobile-language-option-${lang.code}`}
                   >
                     <S.LanguageFlag>{LANGUAGE_FLAGS[lang.code]}</S.LanguageFlag>
                     <S.LanguageName>{lang.label}</S.LanguageName>
                   </S.LanguageMenuItem>
                 ))}
-              </S.LanguageMenu>
-            )}
-          </S.LanguageSelectorContainer>
-        </S.DesktopActions>
-
-        {/* Mobile Menu Button */}
-        <S.MobileMenuButton
-          onClick={handleMobileMenuToggle}
-          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={mobileMenuOpen}
-          data-testid="mobile-menu-button"
-        >
-          <MenuIcon fontSize="large" />
-        </S.MobileMenuButton>
-      </S.StyledToolbar>
-
-      {/* Mobile Menu */}
-      <S.MobileActions
-        role="navigation"
-        aria-label="Mobile menu"
-        ref={mobileMenuRef}
-      >
-        {mobileMenuOpen && (
-          <S.MobileMenu
-            role="menu"
-            aria-label={t("language.selector")}
-            data-testid="mobile-menu"
-          >
-            <div style={{ padding: "8px 16px" }}>
-              <p
-                style={{
-                  fontSize: "0.75rem",
-                  color: "var(--mui-palette-text-secondary)",
-                  margin: "0 0 8px 0",
-                }}
-              >
-                {t("language.selector")}
-              </p>
-              {availableLanguages.map((lang) => (
-                <S.LanguageMenuItem
-                  key={lang.code}
-                  className={currentLanguage === lang.code ? "selected" : ""}
-                  onClick={() => handleLanguageChange(lang.code)}
-                  onKeyDown={(e) => handleKeyDown(e, lang.code)}
-                  role="menuitem"
-                  tabIndex={-1}
-                  data-testid={`mobile-language-option-${lang.code}`}
-                >
-                  <S.LanguageFlag>{LANGUAGE_FLAGS[lang.code]}</S.LanguageFlag>
-                  <S.LanguageName>{lang.label}</S.LanguageName>
-                </S.LanguageMenuItem>
-              ))}
-            </div>
-          </S.MobileMenu>
-        )}
-      </S.MobileActions>
+              </div>
+            </S.MobileMenu>
+          )}
+        </S.MobileActions>
+      </Container>
     </S.StyledHeader>
   );
 }

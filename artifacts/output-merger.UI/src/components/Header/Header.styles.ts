@@ -21,8 +21,9 @@ export const StyledToolbar = styled.div`
   align-items: center;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(2)};
   flex-wrap: wrap;
-  padding: ${({ theme }) => (theme as StyledTheme).spacing(0, 2)};
+  padding: ${({ theme }) => (theme as StyledTheme).spacing(0)};
   min-height: 64px;
+  position: relative;
 `;
 
 export const LogoContainer = styled.div`
@@ -34,8 +35,7 @@ export const LogoContainer = styled.div`
 
 export const LogoIcon = styled.img.attrs({
   src: "/om-logo.svg",
-  alt: "Logo",
-})`
+})<{ alt?: string }>`
   width: 30px;
   height: auto;
   object-fit: contain;
