@@ -30,11 +30,13 @@ export interface Snippet {
  */
 export type TextInputMode = 'input' | 'view';
 
+import type { EntranceAnimationProps } from "@shared-types/animation";
+
 /**
  * Props for the TextInput component
  * @interface TextInputProps
  */
-export interface TextInputProps {
+export interface TextInputProps extends EntranceAnimationProps {
   /**
    * 'input' shows a textarea; 'view' shows plain text with needles. Default 'input'
    */
@@ -67,10 +69,6 @@ export interface TextInputProps {
    * Called with the full array of snippets whenever snippets change (create/resize/remove)
    */
   onChange?: (snippets: Snippet[]) => void;
-  /**
-   * Entrance animation delay (e.g., '100ms'). Used for staggered page-load animations.
-   */
-  $entranceDelay?: string;
 }
 
 /**

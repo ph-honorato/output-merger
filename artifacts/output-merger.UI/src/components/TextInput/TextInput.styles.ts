@@ -1,21 +1,11 @@
-import styled, { keyframes } from "styled-components";
+import styled from "styled-components";
 import TextField from "@mui/material/TextField";
 import type { DefaultTheme } from "styled-components";
 import type { Theme } from "@mui/material/styles";
 import { CARD_HEIGHT } from "../../theme";
+import { slideUpFadeIn } from "@utils/animations";
 
 type StyledTheme = DefaultTheme & Theme;
-
-const slideUpFadeIn = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(100px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
 
 export const TextInputRoot = styled.div<{ $entranceDelay?: string }>`
   display: flex;

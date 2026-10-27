@@ -1,8 +1,10 @@
+import type { EntranceAnimationProps } from "@shared-types/animation";
+
 /**
  * Props for the PreviewArea component
  * @interface PreviewAreaProps
  */
-export interface PreviewAreaProps {
+export interface PreviewAreaProps extends EntranceAnimationProps {
   /**
    * Optional class name applied to the root element
    */
@@ -25,8 +27,4 @@ export interface PreviewAreaProps {
    * last element of its tools rail instead.
    */
   showCharCount?: boolean;
-  /**
-   * Entrance animation delay (e.g., '100ms'). Used for staggered page-load animations.
-   */
-  $entranceDelay?: string;
 }
