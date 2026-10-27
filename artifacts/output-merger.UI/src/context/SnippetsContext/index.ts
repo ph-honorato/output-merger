@@ -9,6 +9,7 @@ export type {
   OwnTextToken,
   PreviewDocument,
   PreviewToken,
+  ResetAllAction,
   SetEditEnabledAction,
   SetSourceSnippetsAction,
   SnippetToken,

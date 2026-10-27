@@ -49,6 +49,13 @@ export function SnippetsProvider({ children }: { children?: ReactNode }) {
     []
   );
 
+  const resetAll = useCallback<SnippetsContextValue['resetAll']>(
+    (seedText) => {
+      dispatch({ type: 'RESET_ALL', seedText });
+    },
+    []
+  );
+
   const setEditEnabled = useCallback<SnippetsContextValue['setEditEnabled']>(
     (editEnabled) => {
       dispatch({ type: 'SET_EDIT_ENABLED', editEnabled });
@@ -65,9 +72,10 @@ export function SnippetsProvider({ children }: { children?: ReactNode }) {
       moveToken,
       moveTokenToLanding,
       syncDocument,
+      resetAll,
       setEditEnabled,
     }),
-    [state, setSourceSnippets, moveToken, moveTokenToLanding, syncDocument, setEditEnabled]
+    [state, setSourceSnippets, moveToken, moveTokenToLanding, syncDocument, resetAll, setEditEnabled]
   );
 
   return (

@@ -162,6 +162,16 @@ export interface SyncDocumentAction {
   tokens: PreviewToken[];
 }
 
+export interface ResetAllAction {
+  type: 'RESET_ALL';
+  /**
+   * The raw visible serialization (captured at confirm time) that
+   * re-seeds the cleared document as plain own text — chips and
+   * highlight colors are gone, no tombstones remain
+   */
+  seedText: string;
+}
+
 export interface SetEditEnabledAction {
   type: 'SET_EDIT_ENABLED';
   editEnabled: boolean;
@@ -181,6 +191,7 @@ export type SnippetsAction =
   | MoveTokenAction
   | MoveTokenToLandingAction
   | SyncDocumentAction
+  | ResetAllAction
   | SetEditEnabledAction
   | SetCaseFixLanguageAction;
 
@@ -221,6 +232,13 @@ export interface SnippetsContextValue {
    * event; computes "edited" flags and snippet tombstones)
    */
   syncDocument: (tokens: PreviewToken[]) => void;
+  /**
+   * Clears every document token and tombstone (preserving
+   * editEnabled and caseFixLanguage) and re-seeds the document with
+   * the given text as plain own text in its canonical token shape —
+   * one user-visible reset transition
+   */
+  resetAll: (seedText: string) => void;
   /**
    * Flips the session-level edit toggle
    */

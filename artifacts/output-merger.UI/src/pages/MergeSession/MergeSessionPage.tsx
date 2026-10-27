@@ -12,16 +12,24 @@ import {
   PreviewModal,
   TextEditingToggle,
   TutorialBanner,
+  ReturnButton,
   readTutorialDismissed,
   writeTutorialDismissed,
 } from "./components";
 import { SnippetsProvider, useSnippets } from "../../context/SnippetsContext";
+import { serialize } from "../../utils/previewDocument";
 
 function MergeSessionWorkspace() {
   const { t } = useTranslation();
-  const { setSourceSnippets } = useSnippets();
+  const { setSourceSnippets, document: previewDocument, resetAll } =
+    useSnippets();
   const [mergeStarted, setMergeStarted] = useState(false);
   const [sourceTexts, setSourceTexts] = useState<Record<string, string>>({});
+  // Bumped once per confirmed return: the value rides each source's
+  // remount key, so every return remounts its TextInput (fresh
+  // snippet-free state, text restored through initialText) while the
+  // Start Merge mode flip keeps the same key and never remounts.
+  const [returnEpoch, setReturnEpoch] = useState(0);
 
   const handleTextChange = useCallback((sourceId: string, text: string) => {
     setSourceTexts((previous) => ({ ...previous, [sourceId]: text }));
@@ -31,10 +39,23 @@ function MergeSessionWorkspace() {
     (text) => text.trim().length > 0,
   );
 
+  // The return's page-owned sequence: capture the raw visible
+  // serialization BEFORE the reset (the clear destroys the tokens),
+  // then clear-and-reseed the document, flip the mode, and bump the
+  // remount epoch — one commit.
+  const handleReturnConfirm = useCallback(() => {
+    const mergedText = serialize(previewDocument);
+    resetAll(mergedText);
+    setMergeStarted(false);
+    setReturnEpoch((epoch) => epoch + 1);
+  }, [previewDocument, resetAll]);
+
   return (
     <>
       <ActionsBar align="right">
-        {mergeStarted ? null : (
+        {mergeStarted ? (
+          <ReturnButton onConfirm={handleReturnConfirm} />
+        ) : (
           <S.StartMergeButton
             variant="contained"
             disabled={!canStartMerge}
@@ -49,16 +70,20 @@ function MergeSessionWorkspace() {
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 4 }}>
           <TextInput
+            key={`text-1:${returnEpoch}`}
             color="#0080FF"
             mode={mergeStarted ? "view" : "input"}
+            initialText={sourceTexts["text-1"] ?? ""}
             onTextChange={(text) => handleTextChange("text-1", text)}
             onChange={(snippets) => setSourceSnippets("text-1", snippets)}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <TextInput
+            key={`text-2:${returnEpoch}`}
             color="#FF1493"
             mode={mergeStarted ? "view" : "input"}
+            initialText={sourceTexts["text-2"] ?? ""}
             onTextChange={(text) => handleTextChange("text-2", text)}
             onChange={(snippets) => setSourceSnippets("text-2", snippets)}
           />
