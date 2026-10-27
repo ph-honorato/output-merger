@@ -30,15 +30,21 @@ export const PreviewAreaRoot = styled.div<{ $entranceDelay?: string }>`
   border-radius: 0.75rem;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 
-  /* Entrance animation: slide up + fade in */
-  opacity: 0;
-  animation: ${slideUpFadeIn} 800ms ease-out
-    ${({ $entranceDelay }) => $entranceDelay ?? "0ms"} forwards;
+  /* Entrance animation: slide up + fade in (opt-in via $entranceDelay prop) */
+  ${({ $entranceDelay }) =>
+    $entranceDelay !== undefined
+      ? css`
+          opacity: 0;
+          animation: ${slideUpFadeIn} 800ms ease-out ${$entranceDelay} forwards;
 
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-    opacity: 1;
-  }
+          @media (prefers-reduced-motion: reduce) {
+            animation: none;
+            opacity: 1;
+          }
+        `
+      : css`
+          opacity: 1;
+        `}
 `;
 
 /**
