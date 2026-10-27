@@ -794,4 +794,44 @@ describe('MergeSessionPage', () => {
     expect(inlineFlow).toBeDefined();
     expect(inlineFlow!).toHaveTextContent('Beta gamma');
   });
+
+  it('does not replay entrance animations on TextInputs and PreviewArea after a confirmed return', async () => {
+    const text = 'alpha beta gamma delta';
+    installVirtualLayout(text);
+
+    renderPage();
+    const user = userEvent.setup();
+
+    // Type text and start merge
+    await user.type(screen.getAllByTestId('text-input-textarea')[0], text);
+    await user.click(screen.getByTestId('merge-session-start-button'));
+
+    const views = screen.getAllByTestId('text-input-view');
+    dragFromTo(views[0], 41, 151);
+
+    // Confirm return
+    await user.click(screen.getByTestId('merge-session-return-button'));
+    await user.click(screen.getByTestId('return-confirmation-confirm-button'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('return-confirmation-dialog')).toBeNull(),
+    );
+
+    // After return: inputs are back in input mode (textareas visible)
+    const textareas = screen.getAllByTestId('text-input-textarea');
+    expect(textareas).toHaveLength(2);
+
+    // The TextInput roots should NOT have the entrance animation (opacity: 1, no animation)
+    // They remount with a new key but without $entranceDelay, so they appear instantly
+    const inputRoots = screen.getAllByTestId('text-input-root');
+    for (const root of inputRoots) {
+      expect(root).toHaveStyle({ opacity: '1' });
+      // The animation should not be present since $entranceDelay is undefined on return
+      expect(root).not.toHaveStyle({ animationName: 'slideUpFadeIn' });
+    }
+
+    // PreviewArea should also not animate on return
+    const previewArea = screen.getByTestId('preview-area');
+    expect(previewArea).toHaveStyle({ opacity: '1' });
+    expect(previewArea).not.toHaveStyle({ animationName: 'slideUpFadeIn' });
+  });
 });

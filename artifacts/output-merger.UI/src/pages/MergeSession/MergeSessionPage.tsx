@@ -86,7 +86,7 @@ function MergeSessionWorkspace() {
             initialText={sourceTexts["text-1"] ?? ""}
             onTextChange={(text) => handleTextChange("text-1", text)}
             onChange={(snippets) => setSourceSnippets("text-1", snippets)}
-            $entranceDelay={ENTRANCE_DELAYS.textInput1}
+            $entranceDelay={returnEpoch === 0 ? ENTRANCE_DELAYS.textInput1 : undefined}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -97,12 +97,12 @@ function MergeSessionWorkspace() {
             initialText={sourceTexts["text-2"] ?? ""}
             onTextChange={(text) => handleTextChange("text-2", text)}
             onChange={(snippets) => setSourceSnippets("text-2", snippets)}
-            $entranceDelay={ENTRANCE_DELAYS.textInput2}
+            $entranceDelay={returnEpoch === 0 ? ENTRANCE_DELAYS.textInput2 : undefined}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <S.PreviewColumn>
-            <PreviewArea $entranceDelay={ENTRANCE_DELAYS.previewArea} />
+            <PreviewArea $entranceDelay={returnEpoch === 0 ? ENTRANCE_DELAYS.previewArea : undefined} />
             <PreviewToolbar>
               <CopyMergedTextButton />
               <PreviewModal />
