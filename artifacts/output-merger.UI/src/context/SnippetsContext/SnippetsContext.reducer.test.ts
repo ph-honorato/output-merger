@@ -896,3 +896,141 @@ describe('MOVE_TOKEN_TO_LANDING exhaustive oracle (word-boundary landings)', () 
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// RESET_ALL — the return transition's oracle: the clear (tokens +
+// tombstones out; editEnabled + caseFixLanguage preserved), the
+// canonical seed shape (single run → one own-text token; multi-line
+// → runs + line-break tokens; empty/whitespace-only seed → the
+// empty document), and the composed-pass settlement of the seed
+// (spacing collapses and trims; case never changes — the seed
+// carries no snippet tokens).
+// ---------------------------------------------------------------------------
+
+describe('RESET_ALL (return transition)', () => {
+  const reset = (state: SnippetsState, seedText: string): SnippetsState =>
+    snippetsReducer(state, { type: 'RESET_ALL', seedText });
+
+  const kindsOf = (tokens: PreviewToken[]): string[] =>
+    tokens.map((token) => token.kind);
+
+  it('clears tokens and tombstones while preserving editEnabled and caseFixLanguage', () => {
+    let state = stateOf([chipTok(0), textTok('t1', ' '), chipTok(1)]);
+    state = { ...state, tombstones: ['src1:s9'] };
+    state = snippetsReducer(state, {
+      type: 'SET_EDIT_ENABLED',
+      editEnabled: true,
+    });
+    state = snippetsReducer(state, {
+      type: 'SET_CASE_FIX_LANGUAGE',
+      language: 'pt-BR',
+    });
+
+    const next = reset(state, 'Hello WORLD');
+
+    expect(next.tokens).toHaveLength(1);
+    expect(next.tombstones).toEqual([]);
+    expect(next.editEnabled).toBe(true);
+    expect(next.caseFixLanguage).toBe('pt-BR');
+  });
+
+  it('seeds a single-run text as exactly one own-text token with the text verbatim', () => {
+    const next = reset(
+      stateOf([chipTok(0), textTok('t1', ' '), chipTok(1)]),
+      'Hello WORLD stays',
+    );
+
+    expect(next.tokens).toHaveLength(1);
+    expect(next.tokens[0]).toEqual({
+      kind: 'text',
+      tokenId: 'return-seed:text-1',
+      text: 'Hello WORLD stays',
+    });
+    expect(serialize(next.tokens)).toBe('Hello WORLD stays');
+  });
+
+  it('seeds a multi-line text as own-text runs separated by line-break tokens', () => {
+    const next = reset(stateOf([chipTok(0)]), 'one\ntwo\n\nthree');
+
+    expect(kindsOf(next.tokens)).toEqual([
+      'text',
+      'line-break',
+      'text',
+      'line-break',
+      'line-break',
+      'text',
+    ]);
+    // No own-text token ever carries a "\n" — the canonical model
+    // shape — and consecutive line breaks survive as consecutive
+    // line-break tokens.
+    expect(
+      next.tokens.every(
+        (token) => token.kind !== 'text' || !token.text.includes('\n'),
+      ),
+    ).toBe(true);
+    expect(serialize(next.tokens)).toBe('one\ntwo\n\nthree');
+  });
+
+  it('seeds an empty text as the empty document', () => {
+    const next = reset(stateOf([chipTok(0), textTok('t1', ' tail'), chipTok(1)]), '');
+
+    expect(next.tokens).toEqual([]);
+    expect(next.tombstones).toEqual([]);
+    // An already-empty, tombstone-free state stays reference-identical.
+    expect(reset(initialSnippetsState, '')).toBe(initialSnippetsState);
+  });
+
+  it('empties a whitespace-only seed through the composed pass (same observable as the empty seed)', () => {
+    const next = reset(stateOf([chipTok(0)]), '   ');
+
+    expect(next.tokens).toEqual([]);
+  });
+
+  it('collapses a double-spaced seed through the composed pass while leaving its case untouched', () => {
+    // The composed pass runs over the seed as over any non-SYNC
+    // transition: interior double spaces collapse, while the case
+    // pass (snippet tokens only) leaves the seeded own text verbatim.
+    const next = reset(stateOf([]), 'Keep  THIS  Case');
+
+    expect(next.tokens).toHaveLength(1);
+    expect(serialize(next.tokens)).toBe('Keep THIS Case');
+  });
+
+  it('trims document-edge and line-break-adjacent whitespace of the seed at the transition', () => {
+    const next = reset(stateOf([]), '  one \n two  ');
+
+    expect(serialize(next.tokens)).toBe('one\ntwo');
+    expect(kindsOf(next.tokens)).toEqual(['text', 'line-break', 'text']);
+  });
+
+  it('mints deterministic seed ids, unique within the document', () => {
+    const first = reset(stateOf([chipTok(0)]), 'one\ntwo');
+    const second = reset(stateOf([chipTok(3), textTok('x', 'zz')]), 'one\ntwo');
+
+    expect(second.tokens.map((token) => token.tokenId)).toEqual(
+      first.tokens.map((token) => token.tokenId),
+    );
+    const ids = first.tokens.map((token) => token.tokenId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('appends a later re-emission after the seeded text with one separator (join parity)', () => {
+    const seeded = reset(stateOf([]), 'Beta gamma');
+    const next = snippetsReducer(seeded, {
+      type: 'SET_SOURCE_SNIPPETS',
+      sourceId: 'text-1',
+      snippets: [mkSnippet(0)],
+    });
+
+    // The appended chip lands after the seeded text with exactly
+    // one " " between — the eager normalization folds that separator
+    // into the adjacent own-text run (the canonical model shape), so
+    // the serialization keeps the join parity.
+    expect(serialize(next.tokens)).toBe('Beta gamma A');
+    expect(next.tokens).toHaveLength(2);
+    expect(next.tokens[0]).toEqual(
+      expect.objectContaining({ kind: 'text', text: 'Beta gamma ' }),
+    );
+    expect(isSnippetToken(next.tokens[1])).toBe(true);
+  });
+});

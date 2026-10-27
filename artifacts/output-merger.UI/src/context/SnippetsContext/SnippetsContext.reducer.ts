@@ -519,6 +519,66 @@ function syncParsedDocument(
   return { ...state, tokens, tombstones };
 }
 
+/**
+ * The canonical token shape of the reseed text: split at every "\n"
+ * into own-text tokens separated by line-break tokens (an own-text
+ * token never carries a "\n"; empty runs produce no token, so an
+ * empty or whitespace-only seed yields no text tokens). Ids mint
+ * deterministically per ordinal — the ids are free after every
+ * clear, so repeated resets produce the same shape.
+ */
+function buildSeedTokens(seedText: string): PreviewToken[] {
+  const tokens: PreviewToken[] = [];
+  let textRun = 0;
+  let lineBreak = 0;
+  const pushTextRun = (text: string) => {
+    if (text.length === 0) {
+      return;
+    }
+    textRun += 1;
+    tokens.push({
+      kind: 'text',
+      tokenId: `return-seed:text-${textRun}`,
+      text,
+    });
+  };
+  const lines = seedText.split('\n');
+  pushTextRun(lines[0]);
+  for (let index = 1; index < lines.length; index += 1) {
+    lineBreak += 1;
+    tokens.push({
+      kind: 'line-break',
+      tokenId: `return-seed:line-break-${lineBreak}`,
+    });
+    pushTextRun(lines[index]);
+  }
+  return tokens;
+}
+
+/**
+ * RESET_ALL — the return transition: every document token and every
+ * tombstone clears (editEnabled and caseFixLanguage pass through
+ * untouched), then the document re-seeds with the given text as
+ * plain own text in its canonical model shape. An empty seed is the
+ * empty document. The transition runs as a normal non-SYNC
+ * transition, so the wrapper's composed auto-fix pass settles the
+ * seed's spacing (interior runs, document edges, line-break-adjacent
+ * whitespace); its case never changes — the case pass touches
+ * snippet tokens only, and the seed carries none.
+ */
+function resetAndReseedDocument(
+  state: SnippetsState,
+  seedText: string,
+): SnippetsState {
+  const tokens = buildSeedTokens(seedText);
+  if (tokens.length === 0) {
+    return state.tokens.length === 0 && state.tombstones.length === 0
+      ? state
+      : { ...state, tokens: [], tombstones: [] };
+  }
+  return { ...state, tokens, tombstones: [] };
+}
+
 const snippetsReducerTransition = (
   state: SnippetsState,
   action: SnippetsAction,
@@ -539,6 +599,9 @@ const snippetsReducerTransition = (
     }
     case 'SYNC_DOCUMENT': {
       return syncParsedDocument(state, action.tokens);
+    }
+    case 'RESET_ALL': {
+      return resetAndReseedDocument(state, action.seedText);
     }
     case 'SET_EDIT_ENABLED': {
       return action.editEnabled === state.editEnabled

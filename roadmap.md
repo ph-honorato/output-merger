@@ -87,21 +87,21 @@
   - [ ] **Task 4.3: Undo auto-corrections** - Let the user undo/review auto-corrections (deferred, user decision 2026-10-22 — see `.specs/features/preview-area-auto-fix/tasks/case-auto-fix/`)
 
 - [ ] **Feature 5: ActionsBar Extensions** - Additional action buttons on the MergeSession ActionsBar
-  - [ ] **Task 5.1: Return Button** - Replace "Start Merge" with "Return" after merge starts
-    - [ ] Task 5.1.1: Add merge mode state to track whether merge has started (derived from inputs in view mode)
-    - [ ] Task 5.1.2: Conditionally render "Return" button (with MUI KeyboardReturn icon) instead of "Start Merge" when in merge mode
-    - [ ] Task 5.1.3: Create ReturnConfirmationModal component (MUI Dialog) in MergeSession/components/ with:
+  - [x] **Task 5.1: Return Button** - Replace "Start Merge" with "Return" after merge starts
+    - [x] Task 5.1.1: Add merge mode state to track whether merge has started (derived from inputs in view mode)
+    - [x] Task 5.1.2: Conditionally render "Return" button (with MUI KeyboardReturn icon) instead of "Start Merge" when in merge mode
+    - [x] Task 5.1.3: Create ReturnConfirmationModal component (MUI Dialog) in MergeSession/components/ with:
       - Warning message about snippet removal and preview reset
       - Checkbox "Don't show this again" (persisted to localStorage key: output-merger.return-confirmation-dismissed)
       - Confirm/Cancel buttons with translations (en-US/pt-BR)
-    - [ ] Task 5.1.4: Implement return logic on confirmation:
+    - [x] Task 5.1.4: Implement return logic on confirmation:
       - Dispatch RESET_ALL reducer action to clear all snippets/tokens (without resetting editEnabled)
       - Reset inputs to input mode (editable textareas)
       - Replace preview area content with plain merged text (follows editEnabled state)
       - Switch ActionsBar back to showing "Start Merge" button
-    - [ ] Task 5.1.5: Wire modal open/close state to Return button click (disable button while modal open)
-    - [ ] Task 5.1.6: Add localStorage persistence for "don't show again" preference
-    - [ ] Task 5.1.7: Tests: modal open/close, confirmation flow, localStorage persistence, state reset
+    - [x] Task 5.1.5: Wire modal open/close state to Return button click (disable button while modal open)
+    - [x] Task 5.1.6: Add localStorage persistence for "don't show again" preference
+    - [x] Task 5.1.7: Tests: modal open/close, confirmation flow, localStorage persistence, state reset
   - [ ] **Task 5.2: "Start Over" Button** - Reset page without reload (to be planned later)
   - [ ] **Task 5.3: "Add Text" Button** - Add new text input, up to 4 total (to be planned later)
 - [ ] **Feature 6: UI/UX Adjustments** - Minor improvements to polish user experience
