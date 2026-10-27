@@ -25,4 +25,8 @@ export interface PreviewAreaProps {
    * last element of its tools rail instead.
    */
   showCharCount?: boolean;
+  /**
+   * Entrance animation delay (e.g., '100ms'). Used for staggered page-load animations.
+   */
+  $entranceDelay?: string;
 }

@@ -7,7 +7,7 @@ import { type TextInputProps } from './TextInput.types';
 import * as S from './TextInput.styles';
 
 function TextInput(props: TextInputProps) {
-  const { mode = 'input', color = '#0080FF', maxCharacters = TEXT_INPUT_MAX_CHARACTERS, label, id } = props;
+  const { mode = 'input', color = '#0080FF', maxCharacters = TEXT_INPUT_MAX_CHARACTERS, label, id, $entranceDelay } = props;
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRows = TEXTAREA_BASELINE_ROWS;
@@ -53,7 +53,13 @@ function TextInput(props: TextInputProps) {
   });
 
   return (
-    <S.TextInputRoot data-testid="text-input-root" data-mode={mode} id={id} ref={rootRef}>
+    <S.TextInputRoot
+      data-testid="text-input-root"
+      data-mode={mode}
+      id={id}
+      ref={rootRef}
+      $entranceDelay={$entranceDelay}
+    >
       {label ? <S.Label>{label}</S.Label> : null}
       {mode === 'input' ? (
         <>
