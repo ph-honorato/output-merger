@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
-import { theme } from '../../theme';
+import { theme } from '@theme';
 import Header from './Header';
 import { i18n } from '@translation';
 import { I18nextProvider } from 'react-i18next';

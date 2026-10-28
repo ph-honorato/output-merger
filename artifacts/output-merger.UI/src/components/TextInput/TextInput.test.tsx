@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
 import { I18nextProvider } from 'react-i18next';
-import { theme } from '../../theme';
+import { theme } from '@theme';
 import { i18n } from '@translation';
 import { withAlpha } from '@utils/color';
 import TextInput from './TextInput';

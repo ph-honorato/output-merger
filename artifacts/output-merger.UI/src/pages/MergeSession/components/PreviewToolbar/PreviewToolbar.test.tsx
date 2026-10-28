@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
-import { theme } from '../../../../theme';
+import { theme } from '@theme';
 import PreviewToolbar from './PreviewToolbar';
 import { i18n } from '@translation';
 import { I18nextProvider } from 'react-i18next';

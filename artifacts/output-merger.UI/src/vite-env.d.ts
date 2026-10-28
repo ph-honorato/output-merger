@@ -1,4 +1,7 @@
 /// <reference types="vite/client" />
+/// <reference types="styled-components" />
+
+import { Theme as MuiTheme } from '@mui/material/styles';
 
 interface ImportMetaEnv {
   /** The preview document's maximum length (fallback 2000). */
@@ -9,4 +12,19 @@ interface ImportMetaEnv {
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
+}
+
+declare module '@mui/material/styles' {
+  interface Theme {
+    borderRadius: string;
+  }
+  interface ThemeOptions {
+    borderRadius?: string;
+  }
+}
+
+declare module 'styled-components' {
+  export interface DefaultTheme extends MuiTheme {
+    borderRadius: string;
+  }
 }

@@ -1,10 +1,7 @@
 import styled, { keyframes } from "styled-components";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
-import type { DefaultTheme } from "styled-components";
-import type { Theme } from "@mui/material/styles";
-
-type StyledTheme = DefaultTheme & Theme;
+import type { StyledTheme } from "@theme";
 
 const gradientMesh = keyframes`
   0% {
@@ -75,7 +72,7 @@ export const StartMergeButton = styled(Button)`
   background-color: #0080ff;
   color: #ffffff;
   font-weight: 600;
-  border-radius: 0.75rem;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   padding: 12px;
   box-shadow: none;
 
