@@ -22,13 +22,15 @@ export const TitleRow = styled.div`
 
 export const Title = styled.h1`
   grid-column: 2;
+  font-family: 'Brawler', serif;
   font-size: clamp(2.5rem, 5vw, 4rem);
-  font-weight: 700;
+  font-weight: 400;
   background: linear-gradient(135deg, #0080ff, #ff1493, #00ffff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 1rem;
+  letter-spacing: normal;
 `;
 
 export const PreviewColumn = styled.div`
@@ -37,7 +39,7 @@ export const PreviewColumn = styled.div`
   align-items: stretch;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
 
-  ${({ theme }) => (theme as StyledTheme).breakpoints.up('md')} {
+  ${({ theme }) => (theme as StyledTheme).breakpoints.up("md")} {
     flex-direction: row;
     align-items: flex-start;
   }
