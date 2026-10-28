@@ -21,7 +21,11 @@
       "@components": ["./src/components"],
       "@components/*": ["./src/components/*"],
       "@translation": ["./src/i18n"],
-      "@translation/*": ["./src/i18n/*"]
+      "@translation/*": ["./src/i18n/*"],
+      "@utils": ["./src/utils"],
+      "@utils/*": ["./src/utils/*"],
+      "@shared-types": ["./src/types"],
+      "@shared-types/*": ["./src/types/*"]
     },
 
     /* Linting */

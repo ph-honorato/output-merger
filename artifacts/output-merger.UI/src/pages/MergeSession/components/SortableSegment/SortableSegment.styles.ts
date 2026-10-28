@@ -1,7 +1,7 @@
 import styled from 'styled-components';
 import type { DefaultTheme } from 'styled-components';
 import type { Theme } from '@mui/material/styles';
-import { withAlpha } from '../../../../utils/color';
+import { withAlpha } from '@utils/color';
 
 type StyledTheme = DefaultTheme & Theme;
 

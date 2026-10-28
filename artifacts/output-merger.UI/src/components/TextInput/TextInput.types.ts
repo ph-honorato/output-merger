@@ -30,11 +30,13 @@ export interface Snippet {
  */
 export type TextInputMode = 'input' | 'view';
 
+import type { EntranceAnimationProps } from "@shared-types/animation";
+
 /**
  * Props for the TextInput component
  * @interface TextInputProps
  */
-export interface TextInputProps {
+export interface TextInputProps extends EntranceAnimationProps {
   /**
    * 'input' shows a textarea; 'view' shows plain text with needles. Default 'input'
    */

@@ -1,12 +1,13 @@
-import styled from 'styled-components';
-import TextField from '@mui/material/TextField';
-import type { DefaultTheme } from 'styled-components';
-import type { Theme } from '@mui/material/styles';
-import { CARD_HEIGHT } from '../../theme';
+import styled, { css } from "styled-components";
+import TextField from "@mui/material/TextField";
+import type { DefaultTheme } from "styled-components";
+import type { Theme } from "@mui/material/styles";
+import { CARD_HEIGHT } from "../../theme";
+import { slideUpFadeIn } from "@utils/animations";
 
 type StyledTheme = DefaultTheme & Theme;
 
-export const TextInputRoot = styled.div`
+export const TextInputRoot = styled.div<{ $entranceDelay?: string }>`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
@@ -23,6 +24,22 @@ export const TextInputRoot = styled.div`
   border: 1px solid ${({ theme }) => (theme as StyledTheme).palette.divider};
   border-radius: 0.75rem;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+
+  /* Entrance animation: slide up + fade in (opt-in via $entranceDelay prop) */
+  ${({ $entranceDelay }) =>
+    $entranceDelay !== undefined
+      ? css`
+          opacity: 0;
+          animation: ${slideUpFadeIn} 800ms ease-out ${$entranceDelay} forwards;
+
+          @media (prefers-reduced-motion: reduce) {
+            animation: none;
+            opacity: 1;
+          }
+        `
+      : css`
+          opacity: 1;
+        `}
 `;
 
 export const Label = styled.span`
@@ -56,8 +73,9 @@ export const StyledTextField = styled(TextField)<{ $accent?: string }>`
   }
 
   & .MuiOutlinedInput-root.Mui-focused {
-    outline: 2px solid ${({ theme, $accent }) =>
-      $accent ?? (theme as StyledTheme).palette.primary.main};
+    outline: 2px solid
+      ${({ theme, $accent }) =>
+        $accent ?? (theme as StyledTheme).palette.primary.main};
     outline-offset: 2px;
     transition: outline-color 200ms ease;
   }
@@ -76,7 +94,7 @@ export const TextViewContainer = styled.div<{ $dragging?: boolean }>`
   white-space: pre-wrap;
   word-break: break-word;
   touch-action: none;
-  cursor: ${({ $dragging }) => ($dragging ? 'ew-resize' : 'default')};
+  cursor: ${({ $dragging }) => ($dragging ? "ew-resize" : "default")};
   line-height: 1.8;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   -webkit-user-select: none;
@@ -97,7 +115,7 @@ export const Needle = styled.span`
   transition: background-color 200ms ease;
 
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     top: -4px;
     bottom: -4px;

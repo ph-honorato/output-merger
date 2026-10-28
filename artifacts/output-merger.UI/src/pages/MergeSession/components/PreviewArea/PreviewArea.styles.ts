@@ -1,11 +1,12 @@
-import styled, { css } from 'styled-components';
-import type { DefaultTheme } from 'styled-components';
-import type { Theme } from '@mui/material/styles';
-import { CARD_HEIGHT } from '../../../../theme';
+import styled, { css } from "styled-components";
+import type { DefaultTheme } from "styled-components";
+import type { Theme } from "@mui/material/styles";
+import { CARD_HEIGHT } from "../../../../theme";
+import { slideUpFadeIn } from "@utils/animations";
 
 type StyledTheme = DefaultTheme & Theme;
 
-export const PreviewAreaRoot = styled.div`
+export const PreviewAreaRoot = styled.div<{ $entranceDelay?: string }>`
   flex: 1 1 auto;
   min-width: 0;
   /* One fixed height for every card (the text inputs and the
@@ -28,6 +29,22 @@ export const PreviewAreaRoot = styled.div`
   border: 1px solid ${({ theme }) => (theme as StyledTheme).palette.divider};
   border-radius: 0.75rem;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+
+  /* Entrance animation: slide up + fade in (opt-in via $entranceDelay prop) */
+  ${({ $entranceDelay }) =>
+    $entranceDelay !== undefined
+      ? css`
+          opacity: 0;
+          animation: ${slideUpFadeIn} 800ms ease-out ${$entranceDelay} forwards;
+
+          @media (prefers-reduced-motion: reduce) {
+            animation: none;
+            opacity: 1;
+          }
+        `
+      : css`
+          opacity: 1;
+        `}
 `;
 
 /**
@@ -48,7 +65,7 @@ export const FlowArea = styled.div<{ $reserveCounter?: boolean }>`
   min-height: 0;
   overflow: auto;
   margin-bottom: ${({ theme, $reserveCounter }) =>
-    $reserveCounter ? (theme as StyledTheme).spacing(3.5) : '0px'};
+    $reserveCounter ? (theme as StyledTheme).spacing(3.5) : "0px"};
 `;
 
 /**
@@ -105,7 +122,7 @@ export const SegmentFlow = styled.div<{ $editing?: boolean }>`
             pointer-events: none;
           }
         `
-      : ''}
+      : ""}
 `;
 
 export const OverlayChip = styled.span`

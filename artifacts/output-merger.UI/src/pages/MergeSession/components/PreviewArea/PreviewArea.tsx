@@ -14,10 +14,10 @@ import {
   buildLandingId,
   enumerateLandingAnchors,
   isSnippetToken,
-} from '../../../../utils/previewDocument';
+} from '@utils/previewDocument';
 import type { Landing } from '../../../../context/SnippetsContext';
 import type { PreviewToken } from '../../../../context/SnippetsContext';
-import { withAlpha } from '../../../../utils/color';
+import { withAlpha } from '@utils/color';
 import type { PreviewAreaProps } from './PreviewArea.types';
 import * as S from './PreviewArea.styles';
 
@@ -48,7 +48,7 @@ function LandingAnchor({ landing }: { landing: Landing }) {
 }
 
 function PreviewArea(props: PreviewAreaProps) {
-  const { className, onActiveDragChange, showCharCount = true } = props;
+  const { className, onActiveDragChange, showCharCount = true, $entranceDelay } = props;
   const {
     t,
     editEnabled,
@@ -197,7 +197,11 @@ function PreviewArea(props: PreviewAreaProps) {
   const showEmptyState = !editEnabled && isDocumentEmpty;
 
   return (
-    <S.PreviewAreaRoot data-testid="preview-area" className={className}>
+    <S.PreviewAreaRoot
+      data-testid="preview-area"
+      className={className}
+      $entranceDelay={$entranceDelay}
+    >
       {showEmptyState ? (
         <S.EmptyState data-testid="preview-empty">
           <PreviewIcon aria-hidden="true" />

@@ -6,7 +6,7 @@ import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@translation';
 import { theme } from '../../../../theme';
 import { SnippetsProvider, useSnippets } from '../../../../context/SnippetsContext';
-import { serialize } from '../../../../utils/previewDocument';
+import { serialize } from '@utils/previewDocument';
 import type { PreviewToken } from '../../../../context/SnippetsContext';
 import type { Snippet } from '@components';
 import CopyMergedTextButton from './CopyMergedTextButton';

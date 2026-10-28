@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useSnippets } from '../../../../context/SnippetsContext';
-import { serialize } from '../../../../utils/previewDocument';
+import { serialize } from '@utils/previewDocument';
 
 /**
  * Composes i18n, the below-md viewport gate, the empty-preview

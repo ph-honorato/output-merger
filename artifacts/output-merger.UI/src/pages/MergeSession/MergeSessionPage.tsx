@@ -17,12 +17,22 @@ import {
   writeTutorialDismissed,
 } from "./components";
 import { SnippetsProvider, useSnippets } from "../../context/SnippetsContext";
-import { serialize } from "../../utils/previewDocument";
+import { serialize } from '@utils/previewDocument';
+
+/** Stagger delays for entrance animation (ms) */
+const ENTRANCE_DELAYS = {
+  textInput1: "50ms",
+  textInput2: "250ms",
+  previewArea: "450ms",
+} as const;
 
 function MergeSessionWorkspace() {
   const { t } = useTranslation();
-  const { setSourceSnippets, document: previewDocument, resetAll } =
-    useSnippets();
+  const {
+    setSourceSnippets,
+    document: previewDocument,
+    resetAll,
+  } = useSnippets();
   const [mergeStarted, setMergeStarted] = useState(false);
   const [sourceTexts, setSourceTexts] = useState<Record<string, string>>({});
   // Bumped once per confirmed return: the value rides each source's
@@ -76,6 +86,7 @@ function MergeSessionWorkspace() {
             initialText={sourceTexts["text-1"] ?? ""}
             onTextChange={(text) => handleTextChange("text-1", text)}
             onChange={(snippets) => setSourceSnippets("text-1", snippets)}
+            $entranceDelay={returnEpoch === 0 ? ENTRANCE_DELAYS.textInput1 : undefined}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -86,11 +97,12 @@ function MergeSessionWorkspace() {
             initialText={sourceTexts["text-2"] ?? ""}
             onTextChange={(text) => handleTextChange("text-2", text)}
             onChange={(snippets) => setSourceSnippets("text-2", snippets)}
+            $entranceDelay={returnEpoch === 0 ? ENTRANCE_DELAYS.textInput2 : undefined}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <S.PreviewColumn>
-            <PreviewArea />
+            <PreviewArea $entranceDelay={returnEpoch === 0 ? ENTRANCE_DELAYS.previewArea : undefined} />
             <PreviewToolbar>
               <CopyMergedTextButton />
               <PreviewModal />

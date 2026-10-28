@@ -9,7 +9,7 @@ import {
   serialize,
   tokensEqual,
   tokensEqualCanonicalCase,
-} from '../../utils/previewDocument';
+} from '@utils/previewDocument';
 import type {
   Landing,
   PreviewToken,
