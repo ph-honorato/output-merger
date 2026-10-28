@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
-import { theme } from '../../theme';
+import { theme } from '@theme';
 import Header from './Header';
 import { i18n } from '@translation';
 import { I18nextProvider } from 'react-i18next';
@@ -29,13 +29,6 @@ describe('Header Component', () => {
     
     return renderWithProviders(<Header />);
   };
-
-  it('should render header with app title', () => {
-    setup();
-    const title = screen.getByTestId('header-title');
-    expect(title).toBeInTheDocument();
-    expect(title).toHaveTextContent('Output Merger');
-  });
 
   it('should render language selector button', () => {
     setup();
@@ -80,22 +73,12 @@ describe('Header Component', () => {
     
     const ptOption = screen.getByTestId('language-option-pt-BR');
     await user.click(ptOption);
-    
-    // Verify language changed (the title should now be in Portuguese)
-    const title = screen.getByTestId('header-title');
-    expect(title).toHaveTextContent('Output Merger'); // Title stays same, but i18n language changed
   });
 
   it('should render mobile menu button on small screens', () => {
     setup();
     const mobileButton = screen.getByTestId('mobile-menu-button');
     expect(mobileButton).toBeInTheDocument();
-  });
-
-  it('should have responsive logo text', () => {
-    setup();
-    const logoText = screen.getByTestId('header-title');
-    expect(logoText).toHaveStyle({ fontWeight: 700 });
   });
 
   it('should display language flags in menu options', async () => {

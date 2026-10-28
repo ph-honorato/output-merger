@@ -25,7 +25,9 @@
       "@utils": ["./src/utils"],
       "@utils/*": ["./src/utils/*"],
       "@shared-types": ["./src/types"],
-      "@shared-types/*": ["./src/types/*"]
+      "@shared-types/*": ["./src/types/*"],
+      "@theme": ["./src/theme"],
+      "@theme/*": ["./src/theme/*"]
     },
 
     /* Linting */

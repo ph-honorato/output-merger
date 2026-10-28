@@ -1,11 +1,7 @@
 import styled, { css } from "styled-components";
 import TextField from "@mui/material/TextField";
-import type { DefaultTheme } from "styled-components";
-import type { Theme } from "@mui/material/styles";
-import { CARD_HEIGHT } from "../../theme";
+import { type StyledTheme, CARD_HEIGHT } from "@theme";
 import { slideUpFadeIn } from "@utils/animations";
-
-type StyledTheme = DefaultTheme & Theme;
 
 export const TextInputRoot = styled.div<{ $entranceDelay?: string }>`
   display: flex;
@@ -22,7 +18,7 @@ export const TextInputRoot = styled.div<{ $entranceDelay?: string }>`
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};
   border: 1px solid ${({ theme }) => (theme as StyledTheme).palette.divider};
-  border-radius: 0.75rem;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 
   /* Entrance animation: slide up + fade in (opt-in via $entranceDelay prop) */

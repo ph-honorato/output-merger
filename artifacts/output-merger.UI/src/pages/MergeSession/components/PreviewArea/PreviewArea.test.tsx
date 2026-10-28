@@ -4,7 +4,7 @@ import { ThemeProvider as MuiThemeProvider } from "@mui/material/styles";
 import { ThemeProvider as StyledThemeProvider } from "styled-components";
 import { I18nextProvider } from "react-i18next";
 import { i18n, enUS, ptBR } from "@translation";
-import { theme } from "../../../../theme";
+import { theme } from '@theme';
 import {
   SnippetsProvider,
   useSnippets,
