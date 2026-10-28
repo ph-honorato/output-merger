@@ -1,6 +1,8 @@
 import { createTheme } from "@mui/material/styles";
 import type { StyledTheme } from "./types";
 
+export type { StyledTheme };
+
 /**
  * The fixed card height shared by the merge session's text inputs
  * and the preview area, so the default-view columns align. Each
@@ -8,13 +10,10 @@ import type { StyledTheme } from "./types";
  */
 export const CARD_HEIGHT = "400px";
 
-export type { StyledTheme };
-
-// Border radius token - single source of truth
-export const borderRadius = "0.5rem"; // 0.25rem = 4px
+// Border radius token
+export const borderRadius = "0.5rem";
 
 export const theme = createTheme({
-  // ... existing theme config
   palette: {
     mode: "light",
     primary: {
