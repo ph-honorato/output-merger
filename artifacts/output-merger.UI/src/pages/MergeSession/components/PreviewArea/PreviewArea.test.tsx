@@ -31,14 +31,14 @@ import {
   enumerateLandingAnchors,
   isSnippetToken,
   serialize,
-} from "../../../../utils/previewDocument";
+} from '@utils/previewDocument';
 import {
   initialSnippetsState,
   snippetsReducer,
 } from "../../../../context/SnippetsContext/SnippetsContext.reducer";
 import type { PreviewToken } from "../../../../context/SnippetsContext";
 import PreviewArea from "./PreviewArea";
-import { withAlpha } from "../../../../utils/color";
+import { withAlpha } from '@utils/color';
 
 const makeSnippet = (id: string, text: string, color = "#0080FF"): Snippet => ({
   id,

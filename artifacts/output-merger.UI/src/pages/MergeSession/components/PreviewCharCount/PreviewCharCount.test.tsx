@@ -10,7 +10,7 @@ import {
   useSnippets,
 } from '../../../../context/SnippetsContext';
 import type { Snippet } from '@components';
-import { PREVIEW_DOCUMENT_MAX_LENGTH } from '../../../../utils/previewDocument';
+import { PREVIEW_DOCUMENT_MAX_LENGTH } from '@utils/previewDocument';
 import PreviewCharCount from './PreviewCharCount';
 
 const makeSnippet = (id: string, text: string): Snippet => ({

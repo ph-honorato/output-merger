@@ -1,8 +1,10 @@
+import type { EntranceAnimationProps } from "@shared-types/animation";
+
 /**
  * Props for the PreviewArea component
  * @interface PreviewAreaProps
  */
-export interface PreviewAreaProps {
+export interface PreviewAreaProps extends EntranceAnimationProps {
   /**
    * Optional class name applied to the root element
    */

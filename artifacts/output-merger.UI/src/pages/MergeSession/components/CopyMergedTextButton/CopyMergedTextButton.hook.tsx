@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSnippets } from '../../../../context/SnippetsContext';
-import { applyAutoFix, serialize } from '../../../../utils/previewDocument';
+import { applyAutoFix, serialize } from '@utils/previewDocument';
 
 export function useCopyMergedTextButton() {
   const { t } = useTranslation();

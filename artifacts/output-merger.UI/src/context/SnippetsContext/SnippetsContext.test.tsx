@@ -5,7 +5,7 @@ import { SnippetsProvider } from "./SnippetsContext";
 import { useSnippets } from "./SnippetsContext.hook";
 import { initialSnippetsState, snippetsReducer } from "./SnippetsContext.reducer";
 import type { PreviewToken, SnippetsState, SnippetToken } from "./SnippetsContext.types";
-import { applyCaseFix, isSeparatorToken, isSnippetToken, serialize } from "../../utils/previewDocument";
+import { applyCaseFix, isSeparatorToken, isSnippetToken, serialize } from "@utils/previewDocument";
 
 const makeSnippet = (
   id: string,
