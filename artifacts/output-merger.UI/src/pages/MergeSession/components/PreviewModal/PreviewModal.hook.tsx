@@ -4,6 +4,9 @@ import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useSnippets } from '../../../../context/SnippetsContext';
 import { serialize } from '@utils/previewDocument';
+import { useKeyboardShortcut } from '@hooks/useKeyboardShortcut';
+import { SHORTCUTS } from '@utils/shortcuts';
+import { createTooltipWithShortcut } from '@utils/shortcutDisplay';
 
 /**
  * Composes i18n, the below-md viewport gate, the empty-preview
@@ -46,6 +49,18 @@ export function usePreviewModal() {
     setDragActive(active);
   }, []);
 
+  // Gating matrix: edit ON → the trigger is always enabled (the
+  // empty document is editable); edit OFF → enabled iff the
+  // document serializes to something (today's behavior).
+  const canOpen = editEnabled || serialize(previewDocument).length > 0;
+
+  // Keyboard shortcut: Ctrl/Cmd+M to open preview modal
+  useKeyboardShortcut({
+    shortcut: SHORTCUTS.OPEN_PREVIEW_MODAL,
+    onTrigger: handleOpen,
+    enabled: !isBelowMd && canOpen,
+  });
+
   /**
    * The Dialog onClose funnel for backdrop and Escape closes.
    *
@@ -75,17 +90,21 @@ export function usePreviewModal() {
     [dragActive, handleClose],
   );
 
+  // Tooltip text with shortcut for the open button
+  const openTooltip = createTooltipWithShortcut(
+    t('pages.mergeSession.previewArea.modal.open'),
+    SHORTCUTS.OPEN_PREVIEW_MODAL
+  );
+
   return {
     t,
     isBelowMd,
-    // Gating matrix: edit ON → the trigger is always enabled (the
-    // empty document is editable); edit OFF → enabled iff the
-    // document serializes to something (today's behavior).
-    canOpen: editEnabled || serialize(previewDocument).length > 0,
+    canOpen,
     open,
     handleOpen,
     handleClose,
     handleDialogClose,
     handleActiveDragChange,
+    openTooltip,
   };
 }

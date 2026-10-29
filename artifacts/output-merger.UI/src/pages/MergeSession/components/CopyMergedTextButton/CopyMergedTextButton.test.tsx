@@ -375,4 +375,11 @@ describe('CopyMergedTextButton', () => {
       await i18n.changeLanguage('en-US');
     });
   });
+
+  it('renders a tooltip with the copy button label', () => {
+    renderWithProviders([['text-1', [makeSnippet('a1', 'Hello')]]]);
+    // Tooltip is rendered by MUI, we verify the title prop is passed
+    const button = screen.getByTestId('preview-copy-button');
+    expect(button).toHaveAttribute('aria-label', 'Copy merged text to clipboard');
+  });
 });

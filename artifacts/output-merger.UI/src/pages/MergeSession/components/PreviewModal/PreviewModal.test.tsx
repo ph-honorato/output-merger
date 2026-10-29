@@ -270,7 +270,7 @@ describe('PreviewModal', () => {
     expect(trigger).toBeEnabled();
     expect(trigger).toHaveAttribute(
       'aria-label',
-      'Open preview in a bigger view',
+      'Open preview in a bigger view (Ctrl+M)',
     );
     const copyButton = screen.getByTestId('preview-copy-button');
     expect(
@@ -331,7 +331,7 @@ describe('PreviewModal', () => {
     const trigger = screen.getByTestId('preview-modal-open-button');
     expect(trigger).toHaveAttribute(
       'aria-label',
-      'Abrir prévia em visualização ampliada',
+      'Abrir prévia em visualização ampliada (Ctrl+M)',
     );
 
     const user = userEvent.setup();
@@ -340,6 +340,31 @@ describe('PreviewModal', () => {
     expect(
       within(dialog).getByTestId('preview-modal-close-button'),
     ).toHaveAttribute('aria-label', 'Fechar prévia');
+  });
+
+  it('renders a tooltip with the open button label including shortcut', () => {
+    renderWithProviders(seedInterleaved());
+    const trigger = screen.getByTestId('preview-modal-open-button');
+    expect(trigger).toHaveAttribute('aria-label', 'Open preview in a bigger view (Ctrl+M)');
+  });
+
+  it('opens the modal on Ctrl+M keyboard shortcut', async () => {
+    renderWithProviders(seedInterleaved());
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.keyDown(window, { key: 'm', ctrlKey: true, code: 'KeyM' });
+
+    const dialog = await screen.findByRole('dialog', { name: 'Preview' });
+    expect(dialog).toBeInTheDocument();
+  });
+
+  it('does not open modal on Ctrl+M when preview is empty', () => {
+    renderWithProviders([]);
+    expect(screen.getByTestId('preview-modal-open-button')).toBeDisabled();
+
+    fireEvent.keyDown(window, { key: 'm', ctrlKey: true, code: 'KeyM' });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 

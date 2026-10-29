@@ -44,5 +44,7 @@
   "textInput.emptyView": "No text added yet.",
   "textInput.needleHover": "Drag to highlight text",
   "textInput.needleStart": "Snippet start handle",
-  "textInput.needleEnd": "Snippet end handle"
+  "textInput.needleEnd": "Snippet end handle",
+  "shortcuts.toggleEditing": "Toggle text editing",
+  "shortcuts.openPreviewModal": "Open preview modal"
 }

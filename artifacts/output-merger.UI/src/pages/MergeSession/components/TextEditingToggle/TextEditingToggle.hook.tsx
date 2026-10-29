@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSnippets } from '../../../../context/SnippetsContext';
+import { useKeyboardShortcut } from '@hooks/useKeyboardShortcut';
+import { SHORTCUTS } from '@utils/shortcuts';
+import { createTooltipWithShortcut } from '@utils/shortcutDisplay';
 
 const TOGGLE_KEYS = {
   on: 'pages.mergeSession.previewArea.editing.toggleOn',
@@ -24,11 +27,20 @@ export function useTextEditingToggle() {
     setEditEnabled(!editEnabled);
   }, [editEnabled, setEditEnabled]);
 
+  // Keyboard shortcut: Ctrl/Cmd+E to toggle editing
+  useKeyboardShortcut({
+    shortcut: SHORTCUTS.TOGGLE_EDITING,
+    onTrigger: handleToggle,
+  });
+
+  // The label names the action the button will perform: enabling
+  // while editing is off, disabling while it is on. Includes shortcut.
+  const baseLabel = t(editEnabled ? TOGGLE_KEYS.off : TOGGLE_KEYS.on);
+  const ariaLabel = createTooltipWithShortcut(baseLabel, SHORTCUTS.TOGGLE_EDITING);
+
   return {
     editEnabled,
-    // The label names the action the button will perform: enabling
-    // while editing is off, disabling while it is on.
-    ariaLabel: t(editEnabled ? TOGGLE_KEYS.off : TOGGLE_KEYS.on),
+    ariaLabel,
     handleToggle,
   };
 }

@@ -44,5 +44,7 @@
   "textInput.emptyView": "Nenhum texto adicionado ainda.",
   "textInput.needleHover": "Arraste para destacar o texto",
   "textInput.needleStart": "Marcador de início do trecho",
-  "textInput.needleEnd": "Marcador de fim do trecho"
+  "textInput.needleEnd": "Marcador de fim do trecho",
+  "shortcuts.toggleEditing": "Alternar edição de texto",
+  "shortcuts.openPreviewModal": "Abrir modal de prévia"
 }

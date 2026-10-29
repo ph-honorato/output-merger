@@ -107,7 +107,7 @@
 - [ ] **Feature 6: UI/UX Adjustments** - Minor improvements to polish user experience
   - [ ] **Task 6.1: Styling Adjustments** - Visual polish and consistency
   - [x] **Task 6.2: Animations** - Subtle motion for better perceived performance
-  - [ ] **Task 6.3: Tools Adjustments** - Refine existing tool behavior
+  - [x] **Task 6.3: Tools Adjustments** - Refine existing tool behavior
   - [ ] **Task 6.4: Platform Adjustments** - Cross-platform/browser consistency
 
 ### v1: "Merges" CRUD

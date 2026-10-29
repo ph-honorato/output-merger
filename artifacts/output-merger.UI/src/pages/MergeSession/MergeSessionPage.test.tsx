@@ -186,7 +186,7 @@ describe('MergeSessionPage', () => {
     expect(trigger).toBeDisabled();
     expect(trigger).toHaveAttribute(
       'aria-label',
-      'Open preview in a bigger view',
+      'Open preview in a bigger view (Ctrl+M)',
     );
     const copyButton = screen.getByTestId('preview-copy-button');
     expect(
@@ -202,7 +202,7 @@ describe('MergeSessionPage', () => {
     const toggle = screen.getByTestId('preview-edit-toggle');
     expect(toolbar).toContainElement(toggle);
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    expect(toggle).toHaveAttribute('aria-label', 'Enable text editing');
+    expect(toggle).toHaveAttribute('aria-label', 'Enable text editing (Ctrl+E)');
     const trigger = screen.getByTestId('preview-modal-open-button');
     expect(
       trigger.compareDocumentPosition(toggle) &
