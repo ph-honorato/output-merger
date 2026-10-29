@@ -1,10 +1,11 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import type { DefaultTheme } from "styled-components";
 import type { Theme } from "@mui/material/styles";
+import { slideUpFadeIn } from "@utils/animations";
 
 type StyledTheme = DefaultTheme & Theme;
 
-export const PreviewToolbarRoot = styled.div`
+export const PreviewToolbarRoot = styled.div<{ $entranceDelay?: string }>`
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -20,4 +21,20 @@ export const PreviewToolbarRoot = styled.div`
   ${({ theme }) => (theme as StyledTheme).breakpoints.up("md")} {
     flex-direction: column;
   }
+
+  /* Entrance animation: slide up + fade in (opt-in via $entranceDelay prop) */
+  ${({ $entranceDelay }) =>
+    $entranceDelay !== undefined
+      ? css`
+          opacity: 0;
+          animation: ${slideUpFadeIn} 800ms ease-out ${$entranceDelay} forwards;
+
+          @media (prefers-reduced-motion: reduce) {
+            animation: none;
+            opacity: 1;
+          }
+        `
+      : css`
+          opacity: 1;
+        `}
 `;
