@@ -4,14 +4,6 @@ import type { TooltipProps } from "@mui/material/Tooltip";
 
 interface TooltipWrapperProps extends Omit<TooltipProps, "children"> {
   children: React.ReactElement;
-  anchorOrigin?: {
-    vertical: "top" | "center" | "bottom";
-    horizontal: "left" | "center" | "right";
-  };
-  transformOrigin?: {
-    vertical: "top" | "center" | "bottom";
-    horizontal: "left" | "center" | "right";
-  };
 }
 
 /**
@@ -22,8 +14,6 @@ export function TooltipWrapper({
   children,
   title,
   placement = "right",
-  anchorOrigin = { vertical: "center", horizontal: "right" },
-  transformOrigin = { vertical: "center", horizontal: "left" },
   disableHoverListener = false,
   disableFocusListener = false,
   ...otherProps
@@ -32,10 +22,6 @@ export function TooltipWrapper({
     <Tooltip
       title={title}
       placement={placement}
-      PopperProps={{
-        anchorOrigin,
-        transformOrigin,
-      }}
       disableHoverListener={disableHoverListener}
       disableFocusListener={disableFocusListener}
       {...otherProps}
