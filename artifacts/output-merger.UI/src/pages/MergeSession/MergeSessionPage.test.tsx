@@ -186,7 +186,7 @@ describe('MergeSessionPage', () => {
     expect(trigger).toBeDisabled();
     expect(trigger).toHaveAttribute(
       'aria-label',
-      'Open preview in a bigger view (Ctrl+M)',
+      'Open big view (Ctrl+M)',
     );
     const copyButton = screen.getByTestId('preview-copy-button');
     expect(

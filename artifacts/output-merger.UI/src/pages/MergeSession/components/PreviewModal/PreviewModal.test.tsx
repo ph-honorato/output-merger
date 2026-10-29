@@ -270,7 +270,7 @@ describe('PreviewModal', () => {
     expect(trigger).toBeEnabled();
     expect(trigger).toHaveAttribute(
       'aria-label',
-      'Open preview in a bigger view (Ctrl+M)',
+      'Open big view (Ctrl+M)',
     );
     const copyButton = screen.getByTestId('preview-copy-button');
     expect(
@@ -302,11 +302,11 @@ describe('PreviewModal', () => {
     );
     expect(enUS).toHaveProperty(
       'pages.mergeSession.previewArea.modal.open',
-      'Open preview in a bigger view',
+      'Open big view',
     );
     expect(enUS).toHaveProperty(
       'pages.mergeSession.previewArea.modal.close',
-      'Close preview',
+      'Close big view',
     );
     expect(ptBR).toHaveProperty(
       'pages.mergeSession.previewArea.modal.name',
@@ -314,11 +314,11 @@ describe('PreviewModal', () => {
     );
     expect(ptBR).toHaveProperty(
       'pages.mergeSession.previewArea.modal.open',
-      'Abrir prévia em visualização ampliada',
+      'Abrir visualização ampliada',
     );
     expect(ptBR).toHaveProperty(
       'pages.mergeSession.previewArea.modal.close',
-      'Fechar prévia',
+      'Fechar visualização ampliada',
     );
   });
 
@@ -331,7 +331,7 @@ describe('PreviewModal', () => {
     const trigger = screen.getByTestId('preview-modal-open-button');
     expect(trigger).toHaveAttribute(
       'aria-label',
-      'Abrir prévia em visualização ampliada (Ctrl+M)',
+      'Abrir visualização ampliada (Ctrl+M)',
     );
 
     const user = userEvent.setup();
@@ -339,13 +339,13 @@ describe('PreviewModal', () => {
     const dialog = screen.getByRole('dialog', { name: 'Prévia' });
     expect(
       within(dialog).getByTestId('preview-modal-close-button'),
-    ).toHaveAttribute('aria-label', 'Fechar prévia');
+    ).toHaveAttribute('aria-label', 'Fechar visualização ampliada (Ctrl+M)');
   });
 
   it('renders a tooltip with the open button label including shortcut', () => {
     renderWithProviders(seedInterleaved());
     const trigger = screen.getByTestId('preview-modal-open-button');
-    expect(trigger).toHaveAttribute('aria-label', 'Open preview in a bigger view (Ctrl+M)');
+    expect(trigger).toHaveAttribute('aria-label', 'Open big view (Ctrl+M)');
   });
 
   it('opens the modal on Ctrl+M keyboard shortcut', async () => {

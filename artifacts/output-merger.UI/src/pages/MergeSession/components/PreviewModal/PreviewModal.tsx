@@ -32,6 +32,7 @@ function PreviewModal(props: PreviewModalProps) {
     handleDialogClose,
     handleActiveDragChange,
     openTooltip,
+    closeTooltip,
   } = usePreviewModal();
 
   return (
@@ -69,13 +70,15 @@ function PreviewModal(props: PreviewModalProps) {
           </S.PreviewZone>
           <S.ToolsRail>
             <CopyMergedTextButton />
-            <IconButton
-              data-testid="preview-modal-close-button"
-              aria-label={t("pages.mergeSession.previewArea.modal.close")}
-              onClick={handleClose}
-            >
-              <CloseFullscreen />
-            </IconButton>
+            <TooltipWrapper title={closeTooltip}>
+              <IconButton
+                data-testid="preview-modal-close-button"
+                aria-label={closeTooltip}
+                onClick={handleClose}
+              >
+                <CloseFullscreen />
+              </IconButton>
+            </TooltipWrapper>
             <TextEditingToggle />
             <PreviewCharCount hideLimit />
           </S.ToolsRail>

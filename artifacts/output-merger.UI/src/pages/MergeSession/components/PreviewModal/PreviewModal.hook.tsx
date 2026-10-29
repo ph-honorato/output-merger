@@ -54,10 +54,10 @@ export function usePreviewModal() {
   // document serializes to something (today's behavior).
   const canOpen = editEnabled || serialize(previewDocument).length > 0;
 
-  // Keyboard shortcut: Ctrl/Cmd+M to open preview modal
+  // Keyboard shortcut: Ctrl/Cmd+M to toggle preview modal (open/close)
   useKeyboardShortcut({
     shortcut: SHORTCUTS.OPEN_PREVIEW_MODAL,
-    onTrigger: handleOpen,
+    onTrigger: open ? handleClose : handleOpen,
     enabled: !isBelowMd && canOpen,
   });
 
@@ -90,9 +90,15 @@ export function usePreviewModal() {
     [dragActive, handleClose],
   );
 
-  // Tooltip text with shortcut for the open button
+  // Tooltip text with shortcut - changes based on modal state
   const openTooltip = createTooltipWithShortcut(
-    t('pages.mergeSession.previewArea.modal.open'),
+    t(open ? 'pages.mergeSession.previewArea.modal.close' : 'pages.mergeSession.previewArea.modal.open'),
+    SHORTCUTS.OPEN_PREVIEW_MODAL
+  );
+
+  // Tooltip for the close button inside the modal (always shows close text with shortcut)
+  const closeTooltip = createTooltipWithShortcut(
+    t('pages.mergeSession.previewArea.modal.close'),
     SHORTCUTS.OPEN_PREVIEW_MODAL
   );
 
@@ -106,5 +112,6 @@ export function usePreviewModal() {
     handleDialogClose,
     handleActiveDragChange,
     openTooltip,
+    closeTooltip,
   };
 }
