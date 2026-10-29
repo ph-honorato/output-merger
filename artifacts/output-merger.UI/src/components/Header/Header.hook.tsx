@@ -9,13 +9,12 @@ import { useThemeContext } from "../../context/ThemeContext";
 export const useHeader = () => {
   const { t, currentLanguage, availableLanguages, changeLanguage } =
     useLanguage();
-  console.log("currentLanguage: ", currentLanguage);
-  const { mode, toggleTheme } = useThemeContext();
+  const { mode, setTheme } = useThemeContext();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isConfigMenuOpen, setIsConfigMenuOpen] = useState(false);
 
-  const handleConfigMenuOpen = useCallback(() => {
-    setIsConfigMenuOpen(true);
+  const handleConfigMenuToggle = useCallback(() => {
+    setIsConfigMenuOpen((prev) => !prev);
   }, []);
 
   const handleConfigMenuClose = useCallback(() => {
@@ -25,9 +24,9 @@ export const useHeader = () => {
   const handleLanguageChange = useCallback(
     (language: LanguageCode) => {
       changeLanguage(language);
-      handleConfigMenuClose();
+      // Don't close config menu when language changes
     },
-    [changeLanguage, handleConfigMenuClose],
+    [changeLanguage],
   );
 
   const handleMobileMenuToggle = useCallback(() => {
@@ -38,10 +37,13 @@ export const useHeader = () => {
     setMobileMenuOpen(false);
   }, []);
 
-  const handleThemeToggle = useCallback(() => {
-    toggleTheme();
-    handleConfigMenuClose();
-  }, [toggleTheme, handleConfigMenuClose]);
+  const handleThemeChange = useCallback(
+    (isDark: boolean) => {
+      setTheme(isDark ? "dark" : "light");
+      // Don't close config menu when theme changes
+    },
+    [setTheme],
+  );
 
   return {
     t,
@@ -50,11 +52,11 @@ export const useHeader = () => {
     isConfigMenuOpen,
     mobileMenuOpen,
     isDarkMode: mode === "dark",
-    handleConfigMenuOpen,
+    handleConfigMenuToggle,
     handleConfigMenuClose,
     handleLanguageChange,
     handleMobileMenuToggle,
     handleMobileMenuClose,
-    handleThemeToggle,
+    handleThemeChange,
   };
 };
