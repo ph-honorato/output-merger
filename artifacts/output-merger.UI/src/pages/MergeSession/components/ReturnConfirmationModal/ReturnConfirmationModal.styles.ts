@@ -3,10 +3,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
-import type { DefaultTheme } from "styled-components";
-import type { Theme } from "@mui/material/styles";
-
-type StyledTheme = DefaultTheme & Theme;
+import type { StyledTheme } from "@theme";
 
 export const Title = styled(DialogTitle)`
   text-align: left;
@@ -34,7 +31,7 @@ export const ConfirmButton = styled(Button)`
   background-color: #0080ff;
   color: #ffffff;
   font-weight: 600;
-  border-radius: 0.75rem;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   padding: 12px;
   box-shadow: none;
 

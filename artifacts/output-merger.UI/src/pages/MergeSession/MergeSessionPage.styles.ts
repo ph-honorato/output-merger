@@ -1,10 +1,7 @@
 import styled, { keyframes } from "styled-components";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
-import type { DefaultTheme } from "styled-components";
-import type { Theme } from "@mui/material/styles";
-
-type StyledTheme = DefaultTheme & Theme;
+import type { StyledTheme } from "@theme";
 
 const gradientMesh = keyframes`
   0% {
@@ -31,8 +28,9 @@ export const TitleRow = styled.div`
 
 export const Title = styled.h1`
   grid-column: 2;
+  font-family: "Brawler", serif;
   font-size: clamp(2.5rem, 5vw, 4rem);
-  font-weight: 700;
+  font-weight: 400;
   background: linear-gradient(135deg, #0080ff, #ff1493, #00ffff);
   background-size: 200% 200%;
   background-position: 0% 50%;
@@ -40,6 +38,7 @@ export const Title = styled.h1`
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 1rem;
+  letter-spacing: normal;
 
   /* One-time gradient mesh on entrance */
   animation: ${gradientMesh} 2.2s ease-in-out forwards;
@@ -56,7 +55,7 @@ export const PreviewColumn = styled.div`
   align-items: stretch;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
 
-  ${({ theme }) => (theme as StyledTheme).breakpoints.up('md')} {
+  ${({ theme }) => (theme as StyledTheme).breakpoints.up("md")} {
     flex-direction: row;
     align-items: flex-start;
   }
@@ -73,7 +72,7 @@ export const StartMergeButton = styled(Button)`
   background-color: #0080ff;
   color: #ffffff;
   font-weight: 600;
-  border-radius: 0.75rem;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   padding: 12px;
   box-shadow: none;
 

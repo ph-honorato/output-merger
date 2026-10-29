@@ -1,4 +1,5 @@
 import styled from "styled-components";
+import type { StyledTheme } from "@theme";
 
 export const Wrapper = styled.div`
   display: flex;
@@ -7,8 +8,8 @@ export const Wrapper = styled.div`
   justify-content: center;
   min-height: 100vh;
   gap: 1rem;
-  background-color: ${(props) =>
-    props.theme === "dark" ? "#1a1a1a" : "#ffffff"};
+  background-color: ${({ theme }) =>
+    (theme as StyledTheme).palette.mode === "dark" ? "#1a1a1a" : "#ffffff"};
   transition: background-color 0.3s ease;
 `;
 
@@ -17,7 +18,7 @@ export const Button = styled.button`
   font-size: 1rem;
   font-weight: 600;
   border: none;
-  border-radius: 0.375rem;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   cursor: pointer;
   background-color: #3b82f6;
   color: white;
@@ -35,5 +36,6 @@ export const Button = styled.button`
 export const CounterText = styled.div`
   font-size: 1.5rem;
   font-weight: 600;
-  color: ${(props) => (props.theme === "dark" ? "#ffffff" : "#000000")};
+  color: ${({ theme }) =>
+    (theme as StyledTheme).palette.mode === "dark" ? "#ffffff" : "#000000"};
 `;

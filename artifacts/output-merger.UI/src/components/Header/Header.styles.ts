@@ -1,8 +1,5 @@
 import styled from "styled-components";
-import type { DefaultTheme } from "styled-components";
-import type { Theme } from "@mui/material/styles";
-
-type StyledTheme = DefaultTheme & Theme;
+import type { StyledTheme } from "@theme";
 
 export const StyledHeader = styled.header`
   background-color: ${({ theme }) =>
@@ -21,8 +18,9 @@ export const StyledToolbar = styled.div`
   align-items: center;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(2)};
   flex-wrap: wrap;
-  padding: ${({ theme }) => (theme as StyledTheme).spacing(0, 2)};
+  padding: ${({ theme }) => (theme as StyledTheme).spacing(0)};
   min-height: 64px;
+  position: relative;
 `;
 
 export const LogoContainer = styled.div`
@@ -34,8 +32,7 @@ export const LogoContainer = styled.div`
 
 export const LogoIcon = styled.img.attrs({
   src: "/om-logo.svg",
-  alt: "Logo",
-})`
+})<{ alt?: string }>`
   width: 30px;
   height: auto;
   object-fit: contain;
@@ -69,7 +66,7 @@ export const LanguageMenuButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   color: ${({ theme }) => (theme as StyledTheme).palette.action.active};
 
   &:hover {
@@ -85,7 +82,7 @@ export const LanguageMenu = styled.div`
   margin-top: ${({ theme }) => (theme as StyledTheme).spacing(1)};
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};
-  border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   box-shadow: ${({ theme }) => (theme as StyledTheme).shadows[4]};
   min-width: 180px;
   z-index: 1000;
@@ -133,7 +130,7 @@ export const MobileMenuButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   color: ${({ theme }) => (theme as StyledTheme).palette.action.active};
 
   &:hover {
@@ -173,7 +170,7 @@ export const MobileMenu = styled.div`
   margin-top: ${({ theme }) => (theme as StyledTheme).spacing(1)};
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};
-  border-radius: ${({ theme }) => (theme as StyledTheme).shape.borderRadius}px;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   box-shadow: ${({ theme }) => (theme as StyledTheme).shadows[4]};
   min-width: 180px;
   z-index: 1000;

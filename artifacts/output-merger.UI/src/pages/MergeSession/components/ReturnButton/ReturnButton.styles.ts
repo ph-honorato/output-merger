@@ -1,9 +1,6 @@
 import styled from "styled-components";
 import Button from "@mui/material/Button";
-import type { DefaultTheme } from "styled-components";
-import type { Theme } from "@mui/material/styles";
-
-type StyledTheme = DefaultTheme & Theme;
+import type { StyledTheme } from "@theme";
 
 /**
  * The Return button: the Start Merge visual (contained, primary
@@ -14,7 +11,7 @@ export const ReturnButtonRoot = styled(Button)`
   background-color: #0080ff;
   color: #ffffff;
   font-weight: 600;
-  border-radius: 0.75rem;
+  border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   padding: 12px;
   box-shadow: none;
 
