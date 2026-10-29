@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useRef, useEffect } from "react";
-import { Menu as MenuIcon, Public } from "@mui/icons-material";
+import { Menu as MenuIcon, Settings, Brightness4, LightMode } from "@mui/icons-material";
 import { Container } from "@mui/material";
 import { useHeader } from "./Header.hook";
 import { type HeaderProps } from "./Header.types";
@@ -14,28 +14,30 @@ const LANGUAGE_FLAGS: Record<"en-US" | "pt-BR", string> = {
 function Header(props: HeaderProps) {
   const { className } = props;
   const { t } = useTranslation();
-  const languageMenuRef = useRef<HTMLDivElement>(null);
+  const configMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const {
     currentLanguage,
     availableLanguages,
-    isLanguageMenuOpen,
+    isConfigMenuOpen,
     mobileMenuOpen,
-    handleLanguageMenuOpen,
-    handleLanguageMenuClose,
+    isDarkMode,
+    handleConfigMenuOpen,
+    handleConfigMenuClose,
     handleLanguageChange,
     handleMobileMenuToggle,
     handleMobileMenuClose,
+    handleThemeToggle,
   } = useHeader();
 
   // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        languageMenuRef.current &&
-        !languageMenuRef.current.contains(event.target as Node)
+        configMenuRef.current &&
+        !configMenuRef.current.contains(event.target as Node)
       ) {
-        handleLanguageMenuClose();
+        handleConfigMenuClose();
       }
       if (
         mobileMenuRef.current &&
@@ -45,7 +47,7 @@ function Header(props: HeaderProps) {
       }
     };
 
-    if (isLanguageMenuOpen || mobileMenuOpen) {
+    if (isConfigMenuOpen || mobileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
@@ -53,9 +55,9 @@ function Header(props: HeaderProps) {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [
-    isLanguageMenuOpen,
+    isConfigMenuOpen,
     mobileMenuOpen,
-    handleLanguageMenuClose,
+    handleConfigMenuClose,
     handleMobileMenuClose,
   ]);
 
@@ -66,6 +68,13 @@ function Header(props: HeaderProps) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       handleLanguageChange(language);
+    }
+  };
+
+  const handleThemeKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleThemeToggle();
     }
   };
 
@@ -80,45 +89,81 @@ function Header(props: HeaderProps) {
 
           {/* Desktop Actions */}
           <S.DesktopActions>
-            <S.LanguageSelectorContainer ref={languageMenuRef}>
-              <S.LanguageMenuButton
-                onClick={handleLanguageMenuOpen}
-                aria-label={t("language.selector")}
-                aria-expanded={isLanguageMenuOpen}
+            <S.ConfigSelectorContainer ref={configMenuRef}>
+              <S.ConfigMenuButton
+                onClick={handleConfigMenuOpen}
+                aria-label={t("config.selector")}
+                aria-expanded={isConfigMenuOpen}
                 aria-haspopup="true"
-                data-testid="language-selector-button"
+                data-testid="config-selector-button"
               >
-                <Public fontSize="large" color="action" />
-              </S.LanguageMenuButton>
+                <Settings fontSize="large" color="action" />
+              </S.ConfigMenuButton>
 
-              {isLanguageMenuOpen && (
-                <S.LanguageMenu
-                  id="language-menu"
+              {isConfigMenuOpen && (
+                <S.ConfigMenu
+                  id="config-menu"
                   role="menu"
-                  aria-label={t("language.selector")}
-                  data-testid="language-menu"
+                  aria-label={t("config.selector")}
+                  data-testid="config-menu"
                 >
-                  {availableLanguages.map((lang) => (
-                    <S.LanguageMenuItem
-                      key={lang.code}
-                      className={
-                        currentLanguage === lang.code ? "selected" : ""
-                      }
-                      onClick={() => handleLanguageChange(lang.code)}
-                      onKeyDown={(e) => handleKeyDown(e, lang.code)}
-                      role="menuitem"
-                      tabIndex={-1}
-                      data-testid={`language-option-${lang.code}`}
+                  {/* Language Section */}
+                  <div style={{ padding: "8px 0" }}>
+                    <p
+                      style={{
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        color: "var(--mui-palette-text-secondary)",
+                        margin: "0 0 8px 16px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                      }}
                     >
-                      <S.LanguageFlag>
-                        {LANGUAGE_FLAGS[lang.code]}
-                      </S.LanguageFlag>
-                      <S.LanguageName>{lang.label}</S.LanguageName>
-                    </S.LanguageMenuItem>
-                  ))}
-                </S.LanguageMenu>
+                      {t("language.selector")}
+                    </p>
+                    {availableLanguages.map((lang) => (
+                      <S.ConfigMenuItem
+                        key={lang.code}
+                        className={currentLanguage === lang.code ? "selected" : ""}
+                        onClick={() => handleLanguageChange(lang.code)}
+                        onKeyDown={(e) => handleKeyDown(e, lang.code)}
+                        role="menuitem"
+                        tabIndex={-1}
+                        data-testid={`config-language-option-${lang.code}`}
+                      >
+                        <S.LanguageFlag>
+                          {LANGUAGE_FLAGS[lang.code]}
+                        </S.LanguageFlag>
+                        <S.LanguageName>{lang.label}</S.LanguageName>
+                      </S.ConfigMenuItem>
+                    ))}
+                  </div>
+
+                  <S.ConfigMenuDivider />
+
+                  {/* Dark Mode Toggle */}
+                  <S.ConfigMenuItem
+                    onClick={handleThemeToggle}
+                    onKeyDown={handleThemeKeyDown}
+                    role="menuitem"
+                    tabIndex={-1}
+                    data-testid="config-darkmode-toggle"
+                  >
+                    <S.ConfigMenuIcon>
+                      {isDarkMode ? <LightMode fontSize="small" /> : <Brightness4 fontSize="small" />}
+                    </S.ConfigMenuIcon>
+                    <S.ConfigMenuLabel>{t("config.darkMode")}</S.ConfigMenuLabel>
+                    <S.ConfigMenuToggle>
+                      {isDarkMode ? (
+                        <span style={{ color: "var(--mui-palette-primary-main)" }}>●</span>
+                      ) : (
+                        <span style={{ color: "var(--mui-palette-text-secondary)" }}>○</span>
+                      )}
+                    </S.ConfigMenuToggle>
+                  </S.ConfigMenuItem>
+                </S.ConfigMenu>
               )}
-            </S.LanguageSelectorContainer>
+            </S.ConfigSelectorContainer>
           </S.DesktopActions>
 
           {/* Mobile Menu Button */}
@@ -141,21 +186,25 @@ function Header(props: HeaderProps) {
           {mobileMenuOpen && (
             <S.MobileMenu
               role="menu"
-              aria-label={t("language.selector")}
+              aria-label={t("config.selector")}
               data-testid="mobile-menu"
             >
               <div style={{ padding: "8px 16px" }}>
+                {/* Language Section */}
                 <p
                   style={{
                     fontSize: "0.75rem",
+                    fontWeight: 600,
                     color: "var(--mui-palette-text-secondary)",
                     margin: "0 0 8px 0",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
                   }}
                 >
                   {t("language.selector")}
                 </p>
                 {availableLanguages.map((lang) => (
-                  <S.LanguageMenuItem
+                  <S.ConfigMenuItem
                     key={lang.code}
                     className={currentLanguage === lang.code ? "selected" : ""}
                     onClick={() => handleLanguageChange(lang.code)}
@@ -166,8 +215,31 @@ function Header(props: HeaderProps) {
                   >
                     <S.LanguageFlag>{LANGUAGE_FLAGS[lang.code]}</S.LanguageFlag>
                     <S.LanguageName>{lang.label}</S.LanguageName>
-                  </S.LanguageMenuItem>
+                  </S.ConfigMenuItem>
                 ))}
+
+                <S.ConfigMenuDivider style={{ margin: "12px 0" }} />
+
+                {/* Dark Mode Toggle */}
+                <S.ConfigMenuItem
+                  onClick={handleThemeToggle}
+                  onKeyDown={handleThemeKeyDown}
+                  role="menuitem"
+                  tabIndex={-1}
+                  data-testid="mobile-darkmode-toggle"
+                >
+                  <S.ConfigMenuIcon>
+                    {isDarkMode ? <LightMode fontSize="small" /> : <Brightness4 fontSize="small" />}
+                  </S.ConfigMenuIcon>
+                  <S.ConfigMenuLabel>{t("config.darkMode")}</S.ConfigMenuLabel>
+                  <S.ConfigMenuToggle>
+                    {isDarkMode ? (
+                      <span style={{ color: "var(--mui-palette-primary-main)" }}>●</span>
+                    ) : (
+                      <span style={{ color: "var(--mui-palette-text-secondary)" }}>○</span>
+                    )}
+                  </S.ConfigMenuToggle>
+                </S.ConfigMenuItem>
               </div>
             </S.MobileMenu>
           )}

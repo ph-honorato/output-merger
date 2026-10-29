@@ -25,6 +25,7 @@ function CopyMergedTextButton(props: CopyMergedTextButtonProps) {
         open={toastOpen}
         autoHideDuration={2500}
         onClose={handleToastClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
         <S.ToastMessage data-testid="preview-copy-toast">
           {t('pages.mergeSession.previewArea.copy.toast')}

@@ -1,5 +1,7 @@
 {
   "app.title": "Output Merger",
+  "config.selector": "Configurações",
+  "config.darkMode": "Modo escuro",
   "language.selector": "Idioma",
   "language.english": "Inglês (EUA)",
   "language.portuguese": "Português (BR)",

@@ -50,7 +50,7 @@ export const LogoText = styled.h1`
   }
 `;
 
-export const LanguageSelectorContainer = styled.div`
+export const ConfigSelectorContainer = styled.div`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
@@ -58,7 +58,7 @@ export const LanguageSelectorContainer = styled.div`
   position: relative;
 `;
 
-export const LanguageMenuButton = styled.button`
+export const ConfigMenuButton = styled.button`
   padding: ${({ theme }) => (theme as StyledTheme).spacing(0.5)};
   background: none;
   border: none;
@@ -75,7 +75,7 @@ export const LanguageMenuButton = styled.button`
   }
 `;
 
-export const LanguageMenu = styled.div`
+export const ConfigMenu = styled.div`
   position: absolute;
   top: 100%;
   right: 0;
@@ -84,14 +84,20 @@ export const LanguageMenu = styled.div`
     (theme as StyledTheme).palette.background.paper};
   border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   box-shadow: ${({ theme }) => (theme as StyledTheme).shadows[4]};
-  min-width: 180px;
+  min-width: 220px;
   z-index: 1000;
 `;
 
-export const LanguageMenuItem = styled.button`
+export const ConfigMenuDivider = styled.hr<{ $margin?: string }>`
+  border: none;
+  border-top: 1px solid ${({ theme }) => (theme as StyledTheme).palette.divider};
+  margin: ${({ $margin }) => $margin || "8px 0"};
+`;
+
+export const ConfigMenuItem = styled.button`
   display: flex;
   align-items: center;
-  gap: ${({ theme }) => (theme as StyledTheme).spacing(1.5)};
+  gap: ${({ theme }) => (theme as StyledTheme).spacing(2)};
   padding: ${({ theme }) => (theme as StyledTheme).spacing(1, 2)};
   width: 100%;
   background: none;
@@ -111,6 +117,35 @@ export const LanguageMenuItem = styled.button`
       (theme as StyledTheme).palette.action.selected};
     font-weight: 600;
   }
+`;
+
+export const ConfigMenuIcon = styled.span`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: ${({ theme }) => (theme as StyledTheme).palette.action.active};
+  flex-shrink: 0;
+`;
+
+export const ConfigMenuLabel = styled.span`
+  flex: 1;
+  font-weight: 500;
+`;
+
+export const ConfigMenuToggle = styled.span`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid
+    ${({ theme }) => (theme as StyledTheme).palette.divider};
+  font-size: 0.75rem;
+  line-height: 1;
+  flex-shrink: 0;
 `;
 
 export const LanguageFlag = styled.span`
@@ -172,6 +207,6 @@ export const MobileMenu = styled.div`
     (theme as StyledTheme).palette.background.paper};
   border-radius: ${({ theme }) => (theme as StyledTheme).borderRadius};
   box-shadow: ${({ theme }) => (theme as StyledTheme).shadows[4]};
-  min-width: 180px;
+  min-width: 220px;
   z-index: 1000;
 `;

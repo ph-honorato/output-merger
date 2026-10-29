@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useLanguage, type LanguageCode } from '../../hooks/useLanguage';
+import { useThemeContext } from '../../context/ThemeContext';
 
 /**
  * Hook for managing the Header component logic
@@ -7,21 +8,22 @@ import { useLanguage, type LanguageCode } from '../../hooks/useLanguage';
  */
 export const useHeader = () => {
   const { t, currentLanguage, availableLanguages, changeLanguage } = useLanguage();
+  const { mode, toggleTheme } = useThemeContext();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
+  const [isConfigMenuOpen, setIsConfigMenuOpen] = useState(false);
 
-  const handleLanguageMenuOpen = useCallback(() => {
-    setIsLanguageMenuOpen(true);
+  const handleConfigMenuOpen = useCallback(() => {
+    setIsConfigMenuOpen(true);
   }, []);
 
-  const handleLanguageMenuClose = useCallback(() => {
-    setIsLanguageMenuOpen(false);
+  const handleConfigMenuClose = useCallback(() => {
+    setIsConfigMenuOpen(false);
   }, []);
 
   const handleLanguageChange = useCallback((language: LanguageCode) => {
     changeLanguage(language);
-    handleLanguageMenuClose();
-  }, [changeLanguage, handleLanguageMenuClose]);
+    handleConfigMenuClose();
+  }, [changeLanguage, handleConfigMenuClose]);
 
   const handleMobileMenuToggle = useCallback(() => {
     setMobileMenuOpen(prev => !prev);
@@ -31,16 +33,23 @@ export const useHeader = () => {
     setMobileMenuOpen(false);
   }, []);
 
+  const handleThemeToggle = useCallback(() => {
+    toggleTheme();
+    handleConfigMenuClose();
+  }, [toggleTheme, handleConfigMenuClose]);
+
   return {
     t,
     currentLanguage,
     availableLanguages,
-    isLanguageMenuOpen,
+    isConfigMenuOpen,
     mobileMenuOpen,
-    handleLanguageMenuOpen,
-    handleLanguageMenuClose,
+    isDarkMode: mode === 'dark',
+    handleConfigMenuOpen,
+    handleConfigMenuClose,
     handleLanguageChange,
     handleMobileMenuToggle,
     handleMobileMenuClose,
+    handleThemeToggle,
   };
 };

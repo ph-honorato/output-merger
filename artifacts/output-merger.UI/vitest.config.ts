@@ -16,6 +16,9 @@ export default defineConfig({
       '@translation': path.resolve(__dirname, './src/i18n'),
       '@utils': path.resolve(__dirname, './src/utils'),
       '@shared-types': path.resolve(__dirname, './src/types'),
+      '@theme': path.resolve(__dirname, './src/theme'),
+      '@context': path.resolve(__dirname, './src/context'),
+      '@hooks': path.resolve(__dirname, './src/hooks'),
     },
   },
 });

@@ -108,7 +108,12 @@
   - [x] **Task 6.1: Styling Adjustments** - Visual polish and consistency
   - [x] **Task 6.2: Animations** - Subtle motion for better perceived performance
   - [ ] **Task 6.3: Tools Adjustments** - Refine existing tool behavior
-  - [ ] **Task 6.4: Platform Adjustments** - Cross-platform/browser consistency
+  - [x] **Task 6.4: Platform Adjustments** - Cross-platform/browser consistency
+    - [x] Adjust toast (Snackbar) position to upper right corner
+    - [x] Replace globe icon with Settings icon in Header
+    - [x] Add configuration dropdown with language selector and dark mode toggle
+    - [x] Implement dark mode with localStorage persistence
+    - [x] Update translations for en-US and pt-BR
 
 ### v1: "Merges" CRUD
 
