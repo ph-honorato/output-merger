@@ -1,6 +1,5 @@
-import styled, { css } from "styled-components";
+import styled from "styled-components";
 import DialogTitle from "@mui/material/DialogTitle";
-import { slideUpFadeIn } from "@utils/animations";
 import type { StyledTheme } from "@theme";
 
 /**

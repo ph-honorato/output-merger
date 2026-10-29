@@ -22,19 +22,24 @@ export const PreviewToolbarRoot = styled.div<{ $entranceDelay?: string }>`
     flex-direction: column;
   }
 
-  /* Entrance animation: slide up + fade in (opt-in via $entranceDelay prop) */
+  /* Final state (after animation): fully visible, no transform.
+   * Explicit transform: none prevents containing block for fixed-position
+   * descendants which would misposition any fixed-position elements. */
+  opacity: 1;
+  transform: none;
+
+  /* Entrance animation: slide up + fade in (opt-in via $entranceDelay prop).
+   * Uses 'backwards' fill-mode so the first keyframe applies immediately,
+   * then animates to the base styles above. No 'forwards' fill-mode means
+   * no transform is retained after the animation completes. */
   ${({ $entranceDelay }) =>
     $entranceDelay !== undefined
       ? css`
-          opacity: 0;
-          animation: ${slideUpFadeIn} 800ms ease-out ${$entranceDelay} forwards;
+          animation: ${slideUpFadeIn} 800ms ease-out ${$entranceDelay} backwards;
 
           @media (prefers-reduced-motion: reduce) {
             animation: none;
-            opacity: 1;
           }
         `
-      : css`
-          opacity: 1;
-        `}
+      : undefined}
 `;
