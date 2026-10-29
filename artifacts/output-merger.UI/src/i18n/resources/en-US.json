@@ -24,7 +24,7 @@
   "pages.mergeSession.tutorial.dismiss": "Dismiss tutorial",
   "pages.mergeSession.tutorial.help": "Show tutorial",
   "pages.mergeSession.previewArea.empty": "Select some snippets on the inputs to start",
-  "pages.mergeSession.previewArea.copy.button": "Copy merged text to clipboard",
+  "pages.mergeSession.previewArea.copy.button": "Copy to clipboard",
   "pages.mergeSession.previewArea.copy.toast": "Text copied to clipboard",
   "pages.mergeSession.previewArea.sorting.instructions": "To pick up a snippet, press Space or Enter. While dragging, use the arrow keys to move it. Press Space or Enter again to drop it, or Escape to cancel. While text editing is on, place the caret inside a snippet and press Ctrl+Space to lift it; Enter drops it and Escape cancels.",
   "pages.mergeSession.previewArea.sorting.started": "Picked up snippet {{index}} of {{count}}.",

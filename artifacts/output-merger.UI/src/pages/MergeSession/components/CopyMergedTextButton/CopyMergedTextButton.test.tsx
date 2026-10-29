@@ -131,7 +131,7 @@ describe('CopyMergedTextButton', () => {
     renderWithProviders([]);
     const button = screen.getByTestId('preview-copy-button');
     expect(button).toBeInTheDocument();
-    expect(button).toHaveAttribute('aria-label', 'Copy merged text to clipboard');
+    expect(button).toHaveAttribute('aria-label', 'Copy to clipboard');
   });
 
   it('is disabled while edit is OFF and the document is empty (today\'s behavior)', () => {
@@ -380,6 +380,6 @@ describe('CopyMergedTextButton', () => {
     renderWithProviders([['text-1', [makeSnippet('a1', 'Hello')]]]);
     // Tooltip is rendered by MUI, we verify the title prop is passed
     const button = screen.getByTestId('preview-copy-button');
-    expect(button).toHaveAttribute('aria-label', 'Copy merged text to clipboard');
+    expect(button).toHaveAttribute('aria-label', 'Copy to clipboard');
   });
 });
