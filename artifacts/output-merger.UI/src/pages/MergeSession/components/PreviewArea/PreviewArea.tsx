@@ -214,56 +214,56 @@ function PreviewArea(props: PreviewAreaProps) {
               absolutely pinned counter below mean no amount of
               content can push the counter out of view; the reserved
               bottom strip keeps the scrolling text clear of it. */}
-          <S.FlowArea
-            data-testid="preview-flow-area"
-            $reserveCounter={showCharCount}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            accessibility={{ announcements, screenReaderInstructions }}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver}
+            onDragCancel={handleDragCancel}
           >
-            <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          accessibility={{ announcements, screenReaderInstructions }}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDragOver={handleDragOver}
-          onDragCancel={handleDragCancel}
-        >
-          <SortableContext
-            items={renderedSnippetIds}
-            strategy={rectSortingStrategy}
-          >
-            <S.SegmentFlow
-              key={`preview-flow-${renderEpoch}`}
-              ref={flowRef}
-              data-testid="preview-segment-flow"
-              $editing={editEnabled}
-              contentEditable={editEnabled || undefined}
-              suppressContentEditableWarning
-              aria-multiline={editEnabled || undefined}
-              aria-label={editEnabled ? editingLabel : undefined}
-              data-placeholder={editEnabled ? editingPlaceholder : undefined}
-              onFocus={handleFlowFocus}
-              onBlur={handleFlowBlur}
-              onInput={editEnabled ? handleFlowInput : undefined}
-              onKeyDown={editEnabled ? handleFlowKeyDown : undefined}
-              onPaste={editEnabled ? handleFlowPaste : undefined}
+            <S.FlowArea
+              data-testid="preview-flow-area"
+              $reserveCounter={showCharCount}
             >
-              {flowChildren}
-            </S.SegmentFlow>
-          </SortableContext>
-          <DragOverlay zIndex={200} dropAnimation={null}>
-            {activeSnippet ? (
-              <S.OverlayChip
-                data-testid="preview-snippet-overlay"
-                style={{
-                  backgroundColor: withAlpha(activeSnippet.color, 0.3),
-                }}
+              <SortableContext
+                items={renderedSnippetIds}
+                strategy={rectSortingStrategy}
               >
-                {activeSnippet.text}
-              </S.OverlayChip>
-            ) : null}
-          </DragOverlay>
-            </DndContext>
-          </S.FlowArea>
+                <S.SegmentFlow
+                  key={`preview-flow-${renderEpoch}`}
+                  ref={flowRef}
+                  data-testid="preview-segment-flow"
+                  $editing={editEnabled}
+                  contentEditable={editEnabled || undefined}
+                  suppressContentEditableWarning
+                  aria-multiline={editEnabled || undefined}
+                  aria-label={editEnabled ? editingLabel : undefined}
+                  data-placeholder={editEnabled ? editingPlaceholder : undefined}
+                  onFocus={handleFlowFocus}
+                  onBlur={handleFlowBlur}
+                  onInput={editEnabled ? handleFlowInput : undefined}
+                  onKeyDown={editEnabled ? handleFlowKeyDown : undefined}
+                  onPaste={editEnabled ? handleFlowPaste : undefined}
+                >
+                  {flowChildren}
+                </S.SegmentFlow>
+              </SortableContext>
+            </S.FlowArea>
+            <DragOverlay zIndex={200} dropAnimation={null}>
+              {activeSnippet ? (
+                <S.OverlayChip
+                  data-testid="preview-snippet-overlay"
+                  style={{
+                    backgroundColor: withAlpha(activeSnippet.color, 0.3),
+                  }}
+                >
+                  {activeSnippet.text}
+                </S.OverlayChip>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
           {/* The char counter, ABSOLUTELY pinned at the card's
               bottom-right padding inset: out of the flow, so no
               amount of content can move or overlap it. The modal

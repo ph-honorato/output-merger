@@ -1,10 +1,11 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import type { DefaultTheme } from "styled-components";
 import type { Theme } from "@mui/material/styles";
+import { slideUpFadeIn } from "@utils/animations";
 
 type StyledTheme = DefaultTheme & Theme;
 
-export const PreviewToolbarRoot = styled.div`
+export const PreviewToolbarRoot = styled.div<{ $entranceDelay?: string }>`
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -20,4 +21,25 @@ export const PreviewToolbarRoot = styled.div`
   ${({ theme }) => (theme as StyledTheme).breakpoints.up("md")} {
     flex-direction: column;
   }
+
+  /* Final state (after animation): fully visible, no transform.
+   * Explicit transform: none prevents containing block for fixed-position
+   * descendants which would misposition any fixed-position elements. */
+  opacity: 1;
+  transform: none;
+
+  /* Entrance animation: slide up + fade in (opt-in via $entranceDelay prop).
+   * Uses 'backwards' fill-mode so the first keyframe applies immediately,
+   * then animates to the base styles above. No 'forwards' fill-mode means
+   * no transform is retained after the animation completes. */
+  ${({ $entranceDelay }) =>
+    $entranceDelay !== undefined
+      ? css`
+          animation: ${slideUpFadeIn} 800ms ease-out ${$entranceDelay} backwards;
+
+          @media (prefers-reduced-motion: reduce) {
+            animation: none;
+          }
+        `
+      : undefined}
 `;
