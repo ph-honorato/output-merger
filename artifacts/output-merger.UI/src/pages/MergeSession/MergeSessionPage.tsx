@@ -24,6 +24,7 @@ const ENTRANCE_DELAYS = {
   textInput1: "50ms",
   textInput2: "250ms",
   previewArea: "450ms",
+  previewToolbar: "550ms",
 } as const;
 
 function MergeSessionWorkspace() {
@@ -103,7 +104,7 @@ function MergeSessionWorkspace() {
         <Grid size={{ xs: 12, md: 4 }}>
           <S.PreviewColumn>
             <PreviewArea $entranceDelay={returnEpoch === 0 ? ENTRANCE_DELAYS.previewArea : undefined} />
-            <PreviewToolbar>
+            <PreviewToolbar $entranceDelay={returnEpoch === 0 ? ENTRANCE_DELAYS.previewToolbar : undefined}>
               <CopyMergedTextButton />
               <PreviewModal />
               <TextEditingToggle />

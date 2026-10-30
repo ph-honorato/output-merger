@@ -4,6 +4,9 @@ import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useSnippets } from '../../../../context/SnippetsContext';
 import { serialize } from '@utils/previewDocument';
+import { useKeyboardShortcut } from '@hooks/useKeyboardShortcut';
+import { SHORTCUTS } from '@utils/shortcuts';
+import { createTooltipWithShortcut } from '@utils/shortcutDisplay';
 
 /**
  * Composes i18n, the below-md viewport gate, the empty-preview
@@ -46,6 +49,18 @@ export function usePreviewModal() {
     setDragActive(active);
   }, []);
 
+  // Gating matrix: edit ON → the trigger is always enabled (the
+  // empty document is editable); edit OFF → enabled iff the
+  // document serializes to something (today's behavior).
+  const canOpen = editEnabled || serialize(previewDocument).length > 0;
+
+  // Keyboard shortcut: Ctrl/Cmd+M to toggle preview modal (open/close)
+  useKeyboardShortcut({
+    shortcut: SHORTCUTS.OPEN_PREVIEW_MODAL,
+    onTrigger: open ? handleClose : handleOpen,
+    enabled: !isBelowMd && canOpen,
+  });
+
   /**
    * The Dialog onClose funnel for backdrop and Escape closes.
    *
@@ -75,17 +90,28 @@ export function usePreviewModal() {
     [dragActive, handleClose],
   );
 
+  // Tooltip text with shortcut - changes based on modal state
+  const openTooltip = createTooltipWithShortcut(
+    t(open ? 'pages.mergeSession.previewArea.modal.close' : 'pages.mergeSession.previewArea.modal.open'),
+    SHORTCUTS.OPEN_PREVIEW_MODAL
+  );
+
+  // Tooltip for the close button inside the modal (always shows close text with shortcut)
+  const closeTooltip = createTooltipWithShortcut(
+    t('pages.mergeSession.previewArea.modal.close'),
+    SHORTCUTS.OPEN_PREVIEW_MODAL
+  );
+
   return {
     t,
     isBelowMd,
-    // Gating matrix: edit ON → the trigger is always enabled (the
-    // empty document is editable); edit OFF → enabled iff the
-    // document serializes to something (today's behavior).
-    canOpen: editEnabled || serialize(previewDocument).length > 0,
+    canOpen,
     open,
     handleOpen,
     handleClose,
     handleDialogClose,
     handleActiveDragChange,
+    openTooltip,
+    closeTooltip,
   };
 }

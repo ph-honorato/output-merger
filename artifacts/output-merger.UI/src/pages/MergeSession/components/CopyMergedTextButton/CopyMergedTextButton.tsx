@@ -1,9 +1,10 @@
-import ContentCopy from '@mui/icons-material/ContentCopy';
-import IconButton from '@mui/material/IconButton';
-import Snackbar from '@mui/material/Snackbar';
-import { useCopyMergedTextButton } from './CopyMergedTextButton.hook';
-import * as S from './CopyMergedTextButton.styles';
-import type { CopyMergedTextButtonProps } from './CopyMergedTextButton.types';
+import ContentCopy from "@mui/icons-material/ContentCopy";
+import IconButton from "@mui/material/IconButton";
+import Snackbar from "@mui/material/Snackbar";
+import { TooltipWrapper } from "@components";
+import { useCopyMergedTextButton } from "./CopyMergedTextButton.hook";
+import * as S from "./CopyMergedTextButton.styles";
+import type { CopyMergedTextButtonProps } from "./CopyMergedTextButton.types";
 
 function CopyMergedTextButton(props: CopyMergedTextButtonProps) {
   const { className } = props;
@@ -12,15 +13,17 @@ function CopyMergedTextButton(props: CopyMergedTextButtonProps) {
 
   return (
     <>
-      <IconButton
-        data-testid="preview-copy-button"
-        className={className}
-        aria-label={t('pages.mergeSession.previewArea.copy.button')}
-        disabled={!canCopy}
-        onClick={handleCopy}
-      >
-        <ContentCopy />
-      </IconButton>
+      <TooltipWrapper title={t("pages.mergeSession.previewArea.copy.button")}>
+        <IconButton
+          data-testid="preview-copy-button"
+          className={className}
+          aria-label={t("pages.mergeSession.previewArea.copy.button")}
+          disabled={!canCopy}
+          onClick={handleCopy}
+        >
+          <ContentCopy />
+        </IconButton>
+      </TooltipWrapper>
       <Snackbar
         open={toastOpen}
         autoHideDuration={2500}
@@ -28,7 +31,7 @@ function CopyMergedTextButton(props: CopyMergedTextButtonProps) {
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
         <S.ToastMessage data-testid="preview-copy-toast">
-          {t('pages.mergeSession.previewArea.copy.toast')}
+          {t("pages.mergeSession.previewArea.copy.toast")}
         </S.ToastMessage>
       </Snackbar>
     </>

@@ -1,4 +1,5 @@
 import Title from '@mui/icons-material/Title';
+import { TooltipWrapper } from '@components/TooltipWrapper';
 import { useTextEditingToggle } from './TextEditingToggle.hook';
 import * as S from './TextEditingToggle.styles';
 import type { TextEditingToggleProps } from './TextEditingToggle.types';
@@ -15,15 +16,17 @@ function TextEditingToggle(props: TextEditingToggleProps) {
   const { ariaLabel, editEnabled, handleToggle } = useTextEditingToggle();
 
   return (
-    <S.ToggleIconButton
-      data-testid="preview-edit-toggle"
-      className={className}
-      aria-label={ariaLabel}
-      aria-pressed={editEnabled}
-      onClick={handleToggle}
-    >
-      <Title />
-    </S.ToggleIconButton>
+    <TooltipWrapper title={ariaLabel}>
+      <S.ToggleIconButton
+        data-testid="preview-edit-toggle"
+        className={className}
+        aria-label={ariaLabel}
+        aria-pressed={editEnabled}
+        onClick={handleToggle}
+      >
+        <Title />
+      </S.ToggleIconButton>
+    </TooltipWrapper>
   );
 }
 

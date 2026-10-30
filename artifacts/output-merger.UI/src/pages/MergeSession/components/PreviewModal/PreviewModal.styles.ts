@@ -1,9 +1,6 @@
 import styled from "styled-components";
 import DialogTitle from "@mui/material/DialogTitle";
-import type { DefaultTheme } from "styled-components";
-import type { Theme } from "@mui/material/styles";
-
-type StyledTheme = DefaultTheme & Theme;
+import type { StyledTheme } from "@theme";
 
 /**
  * Visually hidden DialogTitle (the 1px-clip screen-reader-only

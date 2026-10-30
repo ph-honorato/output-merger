@@ -45,7 +45,7 @@ describe('TextEditingToggle', () => {
     renderToggle();
     const button = screen.getByTestId('preview-edit-toggle');
     expect(button).toHaveAttribute('aria-pressed', 'false');
-    expect(button).toHaveAttribute('aria-label', 'Enable text editing');
+    expect(button).toHaveAttribute('aria-label', 'Enable text editing (Ctrl+E)');
   });
 
   it('flips the shared edit state and both label and pressed state on click', () => {
@@ -55,12 +55,12 @@ describe('TextEditingToggle', () => {
     fireEvent.click(button);
 
     expect(button).toHaveAttribute('aria-pressed', 'true');
-    expect(button).toHaveAttribute('aria-label', 'Disable text editing');
+    expect(button).toHaveAttribute('aria-label', 'Disable text editing (Ctrl+E)');
 
     fireEvent.click(button);
 
     expect(button).toHaveAttribute('aria-pressed', 'false');
-    expect(button).toHaveAttribute('aria-label', 'Enable text editing');
+    expect(button).toHaveAttribute('aria-label', 'Enable text editing (Ctrl+E)');
   });
 
   it('is idempotent: pressing the same state again keeps it', () => {
@@ -144,25 +144,25 @@ describe('TextEditingToggle', () => {
     renderToggle();
     expect(screen.getByTestId('preview-edit-toggle')).toHaveAttribute(
       'aria-label',
-      'Enable text editing',
+      'Enable text editing (Ctrl+E)',
     );
 
     fireEvent.click(screen.getByTestId('preview-edit-toggle'));
     expect(screen.getByTestId('preview-edit-toggle')).toHaveAttribute(
       'aria-label',
-      'Disable text editing',
+      'Disable text editing (Ctrl+E)',
     );
 
     await i18n.changeLanguage('pt');
     expect(screen.getByTestId('preview-edit-toggle')).toHaveAttribute(
       'aria-label',
-      'Desativar edição de texto',
+      'Desativar edição de texto (Ctrl+E)',
     );
 
     fireEvent.click(screen.getByTestId('preview-edit-toggle'));
     expect(screen.getByTestId('preview-edit-toggle')).toHaveAttribute(
       'aria-label',
-      'Ativar edição de texto',
+      'Ativar edição de texto (Ctrl+E)',
     );
   });
 
@@ -176,5 +176,44 @@ describe('TextEditingToggle', () => {
     expect(css).toContain(theme.palette.action.selected);
     fireEvent.click(button);
     expect(button).toHaveStyle({ color: theme.palette.primary.main });
+  });
+
+  it('renders a tooltip with the toggle label including shortcut', () => {
+    renderToggle();
+    const button = screen.getByTestId('preview-edit-toggle');
+    expect(button).toHaveAttribute('aria-label', 'Enable text editing (Ctrl+E)');
+  });
+
+  it('updates tooltip label when toggled', () => {
+    renderToggle();
+    const button = screen.getByTestId('preview-edit-toggle');
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-label', 'Disable text editing (Ctrl+E)');
+  });
+
+  it('toggles edit mode on Ctrl+E keyboard shortcut', () => {
+    renderToggle();
+    const button = screen.getByTestId('preview-edit-toggle');
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.keyDown(window, { key: 'e', ctrlKey: true, code: 'KeyE' });
+
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).toHaveAttribute('aria-label', 'Disable text editing (Ctrl+E)');
+
+    fireEvent.keyDown(window, { key: 'e', ctrlKey: true, code: 'KeyE' });
+
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+    expect(button).toHaveAttribute('aria-label', 'Enable text editing (Ctrl+E)');
+  });
+
+  it('does not toggle on Ctrl+E when shortcut is disabled (metaKey missing)', () => {
+    renderToggle();
+    const button = screen.getByTestId('preview-edit-toggle');
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.keyDown(window, { key: 'e', code: 'KeyE' });
+
+    expect(button).toHaveAttribute('aria-pressed', 'false');
   });
 });
