@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useRef, useEffect } from "react";
 import { Menu as MenuIcon, Settings, Brightness4, LightMode } from "@mui/icons-material";
 import { Container } from "@mui/material";
+import Switch from "@mui/material/Switch";
 import { useHeader } from "./Header.hook";
 import { type HeaderProps } from "./Header.types";
 import * as S from "./Header.styles";
@@ -22,12 +23,12 @@ function Header(props: HeaderProps) {
     isConfigMenuOpen,
     mobileMenuOpen,
     isDarkMode,
-    handleConfigMenuOpen,
+    handleConfigMenuToggle,
     handleConfigMenuClose,
     handleLanguageChange,
     handleMobileMenuToggle,
     handleMobileMenuClose,
-    handleThemeToggle,
+    handleThemeChange,
   } = useHeader();
 
   // Close menus when clicking outside
@@ -74,7 +75,7 @@ function Header(props: HeaderProps) {
   const handleThemeKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      handleThemeToggle();
+      handleThemeChange(!isDarkMode);
     }
   };
 
@@ -91,7 +92,7 @@ function Header(props: HeaderProps) {
           <S.DesktopActions>
             <S.ConfigSelectorContainer ref={configMenuRef}>
               <S.ConfigMenuButton
-                onClick={handleConfigMenuOpen}
+                onClick={handleConfigMenuToggle}
                 aria-label={t("config.selector")}
                 aria-expanded={isConfigMenuOpen}
                 aria-haspopup="true"
@@ -141,25 +142,29 @@ function Header(props: HeaderProps) {
 
                   <S.ConfigMenuDivider />
 
-                  {/* Dark Mode Toggle */}
+                  {/* Dark Mode Toggle with Switch */}
                   <S.ConfigMenuItem
-                    onClick={handleThemeToggle}
-                    onKeyDown={handleThemeKeyDown}
                     role="menuitem"
                     tabIndex={-1}
                     data-testid="config-darkmode-toggle"
+                    style={{ padding: "8px 16px" }}
+                    onClick={(e) => e.stopPropagation()} // Prevent menu item click from triggering
                   >
                     <S.ConfigMenuIcon>
                       {isDarkMode ? <LightMode fontSize="small" /> : <Brightness4 fontSize="small" />}
                     </S.ConfigMenuIcon>
                     <S.ConfigMenuLabel>{t("config.darkMode")}</S.ConfigMenuLabel>
-                    <S.ConfigMenuToggle>
-                      {isDarkMode ? (
-                        <span style={{ color: "var(--mui-palette-primary-main)" }}>●</span>
-                      ) : (
-                        <span style={{ color: "var(--mui-palette-text-secondary)" }}>○</span>
-                      )}
-                    </S.ConfigMenuToggle>
+                    <S.ConfigSwitchWrapper>
+                      <Switch
+                        checked={isDarkMode}
+                        onChange={(e) => handleThemeChange(e.target.checked)}
+                        onKeyDown={handleThemeKeyDown}
+                        tabIndex={0}
+                        aria-label={t("config.darkMode")}
+                        data-testid="config-darkmode-switch"
+                        color="primary"
+                      />
+                    </S.ConfigSwitchWrapper>
                   </S.ConfigMenuItem>
                 </S.ConfigMenu>
               )}
@@ -220,25 +225,29 @@ function Header(props: HeaderProps) {
 
                 <S.ConfigMenuDivider style={{ margin: "12px 0" }} />
 
-                {/* Dark Mode Toggle */}
+                {/* Dark Mode Toggle with Switch */}
                 <S.ConfigMenuItem
-                  onClick={handleThemeToggle}
-                  onKeyDown={handleThemeKeyDown}
                   role="menuitem"
                   tabIndex={-1}
                   data-testid="mobile-darkmode-toggle"
+                  style={{ padding: "8px 16px" }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <S.ConfigMenuIcon>
                     {isDarkMode ? <LightMode fontSize="small" /> : <Brightness4 fontSize="small" />}
                   </S.ConfigMenuIcon>
                   <S.ConfigMenuLabel>{t("config.darkMode")}</S.ConfigMenuLabel>
-                  <S.ConfigMenuToggle>
-                    {isDarkMode ? (
-                      <span style={{ color: "var(--mui-palette-primary-main)" }}>●</span>
-                    ) : (
-                      <span style={{ color: "var(--mui-palette-text-secondary)" }}>○</span>
-                    )}
-                  </S.ConfigMenuToggle>
+                  <S.ConfigSwitchWrapper>
+                    <Switch
+                      checked={isDarkMode}
+                      onChange={(e) => handleThemeChange(e.target.checked)}
+                      onKeyDown={handleThemeKeyDown}
+                      tabIndex={0}
+                      aria-label={t("config.darkMode")}
+                      data-testid="mobile-darkmode-switch"
+                      color="primary"
+                    />
+                  </S.ConfigSwitchWrapper>
                 </S.ConfigMenuItem>
               </div>
             </S.MobileMenu>

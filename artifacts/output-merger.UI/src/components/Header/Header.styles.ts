@@ -148,6 +148,10 @@ export const ConfigMenuToggle = styled.span`
   flex-shrink: 0;
 `;
 
+export const ConfigSwitchWrapper = styled.span`
+  flex-shrink: 0;
+`;
+
 export const LanguageFlag = styled.span`
   font-size: 1.25rem;
   line-height: 1;

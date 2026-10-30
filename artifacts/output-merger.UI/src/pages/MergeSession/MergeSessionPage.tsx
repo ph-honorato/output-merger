@@ -13,7 +13,6 @@ import {
   TextEditingToggle,
   TutorialBanner,
   ReturnButton,
-  readTutorialDismissed,
   writeTutorialDismissed,
 } from "./components";
 import { SnippetsProvider, useSnippets } from "../../context/SnippetsContext";
@@ -118,9 +117,7 @@ function MergeSessionWorkspace() {
 
 export function MergeSessionPage(_props: MergeSessionPageProps) {
   const { t } = useTranslation();
-  const [tutorialVisible, setTutorialVisible] = useState(
-    () => !readTutorialDismissed(),
-  );
+  const [tutorialVisible, setTutorialVisible] = useState(false);
 
   const handleTutorialDismiss = useCallback(() => {
     writeTutorialDismissed();
