@@ -2,6 +2,7 @@ import OpenInFull from "@mui/icons-material/OpenInFull";
 import CloseFullscreen from "@mui/icons-material/CloseFullscreen";
 import Dialog from "@mui/material/Dialog";
 import IconButton from "@mui/material/IconButton";
+import { TooltipWrapper } from "@components/TooltipWrapper";
 import { CopyMergedTextButton, PreviewArea, PreviewCharCount, TextEditingToggle } from "../";
 import { usePreviewModal } from "./PreviewModal.hook";
 import type { PreviewModalProps } from "./PreviewModal.types";
@@ -30,20 +31,24 @@ function PreviewModal(props: PreviewModalProps) {
     handleClose,
     handleDialogClose,
     handleActiveDragChange,
+    openTooltip,
+    closeTooltip,
   } = usePreviewModal();
 
   return (
     <>
       {isBelowMd ? null : (
-        <IconButton
-          className={className}
-          data-testid="preview-modal-open-button"
-          aria-label={t("pages.mergeSession.previewArea.modal.open")}
-          disabled={!canOpen}
-          onClick={handleOpen}
-        >
-          <OpenInFull />
-        </IconButton>
+        <TooltipWrapper title={openTooltip}>
+          <IconButton
+            className={className}
+            data-testid="preview-modal-open-button"
+            aria-label={openTooltip}
+            disabled={!canOpen}
+            onClick={handleOpen}
+          >
+            <OpenInFull />
+          </IconButton>
+        </TooltipWrapper>
       )}
       <Dialog
         open={open}
@@ -65,13 +70,15 @@ function PreviewModal(props: PreviewModalProps) {
           </S.PreviewZone>
           <S.ToolsRail>
             <CopyMergedTextButton />
-            <IconButton
-              data-testid="preview-modal-close-button"
-              aria-label={t("pages.mergeSession.previewArea.modal.close")}
-              onClick={handleClose}
-            >
-              <CloseFullscreen />
-            </IconButton>
+            <TooltipWrapper title={closeTooltip}>
+              <IconButton
+                data-testid="preview-modal-close-button"
+                aria-label={closeTooltip}
+                onClick={handleClose}
+              >
+                <CloseFullscreen />
+              </IconButton>
+            </TooltipWrapper>
             <TextEditingToggle />
             <PreviewCharCount hideLimit />
           </S.ToolsRail>

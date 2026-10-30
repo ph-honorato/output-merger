@@ -26,16 +26,16 @@
   "pages.mergeSession.tutorial.dismiss": "Dismiss tutorial",
   "pages.mergeSession.tutorial.help": "Show tutorial",
   "pages.mergeSession.previewArea.empty": "Select some snippets on the inputs to start",
-  "pages.mergeSession.previewArea.copy.button": "Copy merged text to clipboard",
+  "pages.mergeSession.previewArea.copy.button": "Copy to clipboard",
   "pages.mergeSession.previewArea.copy.toast": "Text copied to clipboard",
   "pages.mergeSession.previewArea.sorting.instructions": "To pick up a snippet, press Space or Enter. While dragging, use the arrow keys to move it. Press Space or Enter again to drop it, or Escape to cancel. While text editing is on, place the caret inside a snippet and press Ctrl+Space to lift it; Enter drops it and Escape cancels.",
   "pages.mergeSession.previewArea.sorting.started": "Picked up snippet {{index}} of {{count}}.",
   "pages.mergeSession.previewArea.sorting.over": "Snippet is now over position {{index}} of {{count}}.",
   "pages.mergeSession.previewArea.sorting.ended": "Snippet dropped at position {{index}} of {{count}}.",
   "pages.mergeSession.previewArea.sorting.cancelled": "Snippet reorder cancelled.",
+  "pages.mergeSession.previewArea.modal.open": "Open big view",
+  "pages.mergeSession.previewArea.modal.close": "Close big view",
   "pages.mergeSession.previewArea.modal.name": "Preview",
-  "pages.mergeSession.previewArea.modal.open": "Open preview in a bigger view",
-  "pages.mergeSession.previewArea.modal.close": "Close preview",
   "pages.mergeSession.previewArea.editing.label": "Merged text editor",
   "pages.mergeSession.previewArea.editing.placeholder": "Type here to add your own text",
   "pages.mergeSession.previewArea.editing.toggleOn": "Enable text editing",
@@ -46,5 +46,7 @@
   "textInput.emptyView": "No text added yet.",
   "textInput.needleHover": "Drag to highlight text",
   "textInput.needleStart": "Snippet start handle",
-  "textInput.needleEnd": "Snippet end handle"
+  "textInput.needleEnd": "Snippet end handle",
+  "shortcuts.toggleEditing": "Toggle text editing",
+  "shortcuts.openPreviewModal": "Open preview modal"
 }

@@ -1569,6 +1569,64 @@ describe("PreviewArea drop indicator", () => {
         screen.getAllByTestId("preview-snippet").map((s) => s.textContent),
       ).toEqual(["Alpha", "beta", "gamma"]);
     });
+
+    it("does not cause layout overflow or scrollbars when dragging a snippet", async () => {
+      renderWithProviders(seedInterleaved());
+      const [alpha] = screen.getAllByTestId("preview-snippet");
+      const previewArea = screen.getByTestId("preview-area");
+      const flowArea = screen.getByTestId("preview-flow-area");
+
+      // Record initial viewport/document dimensions
+      const initialBodyScrollWidth = document.body.scrollWidth;
+      const initialBodyScrollHeight = document.body.scrollHeight;
+      const initialFlowAreaScrollWidth = flowArea.scrollWidth;
+      const initialFlowAreaScrollHeight = flowArea.scrollHeight;
+
+      pointerDownOn(alpha, 40, 10);
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+
+      // Verify the drag overlay is rendered
+      const overlay = screen.getByTestId("preview-snippet-overlay");
+      expect(overlay).toBeInTheDocument();
+
+      // Move the pointer to simulate dragging
+      fireEvent.pointerMove(document, {
+        pointerId: 1,
+        clientX: 200,
+        clientY: 50,
+      });
+
+      // Verify the needle appears
+      expect(screen.getByTestId("preview-drop-indicator")).toBeInTheDocument();
+
+      // The drag overlay should be positioned near the cursor (not far off-screen)
+      const overlayRect = overlay.getBoundingClientRect();
+      expect(overlayRect.left).toBeGreaterThanOrEqual(0);
+      expect(overlayRect.top).toBeGreaterThanOrEqual(0);
+      // Overlay should be reasonably close to the cursor position (within viewport)
+      expect(overlayRect.left).toBeLessThan(window.innerWidth);
+      expect(overlayRect.top).toBeLessThan(window.innerHeight);
+
+      // Document body should not have grown or gained scrollbars
+      expect(document.body.scrollWidth).toBe(initialBodyScrollWidth);
+      expect(document.body.scrollHeight).toBe(initialBodyScrollHeight);
+
+      // Flow area should not have changed scroll dimensions
+      expect(flowArea.scrollWidth).toBe(initialFlowAreaScrollWidth);
+      expect(flowArea.scrollHeight).toBe(initialFlowAreaScrollHeight);
+
+      // Preview area should not have overflow
+      const previewAreaStyles = window.getComputedStyle(previewArea);
+      expect(previewAreaStyles.overflowX).toBe("visible");
+      expect(previewAreaStyles.overflowY).toBe("visible");
+
+      fireEvent.pointerUp(document, { pointerId: 1 });
+      await act(async () => {});
+
+      expect(screen.queryByTestId("preview-snippet-overlay")).toBeNull();
+    });
   });
 
   // ---- hook-level lifecycle (vanish / no target / stability) --------------

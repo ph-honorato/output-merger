@@ -13,4 +13,8 @@ export interface PreviewToolbarProps {
    * Optional class name applied to the root element
    */
   className?: string;
+  /**
+   * Optional entrance delay for staggered animation (e.g., "550ms")
+   */
+  $entranceDelay?: string;
 }

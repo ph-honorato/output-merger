@@ -26,16 +26,16 @@
   "pages.mergeSession.tutorial.dismiss": "Fechar tutorial",
   "pages.mergeSession.tutorial.help": "Mostrar tutorial",
   "pages.mergeSession.previewArea.empty": "Selecione alguns trechos nas entradas para começar",
-  "pages.mergeSession.previewArea.copy.button": "Copiar texto mesclado para a área de transferência",
+  "pages.mergeSession.previewArea.copy.button": "Copiar para a área de transferência",
   "pages.mergeSession.previewArea.copy.toast": "Texto copiado para a área de transferência",
   "pages.mergeSession.previewArea.sorting.instructions": "Para pegar um trecho, pressione Espaço ou Enter. Enquanto arrasta, use as setas para movê-lo. Pressione Espaço ou Enter novamente para soltá-lo, ou Escape para cancelar. Com a edição de texto ativada, posicione o cursor dentro de um trecho e pressione Ctrl+Espaço para levantá-lo; Enter o solta e Escape cancela.",
   "pages.mergeSession.previewArea.sorting.started": "Trecho {{index}} de {{count}} pego.",
   "pages.mergeSession.previewArea.sorting.over": "O trecho agora está sobre a posição {{index}} de {{count}}.",
   "pages.mergeSession.previewArea.sorting.ended": "Trecho solto na posição {{index}} de {{count}}.",
   "pages.mergeSession.previewArea.sorting.cancelled": "Reordenação do trecho cancelada.",
+  "pages.mergeSession.previewArea.modal.open": "Abrir visualização ampliada",
+  "pages.mergeSession.previewArea.modal.close": "Fechar visualização ampliada",
   "pages.mergeSession.previewArea.modal.name": "Prévia",
-  "pages.mergeSession.previewArea.modal.open": "Abrir prévia em visualização ampliada",
-  "pages.mergeSession.previewArea.modal.close": "Fechar prévia",
   "pages.mergeSession.previewArea.editing.label": "Editor de texto mesclado",
   "pages.mergeSession.previewArea.editing.placeholder": "Digite aqui para adicionar seu próprio texto",
   "pages.mergeSession.previewArea.editing.toggleOn": "Ativar edição de texto",
@@ -46,5 +46,7 @@
   "textInput.emptyView": "Nenhum texto adicionado ainda.",
   "textInput.needleHover": "Arraste para destacar o texto",
   "textInput.needleStart": "Marcador de início do trecho",
-  "textInput.needleEnd": "Marcador de fim do trecho"
+  "textInput.needleEnd": "Marcador de fim do trecho",
+  "shortcuts.toggleEditing": "Alternar edição de texto",
+  "shortcuts.openPreviewModal": "Abrir modal de prévia"
 }

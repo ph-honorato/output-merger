@@ -1,10 +1,27 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ThemeProvider as MuiThemeProvider } from "@mui/material/styles";
+import { ThemeProvider as StyledThemeProvider } from "styled-components";
+import { theme } from "@theme";
+import { i18n } from "@translation";
+import { I18nextProvider } from "react-i18next";
 import Example from "./Example";
 
+const renderWithProviders = (component: React.ReactElement) => {
+  return render(
+    <I18nextProvider i18n={i18n}>
+      <MuiThemeProvider theme={theme}>
+        <StyledThemeProvider theme={theme}>
+          {component}
+        </StyledThemeProvider>
+      </MuiThemeProvider>
+    </I18nextProvider>
+  );
+};
+
 describe("Example Component", () => {
-  const setup = (theme: "light" | "dark" = "light") => {
-    return render(<Example theme={theme} />);
+  const setup = () => {
+    return renderWithProviders(<Example />);
   };
 
   it("should render example component", () => {
@@ -31,12 +48,5 @@ describe("Example Component", () => {
 
     await user.click(button);
     expect(counter).toHaveTextContent("Clicks: 2");
-  });
-
-  it("should render with dark theme", () => {
-    setup("dark");
-    const wrapperDark = screen.getByTestId("example-wrapper");
-    expect(wrapperDark).toBeInTheDocument();
-    expect(wrapperDark).toHaveStyle({ backgroundColor: "#1a1a1a" });
   });
 });

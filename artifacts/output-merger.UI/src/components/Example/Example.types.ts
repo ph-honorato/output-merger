@@ -3,10 +3,5 @@
  * @interface ExampleProps
  */
 export interface ExampleProps {
-  /**
-   * The theme style to apply to the component
-   * @default "light"
-   * @enum {"light" | "dark"}
-   */
-  theme?: "light" | "dark";
+  // No props currently - this is a demo component
 }
