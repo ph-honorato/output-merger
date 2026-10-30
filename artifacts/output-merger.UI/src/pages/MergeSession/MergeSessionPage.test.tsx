@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
+import { ThemeProvider } from '@context/ThemeContext';
 import { I18nextProvider } from 'react-i18next';
 import { i18n } from '@translation';
 import { theme } from '@theme';
@@ -29,11 +30,13 @@ vi.mock('../../components/TextInput/TextInput.geometry', async (importOriginal) 
 const renderPage = () =>
   render(
     <I18nextProvider i18n={i18n}>
-      <MuiThemeProvider theme={theme}>
-        <StyledThemeProvider theme={theme}>
-          <MergeSessionPage />
-        </StyledThemeProvider>
-      </MuiThemeProvider>
+      <ThemeProvider>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            <MergeSessionPage />
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </ThemeProvider>
     </I18nextProvider>
   );
 
@@ -115,14 +118,21 @@ describe('MergeSessionPage', () => {
     expect(screen.getByTestId('preview-area')).toBeInTheDocument();
   });
 
-  it('runs the full tutorial lifecycle: render, dismiss, persist, reopen via help, re-dismiss', async () => {
+  it('runs the full tutorial lifecycle: help button opens tutorial, dismiss, persist, reopen via help, re-dismiss', async () => {
     const { unmount } = renderPage();
     const user = userEvent.setup();
+
+    // Tutorial is hidden by default, help button is visible
+    expect(screen.queryByTestId('merge-session-tutorial')).toBeNull();
+    expect(screen.getByTestId('merge-session-help-button')).toBeInTheDocument();
+
+    // Click help button to show tutorial
+    await user.click(screen.getByTestId('merge-session-help-button'));
 
     const banner = screen.getByTestId('merge-session-tutorial');
     expect(banner).toBeInTheDocument();
     expect(screen.getByText('How it works')).toBeInTheDocument();
-    expect(banner.querySelectorAll('ol li')).toHaveLength(6);
+    expect(banner.querySelectorAll('ol li')).toHaveLength(5);
     expect(screen.queryByTestId('merge-session-help-button')).toBeNull();
 
     await user.click(screen.getByTestId('tutorial-dismiss-button'));
@@ -136,6 +146,7 @@ describe('MergeSessionPage', () => {
     unmount();
     renderPage();
 
+    // After remount, tutorial stays hidden (dismissed)
     expect(screen.queryByTestId('merge-session-tutorial')).toBeNull();
     expect(screen.getByTestId('merge-session-help-button')).toBeInTheDocument();
 
@@ -154,26 +165,22 @@ describe('MergeSessionPage', () => {
   });
 
   it('treats a throwing localStorage as not dismissed and never crashes', async () => {
-    const localStorageSpy = vi
-      .spyOn(window, 'localStorage', 'get')
-      .mockImplementation(() => {
-        throw new Error('storage denied');
+    const getItemSpy = vi
+      .spyOn(window.localStorage, 'getItem')
+      .mockImplementation((key) => {
+        // Only throw for tutorial-related keys, let ThemeContext work
+        if (key === 'output-merger.tutorial.dismissed') {
+          throw new Error('storage denied');
+        }
+        return null;
       });
-    const { unmount } = renderPage();
-    const user = userEvent.setup();
-
-    expect(screen.getByTestId('merge-session-tutorial')).toBeInTheDocument();
-
-    await user.click(screen.getByTestId('tutorial-dismiss-button'));
-
-    expect(screen.queryByTestId('merge-session-tutorial')).toBeNull();
-
-    unmount();
     renderPage();
 
-    expect(screen.getByTestId('merge-session-tutorial')).toBeInTheDocument();
+    // Tutorial should be hidden by default regardless of localStorage
+    expect(screen.queryByTestId('merge-session-tutorial')).toBeNull();
+    expect(screen.getByTestId('merge-session-help-button')).toBeInTheDocument();
 
-    localStorageSpy.mockRestore();
+    getItemSpy.mockRestore();
   });
 
   it('renders the preview modal trigger inside the toolbar, below the copy button', () => {
@@ -294,12 +301,6 @@ describe('MergeSessionPage', () => {
 
     const views = screen.getAllByTestId('text-input-view');
     expect(views).toHaveLength(2);
-    const dragFromTo = (view: HTMLElement, from: number, to: number) => {
-      fireEvent.pointerMove(view, { clientX: from, clientY: 5 });
-      fireEvent.pointerDown(view, { clientX: from, clientY: 5 });
-      fireEvent.pointerMove(view, { clientX: to, clientY: 5 });
-      fireEvent.pointerUp(window);
-    };
     dragFromTo(views[0], 41, 151); // 'beta gamma' (text-1)
     dragFromTo(views[1], 41, 95); // 'beta' (text-2)
 
@@ -416,12 +417,6 @@ describe('MergeSessionPage', () => {
     await user.click(screen.getByTestId('merge-session-start-button'));
 
     const views = screen.getAllByTestId('text-input-view');
-    const dragFromTo = (view: HTMLElement, from: number, to: number) => {
-      fireEvent.pointerMove(view, { clientX: from, clientY: 5 });
-      fireEvent.pointerDown(view, { clientX: from, clientY: 5 });
-      fireEvent.pointerMove(view, { clientX: to, clientY: 5 });
-      fireEvent.pointerUp(window);
-    };
     dragFromTo(views[0], 41, 151); // 'beta gamma' (text-1)
     dragFromTo(views[1], 41, 95); // 'beta' (text-2)
     expect(screen.getByTestId('preview-segment-flow')).toHaveTextContent(
