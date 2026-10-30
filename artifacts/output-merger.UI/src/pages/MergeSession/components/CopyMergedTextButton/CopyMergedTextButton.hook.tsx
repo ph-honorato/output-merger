@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSnippets } from '../../../../context/SnippetsContext';
 import { applyAutoFix, serialize } from '@utils/previewDocument';
+import { secureClipboardWrite } from '@utils/sanitize';
 
 export function useCopyMergedTextButton() {
   const { t } = useTranslation();
@@ -24,16 +25,13 @@ export function useCopyMergedTextButton() {
     [previewDocument, caseFixLanguage],
   );
 
-  const handleCopy = useCallback(() => {
-    if (!navigator.clipboard) {
-      return;
+  const handleCopy = useCallback(async () => {
+    try {
+      await secureClipboardWrite(mergedText);
+      setToastOpen(true);
+    } catch {
+      // Silently fail - toast not shown on error
     }
-    navigator.clipboard
-      .writeText(mergedText)
-      .then(() => {
-        setToastOpen(true);
-      })
-      .catch(() => {});
   }, [mergedText]);
 
   const handleToastClose = useCallback(() => {

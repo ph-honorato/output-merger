@@ -19,6 +19,7 @@ import {
 } from './TextInput.snippets';
 import { computeNeedlePosition, resolvePointerAt, tokenize } from './TextInput.tokenize';
 import { readEnvNumber } from '@utils/env';
+import { sanitizePlainText } from '@utils/sanitize';
 
 export type { CharRectLike, NeedleDescriptor, Segment, Token } from './TextInput.types';
 export {
@@ -265,7 +266,9 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number }) 
 
   const handleTextChange = useCallback(
     (value: string) => {
-      const next = value.length > maxCharacters ? value.slice(0, maxCharacters) : value;
+      // Sanitize input: strip control chars, null bytes, normalize whitespace
+      const sanitized = sanitizePlainText(value);
+      const next = sanitized.length > maxCharacters ? sanitized.slice(0, maxCharacters) : sanitized;
       setText(next);
       onTextChange?.(next);
       if (snippets.length > 0) {
