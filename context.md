@@ -45,7 +45,7 @@ When adding new routes:
 - **Frontend**: React 19 + TypeScript + Vite
 - **Routing**: Tanstack Router
 - **Styling**: MUI and Styled Components
-- **Design System**: Guided by `design.md` (to be created)
+- **Design System**: Guided by `design.md` (located at project root)
 - **Testing**: Vitest
 - **State Management**: React Context + useReducer (current), potentially evolving
 
