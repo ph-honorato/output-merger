@@ -12,7 +12,9 @@ AI Output Comparison Platform - Compare and merge AI-generated outputs with live
 
 ## Roadmap
 
-**V0 (MVP):** The user can add up to 3 different texts and start the merge session. The user can select text parts with the mouse to auto-include in the preview. At the preview area, the user can then drag previously highlighted text snippets, create line breaks, split highlighted snippets between words and add own text. **Status: started**
+**V0 (MVP):** The user can add up to 2 different texts and start the merge session. The user can select text parts with the mouse to auto-include in the preview. At the preview area, the user can then drag previously highlighted text snippets, create line breaks, split highlighted snippets between words and add own text. **Status: In Progress**
+
+**Future (V0 extension):** Support for up to 6 text inputs is planned.
 
 **V1 ("Merges" CRUD):** The user must log in and navigate to a sessions screen, where they can start a new "merge" session or return to an existing one. Additional tools may also be added to the text preview interface. **Status: to be started**
 

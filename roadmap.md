@@ -4,7 +4,7 @@
 
 ### v0: Minimum Viable Product (MVP)
 
-- Description: The user can add up to 6 different texts and start the merge session. The user can select text parts with the mouse to auto-include in the preview. At the preview area, the user can then drag previously highlighted text snippets, create line breaks, split highlighted snippets between words and add own text. Routing will be handled by Tanstack Router, with the Merge Session page at "{base_url}/". Includes translations for en-US and pt-BR.
+- Description: The user can add up to 2 different texts and start the merge session. The user can select text parts with the mouse to auto-include in the preview. At the preview area, the user can then drag previously highlighted text snippets, create line breaks, split highlighted snippets between words and add own text. Routing will be handled by Tanstack Router, with the Merge Session page at "{base_url}/". Includes translations for en-US and pt-BR. **Future extension: support for up to 6 text inputs.**
 - Status: In Progress
 
 #### Features for v0

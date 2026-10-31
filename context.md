@@ -52,10 +52,12 @@ When adding new routes:
 ## Current Status (V0 - MVP)
 
 As described in README.md:
-- Users can add up to 3 different texts and start a merge session
+- Users can add up to 2 different texts and start a merge session
 - Users can select text parts with the mouse to auto-include in the preview
 - In the preview area, users can drag highlighted text snippets, create line breaks, split snippets between words, and add own text
 - Status: In Progress
+
+**Future (V0 extension):** Support for up to 6 text inputs is planned.
 
 ## Planned Features
 
