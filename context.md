@@ -21,10 +21,7 @@ The application uses Tanstack Router for routing.
 - `"{base_url}/"` -> Merge Session Page
 
 #### V1:
-- `"{base_url}"` -> Landing page with login
-- `"{base_url}/login"` -> Login Page
-- `"{base_url}/sessions"` -> Sessions Page (accessed after user authentication)
-- `"{base_url}/sessions/{merge_session_id}"` -> Merge Session Page (MVP implementation but with persisted information from user)
+Routes to be defined. Will include authentication, merge session listing, and merge session access with persistence.
 
 ### Route Configuration
 
@@ -63,7 +60,7 @@ As described in README.md:
 
 ### V1 ("Merges" CRUD)
 - User authentication and login requirement
-- Sessions screen to start new merge sessions or return to existing ones
+- Merge Sessions screen to start new merge sessions or return to existing ones
 - Additional tools may be added to the text preview interface
 - Backend API implementation (framework to be decided) for session persistence
 

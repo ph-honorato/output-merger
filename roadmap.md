@@ -149,7 +149,7 @@
 
 ### v1: "Merges" CRUD
 
-- Description: The user must log in and navigate to a sessions screen, where they can start a new "merge" session or return to an existing one. Additional tools may also be added to the text preview interface. Routing will support "{base_url}/sessions/{merge_session_id}" for accessing different sessions.
+- Description: The user must log in and navigate to a sessions screen, where they can start a new merge session or return to an existing one. Additional tools may also be added to the text preview interface. Routing details to be defined.
 - Status: To be started
 
 ### v2: AI Integration

@@ -1,6 +1,6 @@
 # Agents Guidelines for Output Merger Project
 
-**Project Context**: See [context.md](./context.md) for project overview, technology stack, routing, and planned features.
+**Project Context**: See [CONTEXT.md](./CONTEXT.md) for project overview, technology stack, routing, and planned features.
 
 ## Implementation Rules
 
@@ -50,7 +50,7 @@ When adding new routes to the application:
    - Create a route using `createRoute` with path and component
    - Add the route to the route tree in `rootRoute.addChildren([...])`
    - For redirects, use `beforeLoad` with `{ redirect: '/target-path' }`
-3. Update the routes documentation in `context.md` with the new route
+3. Update the routes documentation in `CONTEXT.md` with the new route
 4. Add translations for any new text in the page component
 
 ### Internationalization/Localization
@@ -79,7 +79,7 @@ When working on this project, agents should:
 Whenever starting the implementation of a task, the resolution must follow this sub-agent pipeline:
 
 1. **Create a sub-agent (Specs)**: This sub-agent must call the `/grill-with-docs` skill and grill the user to fully understand the task implementation. After that, the sub-agent should update the `.specs/` folder following its current structure and finish
-2. **Create a sub-agent (Developer)**: This sub-agent must develop the task properly following the `.spec.md` and `context.md` created by Specs sub-agent and respecting the rules on this `AGENTS.md` file. After task is implemented, create an `implementation.md` file on the `.specs/` folder following its structure, and finish
+2. **Create a sub-agent (Developer)**: This sub-agent must develop the task properly following the `.spec.md` and `CONTEXT.md` created by Specs sub-agent and respecting the rules on this `AGENTS.md` file. After task is implemented, create an `implementation.md` file on the `.specs/` folder following its structure, and finish
 3. **Create a sub-agent (Tester)**: This sub-agent must test the task:
    1. Look only at the edited files and check for possible security breaches, code smells and tests implementation
    2. Compare the edited files with the codebase and check for code duplications
