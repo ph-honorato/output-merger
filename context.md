@@ -9,7 +9,7 @@ This document contains the project context, technology stack, and architectural 
 ## Project Structure
 
 - **Frontend**: `artifacts/output-merger.UI` - Vite + React + TypeScript application
-- **Backend**: `artifacts/output-merger.API` - Future Nest.js implementation (planned for V1)
+- **Backend**: `artifacts/output-merger.API` - Future implementation (planned for V1); framework to be decided
 
 ## Routing Behavior
 
@@ -65,7 +65,7 @@ As described in README.md:
 - User authentication and login requirement
 - Sessions screen to start new merge sessions or return to existing ones
 - Additional tools may be added to the text preview interface
-- Backend API implementation (Nest.js) for session persistence
+- Backend API implementation (framework to be decided) for session persistence
 
 ### V2 (AI Integration)
 - Option to choose between manual input or model output
