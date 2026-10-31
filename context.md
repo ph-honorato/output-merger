@@ -42,7 +42,7 @@ When adding new routes:
 
 ## Technology Stack
 
-- **Frontend**: React 18 + TypeScript + Vite
+- **Frontend**: React 19 + TypeScript + Vite
 - **Routing**: Tanstack Router
 - **Styling**: MUI and Styled Components
 - **Design System**: Guided by `design.md` (to be created)
