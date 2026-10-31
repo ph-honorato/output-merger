@@ -37,6 +37,7 @@ import {
   tokensEqualIgnoringEdited,
   truncateToUtf16Budget,
 } from '@utils/previewDocument';
+import { handleSecurePaste } from '@utils/sanitize';
 
 /**
  * PointerSensor hold-to-drag activation (edit mode OFF — the
@@ -2252,7 +2253,8 @@ export function usePreviewArea(
       }
       // Plain-text paste only: the browser never inserts rich content.
       event.preventDefault();
-      const text = event.clipboardData.getData('text/plain');
+      // Use secure paste handler: extracts HTML/plain text, sanitizes, returns plain text
+      const text = handleSecurePaste(event);
       if (!text) {
         return;
       }
