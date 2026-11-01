@@ -73,6 +73,7 @@ export const theme = createTheme({
   shape: {
     borderRadius,
   },
+  borderRadius,
   components: {
     MuiButton: {
       styleOverrides: {
@@ -127,4 +128,5 @@ export const darkTheme = createTheme({
       secondary: "#94a3b8",
     },
   },
+  borderRadius,
 });

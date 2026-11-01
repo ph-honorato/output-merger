@@ -13,19 +13,19 @@ import {
 import type { KeyboardShortcut } from './shortcuts';
 
 // Mock navigator.platform
-const originalNavigator = global.navigator;
+const originalNavigator = globalThis.navigator;
 
 describe('shortcutDisplay', () => {
   beforeEach(() => {
     // Reset navigator mock
-    Object.defineProperty(global, 'navigator', {
+    Object.defineProperty(globalThis, 'navigator', {
       value: { platform: 'Win32' },
       configurable: true,
     });
   });
 
   afterAll(() => {
-    Object.defineProperty(global, 'navigator', {
+    Object.defineProperty(globalThis, 'navigator', {
       value: originalNavigator,
       configurable: true,
     });
@@ -33,7 +33,7 @@ describe('shortcutDisplay', () => {
 
   describe('isMacPlatform', () => {
     it('returns true for Mac platforms', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'MacIntel' },
         configurable: true,
       });
@@ -41,7 +41,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('returns true for iOS platforms', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'iPhone' },
         configurable: true,
       });
@@ -49,7 +49,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('returns false for Windows platforms', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Win32' },
         configurable: true,
       });
@@ -57,7 +57,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('returns false for Linux platforms', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Linux x86_64' },
         configurable: true,
       });
@@ -65,7 +65,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('returns false when navigator is undefined', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: undefined,
         configurable: true,
       });
@@ -75,7 +75,7 @@ describe('shortcutDisplay', () => {
 
   describe('getModifierLabel', () => {
     it('returns "Cmd" on Mac', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'MacIntel' },
         configurable: true,
       });
@@ -83,7 +83,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('returns "Ctrl" on Windows', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Win32' },
         configurable: true,
       });
@@ -91,7 +91,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('returns "Ctrl" on Linux', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Linux x86_64' },
         configurable: true,
       });
@@ -101,7 +101,7 @@ describe('shortcutDisplay', () => {
 
   describe('getModifierSymbol', () => {
     it('returns "⌘" on Mac', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'MacIntel' },
         configurable: true,
       });
@@ -109,7 +109,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('returns "Ctrl" on Windows', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Win32' },
         configurable: true,
       });
@@ -126,7 +126,7 @@ describe('shortcutDisplay', () => {
     };
 
     it('formats as "Cmd+E" on Mac', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'MacIntel' },
         configurable: true,
       });
@@ -134,7 +134,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('formats as "Ctrl+E" on Windows', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Win32' },
         configurable: true,
       });
@@ -143,7 +143,7 @@ describe('shortcutDisplay', () => {
 
     it('uppercases the key', () => {
       const shortcutLower: KeyboardShortcut = { ...shortcut, key: 'm' };
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Win32' },
         configurable: true,
       });
@@ -160,7 +160,7 @@ describe('shortcutDisplay', () => {
     };
 
     it('formats as "⌘E" on Mac', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'MacIntel' },
         configurable: true,
       });
@@ -168,7 +168,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('formats as "Ctrl+E" on Windows', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Win32' },
         configurable: true,
       });
@@ -185,7 +185,7 @@ describe('shortcutDisplay', () => {
     };
 
     it('creates tooltip with base text and formatted shortcut on Mac', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'MacIntel' },
         configurable: true,
       });
@@ -193,7 +193,7 @@ describe('shortcutDisplay', () => {
     });
 
     it('creates tooltip with base text and formatted shortcut on Windows', () => {
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(globalThis, 'navigator', {
         value: { platform: 'Win32' },
         configurable: true,
       });

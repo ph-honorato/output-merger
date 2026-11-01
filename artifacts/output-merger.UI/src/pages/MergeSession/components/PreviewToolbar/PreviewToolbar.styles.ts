@@ -1,9 +1,6 @@
 import styled, { css } from "styled-components";
-import type { DefaultTheme } from "styled-components";
-import type { Theme } from "@mui/material/styles";
+import type { StyledTheme } from "@theme";
 import { slideUpFadeIn } from "@utils/animations";
-
-type StyledTheme = DefaultTheme & Theme;
 
 export const PreviewToolbarRoot = styled.div<{ $entranceDelay?: string }>`
   display: flex;

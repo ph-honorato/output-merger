@@ -8,3 +8,13 @@ import type { Theme } from '@mui/material/styles';
 export type StyledTheme = DefaultTheme & Theme & {
   borderRadius: string;
 };
+
+// Module augmentation to add borderRadius to MUI's Theme
+declare module '@mui/material/styles' {
+  interface Theme {
+    borderRadius: string;
+  }
+  interface ThemeOptions {
+    borderRadius?: string;
+  }
+}

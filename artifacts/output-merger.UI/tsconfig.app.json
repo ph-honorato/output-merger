@@ -24,10 +24,14 @@
       "@translation/*": ["./src/i18n/*"],
       "@utils": ["./src/utils"],
       "@utils/*": ["./src/utils/*"],
+      "@hooks": ["./src/hooks"],
+      "@hooks/*": ["./src/hooks/*"],
       "@shared-types": ["./src/types"],
       "@shared-types/*": ["./src/types/*"],
       "@theme": ["./src/theme"],
-      "@theme/*": ["./src/theme/*"]
+      "@theme/*": ["./src/theme/*"],
+      "@context": ["./src/context"],
+      "@context/*": ["./src/context/*"]
     },
 
     /* Linting */

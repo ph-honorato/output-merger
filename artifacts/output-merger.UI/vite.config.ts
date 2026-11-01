@@ -13,6 +13,7 @@ export default defineConfig({
       "@hooks": path.resolve(__dirname, "./src/hooks"),
       "@shared-types": path.resolve(__dirname, "./src/types"),
       "@theme": path.resolve(__dirname, "./src/theme"),
+      "@context": path.resolve(__dirname, "./src/context"),
     },
   },
   server: {
