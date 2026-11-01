@@ -1,32 +1,94 @@
-# React + TypeScript + Vite
+# Output Merger UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Frontend application for the Output Merger platform — an AI Output Comparison Platform that allows users to compare and merge AI-generated outputs with live preview.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Framework**: React 19 + TypeScript + Vite
+- **Routing**: TanStack Router
+- **Styling**: MUI (Material UI) + styled-components
+- **State Management**: React Context + useReducer
+- **Internationalization**: i18next + react-i18next (en-US, pt-BR)
+- **Testing**: Vitest + React Testing Library
+- **Drag & Drop**: @dnd-kit/core + @dnd-kit/sortable
+- **Security**: DOMPurify, CSP, Trusted Types
 
-## React Compiler
+## Project Structure
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+artifacts/output-merger.UI/
+├── src/
+│   ├── components/       # Global reusable components (Header, TextInput, ActionsBar, etc.)
+│   ├── context/          # React Context providers (SnippetsContext, ThemeContext)
+│   ├── hooks/            # Custom React hooks
+│   ├── i18n/             # Internationalization (translations, language switching)
+│   ├── pages/            # Page components (MergeSession page with its own components)
+│   ├── routes/           # TanStack Router route definitions
+│   ├── theme/            # MUI theme (light/dark) + design tokens
+│   ├── utils/            # Utility functions (sanitization, preview document, animations, etc.)
+│   ├── App.tsx           # Root app component
+│   └── main.tsx          # Entry point
+├── public/               # Static assets (logo, etc.)
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── vitest.config.ts
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Available Scripts
+
+```bash
+npm run dev       # Start development server
+npm run build     # Production build (tsc + vite build)
+npm run lint      # Run oxlint
+npm run preview   # Preview production build
+npm run test      # Run Vitest tests
+```
+
+## Key Features (V0 - MVP)
+
+- **Text Inputs**: 2 sources with needle-based word-aligned snippet selection (max 500 chars each)
+- **Preview Area**: Live merged preview with drag-and-drop reordering (@dnd-kit)
+- **Preview Modal**: Full-screen modal view of the same preview area
+- **Editable Preview**: Inline and modal editing of merged text (own text, line breaks)
+- **Auto-fix**: Automatic case correction (sentence start/mid-sentence) and spacing normalization
+- **Dark Mode**: Full light/dark theme support with persistence
+- **Internationalization**: English (US) and Portuguese (BR) translations
+- **Security**: XSS prevention via DOMPurify, CSP headers, Trusted Types, secure clipboard API
+
+## Design System
+
+Guided by [`design.md`](../../design.md) at the project root. Theme tokens defined in `src/theme/index.ts`.
+
+## Routing
+
+Single route for MVP:
+- `/` → MergeSessionPage
+
+Future routes (V1) to be defined.
+
+## Translation
+
+Add new texts to both `src/i18n/resources/en-US.json` and `src/i18n/resources/pt-BR.json`. Import via `@translation` alias:
+
+```typescript
+import { i18n, enUS, ptBR } from "@translation";
+```
+
+## Component Structure Convention
+
+Each component follows this structure:
+
+```
+ComponentName/
+├── ComponentName.tsx         # Component implementation
+├── ComponentName.hook.tsx    # Custom hooks
+├── ComponentName.test.tsx    # Unit tests
+├── ComponentName.styles.ts   # styled-components
+├── ComponentName.types.ts    # TypeScript interfaces
+└── index.ts                  # Barrel export
+```
+
+Global components exported from `src/components/index.ts` via `@components` alias.
+Page-specific components exported from their page's `components/index.ts`.
