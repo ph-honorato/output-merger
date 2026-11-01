@@ -9,6 +9,10 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     globals: true,
+    env: {
+      VITE_PREVIEW_MAX_LENGTH: "",
+      VITE_TEXT_INPUT_MAX_LENGTH: "",
+    },
   },
   resolve: {
     alias: {
