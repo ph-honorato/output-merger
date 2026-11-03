@@ -1,0 +1,26 @@
+{
+  "name": "output-merger",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Output Comparison Platform - Compare and merge AI-generated outputs with live preview.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build": "cd artifacts/output-merger.UI && npm run build",
+    "dev": "cd artifacts/output-merger.UI && npm run dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ph-honorato/output-merger.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ph-honorato/output-merger/issues"
+  },
+  "homepage": "https://github.com/ph-honorato/output-merger#readme"
+}
