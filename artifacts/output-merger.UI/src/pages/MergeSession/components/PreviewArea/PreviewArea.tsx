@@ -241,8 +241,10 @@ function PreviewArea(props: PreviewAreaProps) {
                   aria-multiline={editEnabled || undefined}
                   aria-label={editEnabled ? editingLabel : undefined}
                   data-placeholder={editEnabled ? editingPlaceholder : undefined}
+                  tabIndex={editEnabled ? 0 : undefined}
                   onFocus={handleFlowFocus}
                   onBlur={handleFlowBlur}
+                  onClick={editEnabled ? () => flowRef.current?.focus() : undefined}
                   onInput={editEnabled ? handleFlowInput : undefined}
                   onKeyDown={editEnabled ? handleFlowKeyDown : undefined}
                   onPaste={editEnabled ? handleFlowPaste : undefined}

@@ -215,14 +215,23 @@ export async function secureClipboardRead(): Promise<string> {
  * @returns Sanitized plain text from clipboard
  */
 export function handleSecurePaste(event: React.ClipboardEvent<HTMLDivElement> | ClipboardEvent): string {
-  // Try to get HTML first (for rich text sources), sanitize it
-  const html = event.clipboardData?.getData('text/html');
-  const plainText = event.clipboardData?.getData('text/plain') ?? '';
+  // Get clipboardData from native event if available (React synthetic event)
+  // or directly from the event (native ClipboardEvent)
+  const clipboardData = 'nativeEvent' in event
+    ? event.nativeEvent.clipboardData
+    : event.clipboardData;
 
+  // Get both HTML and plain text from clipboard
+  const html = clipboardData?.getData('text/html');
+  const plainText = clipboardData?.getData('text/plain') ?? '';
+
+  // Prefer plain text when available - it's already clean and doesn't need
+  // sanitization. HTML from clipboard (especially from our own preview area)
+  // may contain styled elements that introduce extra whitespace when sanitized.
   let text = plainText;
-  if (html && html.trim().length > 0) {
-    // Sanitize HTML from clipboard - strips all tags, returns plain text
-    text = sanitizeClipboardHtml(html) || plainText;
+  if (!text && html && html.trim().length > 0) {
+    // Fall back to sanitized HTML only when plain text is empty
+    text = sanitizeClipboardHtml(html) || '';
   }
 
   return sanitizePlainText(text);

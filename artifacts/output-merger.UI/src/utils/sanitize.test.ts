@@ -136,7 +136,7 @@ describe('sanitize utility', () => {
       expect(result).toBe('Hello World');
     });
 
-    it('prefers HTML content and sanitizes it', () => {
+    it('prefers plain text over HTML when both are available', () => {
       const event = {
         clipboardData: {
           getData: (type: string) =>
@@ -145,8 +145,8 @@ describe('sanitize utility', () => {
       } as unknown as ClipboardEvent;
 
       const result = handleSecurePaste(event);
-      // HTML is sanitized to plain text
-      expect(result).toBe('Bold Text');
+      // Plain text is preferred over HTML (cleaner, no sanitization needed)
+      expect(result).toBe('Plain Text');
     });
 
     it('falls back to plain text when HTML is empty', () => {
@@ -161,13 +161,13 @@ describe('sanitize utility', () => {
       expect(result).toBe('Plain Text');
     });
 
-    it('sanitizes malicious HTML from clipboard', () => {
+    it('sanitizes malicious HTML from clipboard when no plain text', () => {
       const event = {
         clipboardData: {
           getData: (type: string) =>
             type === 'text/html'
               ? '<script>alert(1)</script><b>Safe</b>'
-              : 'Plain',
+              : '',
         },
       } as unknown as ClipboardEvent;
 
