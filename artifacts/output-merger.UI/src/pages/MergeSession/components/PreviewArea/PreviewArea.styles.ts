@@ -84,7 +84,9 @@ export const FlowArea = styled.div<{ $reserveCounter?: boolean }>`
       (theme as StyledTheme).palette.primary.main};
     border-radius: 3px;
     opacity: 0.5;
-    transition: opacity 200ms ease, background-color 200ms ease;
+    transition:
+      opacity 200ms ease,
+      background-color 200ms ease;
   }
   &::-webkit-scrollbar-thumb:hover {
     opacity: 0.8;
@@ -102,8 +104,7 @@ export const FlowArea = styled.div<{ $reserveCounter?: boolean }>`
 
   /* Firefox */
   scrollbar-width: thin;
-  scrollbar-color:
-    ${({ theme }) => (theme as StyledTheme).palette.primary.main}
+  scrollbar-color: ${({ theme }) => (theme as StyledTheme).palette.primary.main}
     transparent;
 `;
 
@@ -181,7 +182,7 @@ export const OverlayChip = styled.span<{ $isLong?: boolean }>`
           max-width: 20ch;
           text-overflow: ellipsis;
         `
-      : ''}
+      : ""}
 `;
 
 /**

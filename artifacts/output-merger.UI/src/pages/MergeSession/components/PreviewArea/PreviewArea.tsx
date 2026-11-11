@@ -8,6 +8,7 @@ import {
   useDroppable,
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
+import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { PreviewCharCount, SortableSegment } from "../";
 import { sameLanding, usePreviewArea } from "./PreviewArea.hook";
 import {
@@ -233,6 +234,7 @@ function PreviewArea(props: PreviewAreaProps) {
             onDragEnd={handleDragEnd}
             onDragOver={handleDragOver}
             onDragCancel={handleDragCancel}
+            modifiers={[snapCenterToCursor]}
           >
             <S.FlowArea
               ref={flowAreaRef}
