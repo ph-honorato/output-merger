@@ -71,6 +71,40 @@ export const StyledTextField = styled(TextField)<{ $accent?: string }>`
     height: 100% !important;
     box-sizing: border-box;
     resize: none;
+
+    /* Minimalist scrollbar for textarea */
+    &::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background-color: ${({ theme }) =>
+        (theme as StyledTheme).palette.primary.main};
+      border-radius: 3px;
+      opacity: 0.5;
+      transition: opacity 200ms ease, background-color 200ms ease;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+      opacity: 0.8;
+      background-color: ${({ theme }) =>
+        (theme as StyledTheme).palette.primary.light};
+    }
+    &::-webkit-scrollbar-thumb:active {
+      background-color: ${({ theme }) =>
+        (theme as StyledTheme).palette.primary.dark};
+      opacity: 1;
+    }
+    &::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+
+    scrollbar-width: thin;
+    scrollbar-color:
+      ${({ theme }) => (theme as StyledTheme).palette.primary.main}
+      transparent;
   }
 
   & .MuiOutlinedInput-root.Mui-focused {
@@ -100,6 +134,41 @@ export const TextViewContainer = styled.div<{ $dragging?: boolean }>`
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   -webkit-user-select: none;
   user-select: none;
+
+  /* Minimalist scrollbar for view mode container */
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.primary.main};
+    border-radius: 3px;
+    opacity: 0.5;
+    transition: opacity 200ms ease, background-color 200ms ease;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    opacity: 0.8;
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.primary.light};
+  }
+  &::-webkit-scrollbar-thumb:active {
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.primary.dark};
+    opacity: 1;
+  }
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color:
+    ${({ theme }) => (theme as StyledTheme).palette.primary.main}
+    transparent;
 `;
 
 export const Highlight = styled.span`
