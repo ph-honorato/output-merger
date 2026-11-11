@@ -259,6 +259,7 @@ function PreviewArea(props: PreviewAreaProps) {
               {activeSnippet ? (
                 <S.OverlayChip
                   data-testid="preview-snippet-overlay"
+                  $isLong={activeSnippet.text.length > 20}
                   style={{
                     backgroundColor: withAlpha(activeSnippet.color, 0.3),
                   }}

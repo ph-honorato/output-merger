@@ -164,13 +164,24 @@ export const SegmentFlow = styled.div<{ $editing?: boolean }>`
       : ""}
 `;
 
-export const OverlayChip = styled.span`
+export const OverlayChip = styled.span<{ $isLong?: boolean }>`
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   white-space: pre-wrap;
   cursor: grabbing;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+
+  ${({ $isLong }) =>
+    $isLong
+      ? css`
+          display: inline-block;
+          overflow: hidden;
+          white-space: nowrap;
+          max-width: 20ch;
+          text-overflow: ellipsis;
+        `
+      : ''}
 `;
 
 /**
