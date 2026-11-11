@@ -1,25 +1,25 @@
-import PreviewIcon from '@mui/icons-material/Preview';
-import { Fragment, useMemo } from 'react';
-import type { ReactNode } from 'react';
+import PreviewIcon from "@mui/icons-material/Preview";
+import { Fragment, useMemo } from "react";
+import type { ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
   closestCenter,
   useDroppable,
-} from '@dnd-kit/core';
-import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
-import { PreviewCharCount, SortableSegment } from '../';
-import { sameLanding, usePreviewArea } from './PreviewArea.hook';
+} from "@dnd-kit/core";
+import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
+import { PreviewCharCount, SortableSegment } from "../";
+import { sameLanding, usePreviewArea } from "./PreviewArea.hook";
 import {
   buildLandingId,
   enumerateLandingAnchors,
   isSnippetToken,
-} from '@utils/previewDocument';
-import type { Landing } from '../../../../context/SnippetsContext';
-import type { PreviewToken } from '../../../../context/SnippetsContext';
-import { withAlpha } from '@utils/color';
-import type { PreviewAreaProps } from './PreviewArea.types';
-import * as S from './PreviewArea.styles';
+} from "@utils/previewDocument";
+import type { Landing } from "../../../../context/SnippetsContext";
+import type { PreviewToken } from "../../../../context/SnippetsContext";
+import { withAlpha } from "@utils/color";
+import type { PreviewAreaProps } from "./PreviewArea.types";
+import * as S from "./PreviewArea.styles";
 
 /**
  * Invisible zero-footprint droppable for one drag LANDING — one of
@@ -48,7 +48,13 @@ function LandingAnchor({ landing }: { landing: Landing }) {
 }
 
 function PreviewArea(props: PreviewAreaProps) {
-  const { className, onActiveDragChange, showCharCount = true, $entranceDelay } = props;
+  const {
+    className,
+    onActiveDragChange,
+    showCharCount = true,
+    $entranceDelay,
+  } = props;
+
   const {
     t,
     editEnabled,
@@ -89,14 +95,14 @@ function PreviewArea(props: PreviewAreaProps) {
   const { flowChildren, renderedSnippetIds } = useMemo(() => {
     const snippetCount = renderedTokens.reduce(
       (count, token) => (isSnippetToken(token) ? count + 1 : count),
-      0
+      0,
     );
 
     const tokenGapAnchors = new Map<number, Landing[]>();
     const splitOffsets = new Map<number, number[]>();
     if (snippetCount > 0) {
       for (const { landing } of enumerateLandingAnchors(renderedTokens)) {
-        if (landing.kind === 'token-gap') {
+        if (landing.kind === "token-gap") {
           const list = tokenGapAnchors.get(landing.tokenIndex) ?? [];
           tokenGapAnchors.set(landing.tokenIndex, [...list, landing]);
         } else {
@@ -125,14 +131,18 @@ function PreviewArea(props: PreviewAreaProps) {
     // exactly at the word boundaries without perturbing the text.
     const renderToken = (
       token: PreviewToken,
-      tokenIndex: number
+      tokenIndex: number,
     ): ReactNode => {
       if (isSnippetToken(token)) {
         return (
-          <SortableSegment key={token.tokenId} token={token} editing={editEnabled} />
+          <SortableSegment
+            key={token.tokenId}
+            token={token}
+            editing={editEnabled}
+          />
         );
       }
-      if (token.kind === 'text') {
+      if (token.kind === "text") {
         const offsets = splitOffsets.get(tokenIndex);
         if (!offsets || offsets.length === 0) {
           return <Fragment key={token.tokenId}>{token.text}</Fragment>;
@@ -142,29 +152,29 @@ function PreviewArea(props: PreviewAreaProps) {
         offsets.forEach((offset, ordinal) => {
           const piece = token.text.slice(cursor, offset);
           const landing: Landing = {
-            kind: 'text-split',
+            kind: "text-split",
             tokenIndex,
             boundaryOffset: offset,
           };
           pieces.push(
             piece ? (
               <Fragment key={`piece-${ordinal}`}>{piece}</Fragment>
-            ) : null
+            ) : null,
           );
           pieces.push(
-            <LandingAnchor key={`anchor-${ordinal}`} landing={landing} />
+            <LandingAnchor key={`anchor-${ordinal}`} landing={landing} />,
           );
           pieces.push(needleAt(landing));
           cursor = offset;
         });
         if (cursor < token.text.length) {
           pieces.push(
-            <Fragment key="piece-last">{token.text.slice(cursor)}</Fragment>
+            <Fragment key="piece-last">{token.text.slice(cursor)}</Fragment>,
           );
         }
         return <Fragment key={token.tokenId}>{pieces}</Fragment>;
       }
-      return <Fragment key={token.tokenId}>{'\n'}</Fragment>;
+      return <Fragment key={token.tokenId}>{"\n"}</Fragment>;
     };
 
     const children: ReactNode[] = [];
@@ -175,7 +185,7 @@ function PreviewArea(props: PreviewAreaProps) {
           <LandingAnchor
             key={`gap-${token.tokenId}-${tokenIndex}`}
             landing={landing}
-          />
+          />,
         );
         children.push(needleAt(landing));
       }
@@ -206,7 +216,7 @@ function PreviewArea(props: PreviewAreaProps) {
       {showEmptyState ? (
         <S.EmptyState data-testid="preview-empty">
           <PreviewIcon aria-hidden="true" />
-          <span>{t('pages.mergeSession.previewArea.empty')}</span>
+          <span>{t("pages.mergeSession.previewArea.empty")}</span>
         </S.EmptyState>
       ) : (
         <>
@@ -242,11 +252,15 @@ function PreviewArea(props: PreviewAreaProps) {
                   suppressContentEditableWarning
                   aria-multiline={editEnabled || undefined}
                   aria-label={editEnabled ? editingLabel : undefined}
-                  data-placeholder={editEnabled ? editingPlaceholder : undefined}
+                  data-placeholder={
+                    editEnabled ? editingPlaceholder : undefined
+                  }
                   tabIndex={editEnabled ? 0 : undefined}
                   onFocus={handleFlowFocus}
                   onBlur={handleFlowBlur}
-                  onClick={editEnabled ? () => flowRef.current?.focus() : undefined}
+                  onClick={
+                    editEnabled ? () => flowRef.current?.focus() : undefined
+                  }
                   onInput={editEnabled ? handleFlowInput : undefined}
                   onKeyDown={editEnabled ? handleFlowKeyDown : undefined}
                   onPaste={editEnabled ? handleFlowPaste : undefined}
