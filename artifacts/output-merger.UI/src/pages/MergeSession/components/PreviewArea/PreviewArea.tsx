@@ -58,6 +58,7 @@ function PreviewArea(props: PreviewAreaProps) {
     renderEpoch,
     isDocumentEmpty,
     flowRef,
+    flowAreaRef,
     sensors,
     announcements,
     screenReaderInstructions,
@@ -224,6 +225,7 @@ function PreviewArea(props: PreviewAreaProps) {
             onDragCancel={handleDragCancel}
           >
             <S.FlowArea
+              ref={flowAreaRef}
               data-testid="preview-flow-area"
               $reserveCounter={showCharCount}
             >

@@ -646,6 +646,39 @@ const placeCaret = (node: Node, offset: number): void => {
   }
 };
 
+/**
+ * Scrolls the caret into view if needed, matching native textarea behavior.
+ * Creates a temporary marker at the caret position and uses scrollIntoView
+ * with { block: 'nearest' } to only scroll when the caret is outside
+ * the visible viewport.
+ */
+const scrollCaretIntoView = (flowArea: HTMLElement): void => {
+  const view = flowArea.ownerDocument.defaultView;
+  if (!view || typeof view.getSelection !== 'function') {
+    return;
+  }
+  const selection = view.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  if (!flowArea.contains(range.commonAncestorContainer)) {
+    return;
+  }
+  // Only scroll if content actually overflows
+  if (flowArea.scrollHeight <= flowArea.clientHeight) {
+    return;
+  }
+  // Create a temporary zero-width marker at the caret position
+  const marker = flowArea.ownerDocument.createElement('span');
+  marker.style.cssText = 'display: inline-block; width: 0; height: 0; overflow: hidden;';
+  range.insertNode(marker);
+  // Scroll the marker into view (textarea-like behavior: only if needed)
+  marker.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  // Clean up the marker
+  marker.remove();
+};
+
 /** The chip's first text child, or null. */
 const firstTextChildOf = (chip: HTMLElement): Text | null => {
   const children = chip.childNodes;
@@ -1329,6 +1362,8 @@ export function usePreviewArea(
 
   // The segment-flow root (the contentEditable host while edit is ON).
   const flowRef = useRef<HTMLDivElement | null>(null);
+  // The FlowArea wrapper (the scrollable container).
+  const flowAreaRef = useRef<HTMLDivElement | null>(null);
   const [flowFocused, setFlowFocused] = useState(false);
   // The token snapshot the focused surface renders from: frozen while
   // edit is ON and the surface is focused (the browser owns the DOM),
@@ -1447,6 +1482,14 @@ export function usePreviewArea(
       return;
     }
     applyDocumentLimitClamp(parsePreviewDom(root, modelRef.current));
+
+    // Scroll caret into view after composition end (IME, emoji, etc.)
+    setTimeout(() => {
+      const flowArea = flowAreaRef.current;
+      if (flowArea) {
+        scrollCaretIntoView(flowArea);
+      }
+    }, 0);
   }, [applyDocumentLimitClamp]);
 
   const commitFlow = useCallback(() => {
@@ -1742,6 +1785,14 @@ export function usePreviewArea(
       } else {
         applyDocumentLimitClamp(parsePreviewDom(root, modelRef.current));
       }
+
+      // Scroll caret into view after input (typing, deletion, etc.)
+      setTimeout(() => {
+        const flowArea = flowAreaRef.current;
+        if (flowArea) {
+          scrollCaretIntoView(flowArea);
+        }
+      }, 0);
     },
     [applyDocumentLimitClamp, dispatchParsedSync]
   );
@@ -2139,6 +2190,14 @@ export function usePreviewArea(
         ensureTrailingLineAnchor(newlineNode);
         // Manual DOM edits fire no input event — sync explicitly.
         commitFlow();
+
+        // Scroll caret into view after Enter (new line)
+        setTimeout(() => {
+          const flowArea = flowAreaRef.current;
+          if (flowArea) {
+            scrollCaretIntoView(flowArea);
+          }
+        }, 0);
       }
     },
     [commitFlow, handleArrowNavigation]
@@ -2325,6 +2384,14 @@ export function usePreviewArea(
         ensureTrailingLineAnchor(inserted);
       }
       commitFlow();
+
+      // Scroll caret into view after paste
+      setTimeout(() => {
+        const flowArea = flowAreaRef.current;
+        if (flowArea) {
+          scrollCaretIntoView(flowArea);
+        }
+      }, 0);
     },
     [commitFlow]
   );
@@ -2582,6 +2649,7 @@ export function usePreviewArea(
     mergedText,
     isDocumentEmpty: mergedText.length === 0,
     flowRef,
+    flowAreaRef,
     snippetTokens,
     sortableIds,
     sensors,
