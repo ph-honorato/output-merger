@@ -674,9 +674,12 @@ const scrollCaretIntoView = (flowArea: HTMLElement): void => {
   marker.style.cssText = 'display: inline-block; width: 0; height: 0; overflow: hidden;';
   range.insertNode(marker);
   // Scroll the marker into view (textarea-like behavior: only if needed)
-  marker.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  // Clean up the marker
-  marker.remove();
+  // Use try/finally to ensure marker is always removed, preventing DOM corruption
+  try {
+    marker.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  } finally {
+    marker.remove();
+  }
 };
 
 /** The chip's first text child, or null. */
