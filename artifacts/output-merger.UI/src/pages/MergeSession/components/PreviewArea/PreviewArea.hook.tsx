@@ -40,6 +40,17 @@ import {
 import { handleSecurePaste } from '@utils/sanitize';
 
 /**
+ * A no-op sensor used when edit mode is ON to keep the sensors array
+ * size stable (always 2) while effectively disabling pointer drag.
+ * It has no activators, so it never activates.
+ */
+class NoOpPointerSensor {
+  static activators: never[] = [];
+  autoScrollEnabled = false;
+  constructor() {}
+}
+
+/**
  * PointerSensor hold-to-drag activation (edit mode OFF — the
  * sensor is not mounted while editing): the drag starts only when
  * the pointer is held for the delay while moving at most the
@@ -1330,31 +1341,20 @@ export function usePreviewArea(
     [snippetTokens]
   );
 
-  // While edit mode is ON the
-  // mouse serves the editor — the pointer sensor is NOT mounted for
-  // the editing surface. Both sensor sets are created by separate
-  // unconditional hooks (the hooks themselves are never
-  // conditionalized); the mounted array is filtered per mode:
-  // keyboard-only while editing, pointer + keyboard while not.
-  const pointerSensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: SNIPPET_DRAG_ACTIVATION,
-    })
+  // Create both sensor descriptors unconditionally (hooks must be
+  // called in the same order every render). When edit mode is ON,
+  // the pointer sensor is replaced with a no-op sensor that has no
+  // activators, so it never activates. This keeps the sensors array
+  // size stable (always 2) and avoids React's useEffect dependency
+  // array size mismatch warnings in DndContext's useSensorSetup.
+  const pointerSensor = useSensor(
+    (editEnabled ? NoOpPointerSensor : PointerSensor) as any,
+    editEnabled ? {} : { activationConstraint: SNIPPET_DRAG_ACTIVATION }
   );
-  const keyboardSensors = useSensors(
-    // the arrows step through ALL droppable landing
-    // positions (chips + word-boundary anchors) in reading order.
-    useSensor(KeyboardSensor, {
-      coordinateGetter: landingKeyboardCoordinates,
-    })
-  );
-  const sensors = useMemo(
-    () =>
-      editEnabled
-        ? keyboardSensors
-        : [...pointerSensors, ...keyboardSensors],
-    [editEnabled, pointerSensors, keyboardSensors]
-  );
+  const keyboardSensor = useSensor(KeyboardSensor, {
+    coordinateGetter: landingKeyboardCoordinates,
+  });
+  const sensors = useSensors(pointerSensor, keyboardSensor);
 
   const [activeSnippet, setActiveSnippet] = useState<SnippetToken | null>(null);
   // Insertion slot of the drop-indicator needle; null keeps it hidden
