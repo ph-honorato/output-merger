@@ -290,17 +290,24 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number; is
           return;
         }
         if (resolved.boundary === null) return;
-        const anchor = hoverBoundary ?? resolved.boundary;
+        const wordStart = resolved.token.start;
+        const wordEnd = wordStart + resolved.token.value.length;
         mobilePointerStartRef.current = { x: e.clientX, y: e.clientY };
         pendingMobileDragRef.current = {
           kind: 'create',
-          anchor,
-          boundary: resolved.boundary,
+          anchor: wordStart,
+          boundary: wordEnd,
         };
         const createTimer = window.setTimeout(() => {
           const pending = pendingMobileDragRef.current;
           if (pending?.kind === 'create') {
-            setDrag({ type: 'create', anchor: pending.anchor, current: pending.anchor });
+            setDrag({
+              type: 'create',
+              anchor: pending.anchor,
+              current: pending.boundary,
+              baseStart: pending.anchor,
+              baseEnd: pending.boundary,
+            });
           }
           pendingMobileDragRef.current = null;
           longPressTimerRef.current = null;
@@ -360,8 +367,10 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number; is
   const commit = useCallback(() => {
     if (!drag) return;
     if (drag.type === 'create') {
-      const end = Math.max(drag.anchor, drag.current);
-      const start = trimRangeStart(text, Math.min(drag.anchor, drag.current), end);
+      const baseStart = drag.baseStart ?? drag.anchor;
+      const baseEnd = drag.baseEnd ?? drag.anchor;
+      const end = Math.max(baseEnd, drag.current, drag.anchor);
+      const start = trimRangeStart(text, Math.min(baseStart, drag.current, drag.anchor), end);
       if (start !== end) {
         const snippet: Snippet = {
           id: generateId(),

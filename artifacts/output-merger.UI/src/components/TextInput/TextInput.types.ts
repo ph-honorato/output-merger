@@ -185,6 +185,6 @@ export interface Segment extends CharRange {
  * Live drag state: a snippet being created or resized, or null when idle
  */
 export type Drag =
-  | { type: 'create'; anchor: Boundary; current: Boundary }
+  | { type: 'create'; anchor: Boundary; current: Boundary; baseStart?: Boundary; baseEnd?: Boundary }
   | { type: 'resize'; snippetId: string; edge: 'start' | 'end'; boundary: Boundary }
   | null;
