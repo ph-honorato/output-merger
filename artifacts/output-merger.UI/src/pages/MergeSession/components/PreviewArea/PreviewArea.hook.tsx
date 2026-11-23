@@ -1348,7 +1348,7 @@ export function usePreviewArea(
   // size stable (always 2) and avoids React's useEffect dependency
   // array size mismatch warnings in DndContext's useSensorSetup.
   const pointerSensor = useSensor(
-    (editEnabled ? NoOpPointerSensor : PointerSensor) as any,
+    (editEnabled ? NoOpPointerSensor : PointerSensor) as typeof PointerSensor,
     editEnabled ? {} : { activationConstraint: SNIPPET_DRAG_ACTIVATION }
   );
   const keyboardSensor = useSensor(KeyboardSensor, {
