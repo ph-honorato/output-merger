@@ -1360,6 +1360,21 @@ export function usePreviewArea(
   // Insertion slot of the drop-indicator needle; null keeps it hidden
   // (no active drag, or no target resolves).
   const [dropLanding, setDropLanding] = useState<Landing | null>(null);
+  // Mirror of `dropLanding` kept in a ref so the drag-end handler can
+  // read the landing the indicator actually marked at the last
+  // drag-over, independent of dnd-kit's final `over` resolution (which
+  // can differ from the last reported target and silently drop the
+  // reorder).
+  const dropLandingRef = useRef<Landing | null>(null);
+  // Whether a drag-over has actually been reported since the drag
+  // started. The drag-start seeds an origin landing (and the
+  // indicator), but that must not override a drop that dnd-kit
+  // resolves through `over` when no drag-over event fired in between.
+  const dragOverOccurredRef = useRef(false);
+  const updateDropLanding = useCallback((landing: Landing | null) => {
+    setDropLanding(landing);
+    dropLandingRef.current = landing;
+  }, []);
 
   // ---- editable surface state ---------------------------
 
@@ -2408,11 +2423,13 @@ export function usePreviewArea(
       setActiveSnippet(index >= 0 ? snippetTokens[index] : null);
       // Pickup resolves to the dragged item itself: the needle starts
       // at the origin spot (the anchor covering "before the chip").
-      setDropLanding(
+      const initialLanding =
         index >= 0
           ? landingBeforeToken(previewDocument, tokenIndexOf(String(event.active.id)))
-          : null
-      );
+          : null;
+      updateDropLanding(initialLanding);
+      dropLandingRef.current = initialLanding;
+      dragOverOccurredRef.current = false;
       // a raised snippet suspends editing keydowns while
       // edit mode is on (the guard is inert while edit is off).
       keyboardSortActiveRef.current = true;
@@ -2423,10 +2440,11 @@ export function usePreviewArea(
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
+      dragOverOccurredRef.current = true;
       const { active, over } = event;
       const overId = over ? String(over.id) : null;
       if (overId === null) {
-        setDropLanding(null);
+        updateDropLanding(null);
         return;
       }
 
@@ -2450,7 +2468,7 @@ export function usePreviewArea(
             landing.boundaryOffset >= 0 &&
             landing.boundaryOffset <= target.text.length;
         }
-        setDropLanding(valid ? landing : null);
+        updateDropLanding(valid ? landing : null);
         return;
       }
 
@@ -2462,10 +2480,10 @@ export function usePreviewArea(
       const overSnippet = indexOfSortableId(overId);
       const overTokenIndex = tokenIndexOf(overId);
       if (fromSnippet < 0 || overSnippet < 0 || overTokenIndex < 0) {
-        setDropLanding(null);
+        updateDropLanding(null);
         return;
       }
-      setDropLanding(
+      updateDropLanding(
         fromSnippet < overSnippet
           ? landingAfterToken(previewDocument, overTokenIndex)
           : landingBeforeToken(previewDocument, overTokenIndex)
@@ -2478,7 +2496,11 @@ export function usePreviewArea(
     (event: DragEndEvent) => {
       notifyActiveDragChange(false);
       setActiveSnippet(null);
-      setDropLanding(null);
+      const appliedLanding = dropLandingRef.current;
+      const didDragOver = dragOverOccurredRef.current;
+      dropLandingRef.current = null;
+      dragOverOccurredRef.current = false;
+      updateDropLanding(null);
       // the sort ended — schedule the caret restoration
       // (after the drop's re-render; a no-op drop restores into the
       // unchanged chip).
@@ -2487,23 +2509,32 @@ export function usePreviewArea(
         setKeyboardSortActive(false);
         pendingCaretRestoreRef.current = savedSortCaretRef.current;
       }
-      const { active, over } = event;
-
-      if (!over || active.id === over.id) {
-        // Released on the item's own position or with no target: the
-        // merge order stays unchanged.
-        return;
-      }
-
-      const activeId = String(active.id);
+      const activeId = String(event.active.id);
       const fromIndex = indexOfSortableId(activeId);
       const fromTokenIndex = tokenIndexOf(activeId);
-      const overId = String(over.id);
 
       if (fromIndex < 0 || fromTokenIndex < 0) {
         // The dragged snippet vanished mid-drag: discard the reorder.
         return;
       }
+
+      // Prefer the landing the drop indicator actually marked during
+      // the drag: it is the user-visible target and is more reliable
+      // than re-deriving from dnd-kit's final `over` resolution. This
+      // also covers drops where dnd-kit reports no `over` (common at
+      // the document's trailing edge).
+      if (didDragOver && appliedLanding !== null) {
+        moveTokenToLanding(fromTokenIndex, appliedLanding);
+        return;
+      }
+
+      const { over } = event;
+      if (!over || event.active.id === over.id) {
+        // Released on the item's own position or with no target: the
+        // merge order stays unchanged.
+        return;
+      }
+      const overId = String(over.id);
 
       // a landing anchor — the word-boundary landing model.
       const landing = parseLandingId(overId);
@@ -2540,7 +2571,9 @@ export function usePreviewArea(
     (_event: DragCancelEvent) => {
       notifyActiveDragChange(false);
       setActiveSnippet(null);
-      setDropLanding(null);
+      dropLandingRef.current = null;
+      dragOverOccurredRef.current = false;
+      updateDropLanding(null);
       // cancelled — the snippet never moved; restore the
       // caret right away (the document is unchanged).
       if (keyboardSortActiveRef.current) {
