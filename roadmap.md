@@ -51,7 +51,7 @@
   - [x] Task 6.3: Tools Adjustments — Refine existing tool behavior — implementation details on `.specs/features/06-ui-ux-adjustments/tasks/6.3-tools-adjustments/`
   - [x] Task 6.4: Platform Adjustments — Cross-platform/browser consistency — implementation details on `.specs/features/06-ui-adjustments/tasks/6.4-platform-adjustments/`
   - [x] Task 6.5: Security Hardening — Front-end security improvements — implementation details on `.specs/features/06-ui-ux-adjustments/tasks/6.5-security-hardening/`
-  - [ ] Task 6.6: Mobile Adjustments — Mobile-specific UI/UX adjustments
+  - [x] Task 6.6: Mobile Adjustments — Mobile-specific UI/UX adjustments — implementation details on `.specs/features/06-ui-ux-adjustments/tasks/6.6-mobile-adjustments/`
 
 ### v1: "Merges" CRUD
 

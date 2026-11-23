@@ -1,4 +1,8 @@
-import { useCallback, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useTheme } from '@mui/material/styles';
+import { useMediaQuery } from '@mui/material';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import ChevronLeft from '@mui/icons-material/ChevronLeft';
 import { useTranslation } from 'react-i18next';
 import { withAlpha } from '@utils/color';
 import { TEXT_INPUT_MAX_CHARACTERS, TEXTAREA_BASELINE_ROWS, useTextInput } from './TextInput.hook';
@@ -7,8 +11,14 @@ import { type TextInputProps } from './TextInput.types';
 import * as S from './TextInput.styles';
 
 function TextInput(props: TextInputProps) {
-  const { mode = 'input', color = '#0080FF', maxCharacters = TEXT_INPUT_MAX_CHARACTERS, label, id, $entranceDelay } = props;
+  const { mode = 'input', color = '#0080FF', maxCharacters = TEXT_INPUT_MAX_CHARACTERS, label, id, inputNumber, $entranceDelay } = props;
   const { t } = useTranslation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [minimized, setMinimized] = useState(false);
+  useEffect(() => {
+    if (!isMobile) setMinimized(false);
+  }, [isMobile]);
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRows = TEXTAREA_BASELINE_ROWS;
   const {
@@ -21,7 +31,7 @@ function TextInput(props: TextInputProps) {
     handlePointerMove,
     handlePointerDown,
     positionNeedle,
-  } = useTextInput({ ...props, maxCharacters });
+  } = useTextInput({ ...props, maxCharacters, isMobile });
 
   const needleRefs = useRef(new Map<string, HTMLSpanElement>());
   const registerNeedle = useCallback((key: string) => (el: HTMLSpanElement | null) => {
@@ -59,9 +69,23 @@ function TextInput(props: TextInputProps) {
       id={id}
       ref={rootRef}
       $entranceDelay={$entranceDelay}
+      $minimized={isMobile ? minimized : false}
     >
-      {label ? <S.Label>{label}</S.Label> : null}
-      {mode === 'input' ? (
+      {isMobile ? (
+        <S.Header>
+          <S.HeaderTitle>{t('textInput.header', { number: inputNumber })}</S.HeaderTitle>
+          <S.MinimizeButton
+            onClick={() => setMinimized((v) => !v)}
+            aria-expanded={!minimized}
+            aria-label={t(minimized ? 'textInput.expand' : 'textInput.minimize')}
+          >
+            {minimized ? <ChevronLeft /> : <ExpandMore />}
+          </S.MinimizeButton>
+        </S.Header>
+      ) : (
+        label ? <S.Label>{label}</S.Label> : null
+      )}
+      {!minimized && (mode === 'input' ? (
         <>
           <S.StyledTextField
             multiline
@@ -133,7 +157,7 @@ function TextInput(props: TextInputProps) {
             );
           })}
         </S.TextViewContainer>
-      )}
+      ))}
     </S.TextInputRoot>
   );
 }

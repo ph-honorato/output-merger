@@ -58,6 +58,10 @@ export interface TextInputProps extends EntranceAnimationProps {
    */
   label?: string;
   /**
+   * Optional 1-based index of this input, used for the mobile header title
+   */
+  inputNumber?: number;
+  /**
    * Optional element id applied to the root element
    */
   id?: string;
