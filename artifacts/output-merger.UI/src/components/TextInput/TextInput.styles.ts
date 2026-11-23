@@ -2,6 +2,7 @@ import styled, { css } from "styled-components";
 import TextField from "@mui/material/TextField";
 import { type StyledTheme, CARD_HEIGHT } from "@theme";
 import { slideUpFadeIn } from "@utils/animations";
+import { minimalistScrollbar } from "@utils/scrollbar";
 
 export const TextInputRoot = styled.div<{ $entranceDelay?: string }>`
   display: flex;
@@ -71,6 +72,9 @@ export const StyledTextField = styled(TextField)<{ $accent?: string }>`
     height: 100% !important;
     box-sizing: border-box;
     resize: none;
+
+    /* Minimalist scrollbar for textarea */
+    ${minimalistScrollbar}
   }
 
   & .MuiOutlinedInput-root.Mui-focused {
@@ -100,6 +104,9 @@ export const TextViewContainer = styled.div<{ $dragging?: boolean }>`
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   -webkit-user-select: none;
   user-select: none;
+
+  /* Minimalist scrollbar for view mode container */
+  ${minimalistScrollbar}
 `;
 
 export const Highlight = styled.span`
