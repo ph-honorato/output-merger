@@ -62,11 +62,13 @@ export function formatShortcutWithSymbol(shortcut: KeyboardShortcut): string {
  * Detect whether the current viewport is mobile-sized. Used to hide
  * keyboard-shortcut hints on devices without a keyboard.
  */
+const MOBILE_VIEWPORT_BREAKPOINT = 899;
+
 export function isMobileViewport(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false;
   }
-  return window.matchMedia('(max-width: 899px)').matches;
+  return window.matchMedia(`(max-width: ${MOBILE_VIEWPORT_BREAKPOINT}px)`).matches;
 }
 
 export function createTooltipWithShortcut(

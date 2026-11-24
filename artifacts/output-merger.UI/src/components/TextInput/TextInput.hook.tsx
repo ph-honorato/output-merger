@@ -87,6 +87,11 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number; is
     return () => {
       if (longPressTimerRef.current !== null) {
         window.clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      if (mobileCancelRef.current) {
+        window.removeEventListener('pointerup', mobileCancelRef.current);
+        mobileCancelRef.current = null;
       }
     };
   }, []);
