@@ -58,11 +58,23 @@ export function formatShortcutWithSymbol(shortcut: KeyboardShortcut): string {
  * Create a tooltip text that includes the shortcut
  * e.g., "Enable text editing (Cmd+E)" on Mac
  */
+/**
+ * Detect whether the current viewport is mobile-sized. Used to hide
+ * keyboard-shortcut hints on devices without a keyboard.
+ */
+export function isMobileViewport(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(max-width: 899px)').matches;
+}
+
 export function createTooltipWithShortcut(
   baseText: string,
   shortcut: KeyboardShortcut
 ): string {
   if (!baseText) return '';
+  if (isMobileViewport()) return baseText;
   const formattedShortcut = formatShortcut(shortcut);
   return `${baseText} (${formattedShortcut})`;
 }
