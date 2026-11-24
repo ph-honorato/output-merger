@@ -1,7 +1,7 @@
 import styled, { css } from "styled-components";
 import TextField from "@mui/material/TextField";
 import IconButton from "@mui/material/IconButton";
-import { type StyledTheme, CARD_HEIGHT } from "@theme";
+import { type StyledTheme, CARD_HEIGHT, MOBILE_MAX_WIDTH } from "@theme";
 import { slideUpFadeIn } from "@utils/animations";
 import { minimalistScrollbar } from "@utils/scrollbar";
 
@@ -119,7 +119,7 @@ export const TextViewContainer = styled.div<{ $dragging?: boolean }>`
   white-space: pre-wrap;
   word-break: break-word;
   touch-action: none;
-  @media (max-width: 899px) {
+  @media (max-width: ${MOBILE_MAX_WIDTH}px) {
     touch-action: pan-y;
   }
   cursor: ${({ $dragging }) => ($dragging ? "ew-resize" : "default")};
@@ -154,7 +154,7 @@ export const Needle = styled.span`
     right: -6px;
   }
 
-  @media (max-width: 899px) {
+  @media (max-width: ${MOBILE_MAX_WIDTH}px) {
     &::before {
       top: -20px;
       bottom: -20px;

@@ -10,6 +10,15 @@ export type { StyledTheme };
  */
 export const CARD_HEIGHT = "400px";
 
+/**
+ * Upper bound (in px) of the mobile viewport, matching
+ * `theme.breakpoints.down('md')` (MUI's `md` breakpoint is 900px).
+ * Used for CSS media queries and client-side viewport checks.
+ */
+export const BREAKPOINT_SM = 600;
+export const BREAKPOINT_MD = 900;
+export const MOBILE_MAX_WIDTH = BREAKPOINT_MD - 1;
+
 // Border radius token
 export const borderRadius = "0.5rem";
 

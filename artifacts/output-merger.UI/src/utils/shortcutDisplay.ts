@@ -5,7 +5,7 @@
  */
 
 import type { KeyboardShortcut } from './shortcuts';
-
+import { MOBILE_MAX_WIDTH } from '@theme';
 /**
  * Detect if the current platform is Mac
  * Uses navigator.platform for SSR-safe detection
@@ -62,13 +62,12 @@ export function formatShortcutWithSymbol(shortcut: KeyboardShortcut): string {
  * Detect whether the current viewport is mobile-sized. Used to hide
  * keyboard-shortcut hints on devices without a keyboard.
  */
-const MOBILE_VIEWPORT_BREAKPOINT = 899;
 
 export function isMobileViewport(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false;
   }
-  return window.matchMedia(`(max-width: ${MOBILE_VIEWPORT_BREAKPOINT}px)`).matches;
+  return window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`).matches;
 }
 
 export function createTooltipWithShortcut(

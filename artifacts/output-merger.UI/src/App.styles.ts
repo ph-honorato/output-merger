@@ -1,6 +1,7 @@
 import styled from "styled-components";
 import type { DefaultTheme } from "styled-components";
 import type { Theme } from "@mui/material/styles";
+import { MOBILE_MAX_WIDTH } from "@theme";
 
 type StyledTheme = DefaultTheme & Theme;
 
@@ -16,7 +17,7 @@ export const PageContent = styled.div`
   flex-direction: column;
   padding: ${({ theme }) => (theme as StyledTheme).spacing(3)} 0;
 
-  @media (max-width: 600px) {
+  @media (max-width: ${MOBILE_MAX_WIDTH}px) {
     padding: ${({ theme }) => (theme as StyledTheme).spacing(2)} 0;
   }
 `;
