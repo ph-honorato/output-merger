@@ -17,6 +17,7 @@ function Header(props: HeaderProps) {
   const { t } = useTranslation();
   const configMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const {
     currentLanguage,
     availableLanguages,
@@ -42,7 +43,8 @@ function Header(props: HeaderProps) {
       }
       if (
         mobileMenuRef.current &&
-        !mobileMenuRef.current.contains(event.target as Node)
+        !mobileMenuRef.current.contains(event.target as Node) &&
+        !mobileMenuButtonRef.current?.contains(event.target as Node)
       ) {
         handleMobileMenuClose();
       }
@@ -173,6 +175,7 @@ function Header(props: HeaderProps) {
 
           {/* Mobile Menu Button */}
           <S.MobileMenuButton
+            ref={mobileMenuButtonRef}
             onClick={handleMobileMenuToggle}
             aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileMenuOpen}
