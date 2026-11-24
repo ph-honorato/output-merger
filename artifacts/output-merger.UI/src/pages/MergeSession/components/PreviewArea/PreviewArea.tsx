@@ -1,5 +1,5 @@
 import PreviewIcon from "@mui/icons-material/Preview";
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   DndContext,
@@ -56,6 +56,8 @@ function PreviewArea(props: PreviewAreaProps) {
     $entranceDelay,
   } = props;
 
+  const [touchLocked, setTouchLocked] = useState(false);
+
   const {
     t,
     editEnabled,
@@ -81,6 +83,15 @@ function PreviewArea(props: PreviewAreaProps) {
     handleDragOver,
     handleDragCancel,
   } = usePreviewArea(onActiveDragChange);
+
+  useEffect(() => {
+    if (!touchLocked) return;
+    const prevent = (e: TouchEvent) => {
+      e.preventDefault();
+    };
+    document.addEventListener("touchmove", prevent, { passive: false });
+    return () => document.removeEventListener("touchmove", prevent);
+  }, [touchLocked]);
 
   // The token children as stable element references, plus the flow's
   // assembled children (tokens with the landing anchors and the
@@ -231,15 +242,37 @@ function PreviewArea(props: PreviewAreaProps) {
             collisionDetection={closestCenter}
             accessibility={{ announcements, screenReaderInstructions }}
             onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
+            onDragEnd={(e) => { setTouchLocked(false); handleDragEnd(e); }}
             onDragOver={handleDragOver}
-            onDragCancel={handleDragCancel}
+            onDragCancel={(e) => { setTouchLocked(false); handleDragCancel(e); }}
             modifiers={[snapCenterToCursor]}
           >
             <S.FlowArea
               ref={flowAreaRef}
               data-testid="preview-flow-area"
               $reserveCounter={showCharCount}
+              onPointerDown={(e) => {
+                const target = e.target as HTMLElement;
+                if (
+                  e.pointerType === "touch" &&
+                  target.closest('[data-testid="preview-snippet"]')
+                ) {
+                  setTouchLocked(true);
+                  const prevent = (ev: TouchEvent) => ev.preventDefault();
+                  document.addEventListener("touchmove", prevent, {
+                    passive: false,
+                  });
+                  (e.currentTarget as HTMLElement).dataset.touchPrevent = "1";
+                  const cleanup = () => {
+                    document.removeEventListener("touchmove", prevent);
+                  };
+                  const node = e.currentTarget as HTMLElement;
+                  node.addEventListener("pointerup", cleanup, { once: true });
+                  node.addEventListener("pointercancel", cleanup, { once: true });
+                }
+              }}
+              onPointerUp={() => setTouchLocked(false)}
+              onPointerCancel={() => setTouchLocked(false)}
             >
               <SortableContext
                 items={renderedSnippetIds}
