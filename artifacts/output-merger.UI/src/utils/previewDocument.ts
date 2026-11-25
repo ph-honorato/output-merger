@@ -301,17 +301,18 @@ export function enumerateLandingAnchors(
       for (const offset of wordBoundaryOffsets(token.text)) {
         push({ kind: 'text-split', tokenIndex: index, boundaryOffset: offset });
       }
-      if (index < tokens.length - 1) {
-        push({
-          kind: 'text-split',
-          tokenIndex: index,
-          boundaryOffset: token.text.length,
-        });
-      }
+      push({
+        kind: 'text-split',
+        tokenIndex: index,
+        boundaryOffset: token.text.length,
+      });
     }
     // line-break tokens: no anchors
   }
-  push({ kind: 'token-gap', tokenIndex: tokens.length });
+  const lastToken = tokens.length > 0 ? tokens[tokens.length - 1] : undefined;
+  if (!lastToken || lastToken.kind !== 'text') {
+    push({ kind: 'token-gap', tokenIndex: tokens.length });
+  }
   return anchors;
 }
 

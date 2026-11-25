@@ -38,12 +38,12 @@
   - [x] Task 4.1: Case Auto-Fix — Snippet capitalization follows its new context in the preview — implementation details on `.specs/features/04-preview-area-auto-fix/tasks/4.1-case-auto-fix/`
   - [x] Task 4.2: Spacing Auto-Fix — Punctuation-adjacent spacing in the preview — implementation details on `.specs/features/04-preview-area-auto-fix/tasks/4.2-spacing-auto-fix/`
   - [x] Task 4.2.1: Review Fixes — External review fixes for Case Auto-Fix (2 findings) and internal review fixes for Spacing Auto-Fix (7 findings, 5 fixed, 2 deferred) — implementation details on `.specs/features/04-preview-area-auto-fix/tasks/4.2.1-review-fixes/`
-  - [ ] Task 4.3: Undo Auto-Corrections — Let the user undo/review auto-corrections — deferred (user decision 2026-10-22) — implementation details on `.specs/features/04-preview-area-auto-fix/tasks/4.3-undo-auto-corrections/`
+  - [ ] Task 4.3: Undo Auto-Corrections — Let the user undo/review auto-corrections — deferred (user decision 2026-10-22) — planned for V1 — implementation details on `.specs/features/04-preview-area-auto-fix/tasks/4.3-undo-auto-corrections/`
 
 - [ ] **Feature 5: ActionsBar Extensions** — Additional action buttons on the MergeSession ActionsBar
   - [x] Task 5.1: Return Button — Replace "Start Merge" with "Return" after merge starts — implementation details on `.specs/features/05-actions-bar-extensions/tasks/5.1-return-button/`
-  - [ ] Task 5.2: "Start Over" Button — Reset page without reload (to be planned later)
-  - [ ] Task 5.3: "Add Text" Button — Add new text input, up to 4 total (to be planned later)
+  - [ ] Task 5.2: "Start Over" Button — Reset page without reload (to be planned later) — planned for V1
+  - [ ] Task 5.3: "Add Text" Button — Add new text input, up to 4 total (to be planned later) — planned for V1
 
 - [ ] **Feature 6: UI/UX Adjustments** — Minor improvements to polish user experience
   - [x] Task 6.1: Styling Adjustments — Visual polish and consistency — implemented (no separate .specs folder)
@@ -51,6 +51,7 @@
   - [x] Task 6.3: Tools Adjustments — Refine existing tool behavior — implementation details on `.specs/features/06-ui-ux-adjustments/tasks/6.3-tools-adjustments/`
   - [x] Task 6.4: Platform Adjustments — Cross-platform/browser consistency — implementation details on `.specs/features/06-ui-adjustments/tasks/6.4-platform-adjustments/`
   - [x] Task 6.5: Security Hardening — Front-end security improvements — implementation details on `.specs/features/06-ui-ux-adjustments/tasks/6.5-security-hardening/`
+  - [x] Task 6.6: Mobile Adjustments — Mobile-specific UI/UX adjustments — implementation details on `.specs/features/06-ui-ux-adjustments/tasks/6.6-mobile-adjustments/`
 
 ### v1: "Merges" CRUD
 

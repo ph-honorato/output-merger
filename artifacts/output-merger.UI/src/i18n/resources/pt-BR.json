@@ -43,9 +43,13 @@
   "textInput.placeholder": "Digite ou cole seu texto aqui",
   "textInput.counterLabel": "Contagem de caracteres",
   "textInput.emptyView": "Nenhum texto adicionado ainda.",
+  "textInput.header": "Texto {{number}}",
+  "textInput.minimize": "Minimizar",
+  "textInput.expand": "Expandir",
   "textInput.needleHover": "Arraste para destacar o texto",
   "textInput.needleStart": "Marcador de início do trecho",
   "textInput.needleEnd": "Marcador de fim do trecho",
   "shortcuts.toggleEditing": "Alternar edição de texto",
-  "shortcuts.openPreviewModal": "Abrir modal de prévia"
+  "shortcuts.openPreviewModal": "Abrir modal de prévia",
+  "footer.github": "Perfil no GitHub"
 }

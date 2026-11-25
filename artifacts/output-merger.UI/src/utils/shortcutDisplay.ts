@@ -5,7 +5,7 @@
  */
 
 import type { KeyboardShortcut } from './shortcuts';
-
+import { MOBILE_MAX_WIDTH } from '@theme';
 /**
  * Detect if the current platform is Mac
  * Uses navigator.platform for SSR-safe detection
@@ -58,11 +58,25 @@ export function formatShortcutWithSymbol(shortcut: KeyboardShortcut): string {
  * Create a tooltip text that includes the shortcut
  * e.g., "Enable text editing (Cmd+E)" on Mac
  */
+/**
+ * Detect whether the current viewport is mobile-sized. Used to hide
+ * keyboard-shortcut hints on devices without a keyboard.
+ */
+
+export function isMobileViewport(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  const mediaQueryList = window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`);
+  return !!mediaQueryList && mediaQueryList.matches;
+}
+
 export function createTooltipWithShortcut(
   baseText: string,
   shortcut: KeyboardShortcut
 ): string {
   if (!baseText) return '';
+  if (isMobileViewport()) return baseText;
   const formattedShortcut = formatShortcut(shortcut);
   return `${baseText} (${formattedShortcut})`;
 }

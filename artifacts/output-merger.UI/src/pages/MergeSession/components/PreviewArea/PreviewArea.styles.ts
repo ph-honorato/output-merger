@@ -68,6 +68,44 @@ export const FlowArea = styled.div<{ $reserveCounter?: boolean }>`
   overflow: auto;
   margin-bottom: ${({ theme, $reserveCounter }) =>
     $reserveCounter ? (theme as StyledTheme).spacing(3.5) : "0px"};
+
+  /* Minimalist scrollbar styling — no track background, thin thumb
+   * using primary color. Matches Aurora UI ethereal aesthetic. */
+  /* WebKit/Blink (Chrome, Safari, Edge) */
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.primary.main};
+    border-radius: 3px;
+    opacity: 0.5;
+    transition:
+      opacity 200ms ease,
+      background-color 200ms ease;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    opacity: 0.8;
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.primary.light};
+  }
+  &::-webkit-scrollbar-thumb:active {
+    background-color: ${({ theme }) =>
+      (theme as StyledTheme).palette.primary.dark};
+    opacity: 1;
+  }
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: ${({ theme }) => (theme as StyledTheme).palette.primary.main}
+    transparent;
 `;
 
 /**
@@ -127,13 +165,24 @@ export const SegmentFlow = styled.div<{ $editing?: boolean }>`
       : ""}
 `;
 
-export const OverlayChip = styled.span`
+export const OverlayChip = styled.span<{ $isLong?: boolean }>`
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
   white-space: pre-wrap;
   cursor: grabbing;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+
+  ${({ $isLong }) =>
+    $isLong
+      ? css`
+          display: inline-block;
+          overflow: hidden;
+          white-space: nowrap;
+          max-width: 20ch;
+          text-overflow: ellipsis;
+        `
+      : ""}
 `;
 
 /**

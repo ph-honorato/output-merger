@@ -40,6 +40,17 @@ import {
 import { handleSecurePaste } from '@utils/sanitize';
 
 /**
+ * A no-op sensor used when edit mode is ON to keep the sensors array
+ * size stable (always 2) while effectively disabling pointer drag.
+ * It has no activators, so it never activates.
+ */
+class NoOpPointerSensor {
+  static activators: never[] = [];
+  autoScrollEnabled = false;
+  constructor() {}
+}
+
+/**
  * PointerSensor hold-to-drag activation (edit mode OFF — the
  * sensor is not mounted while editing): the drag starts only when
  * the pointer is held for the delay while moving at most the
@@ -643,6 +654,42 @@ const placeCaret = (node: Node, offset: number): void => {
   if (selection) {
     selection.removeAllRanges();
     selection.addRange(range);
+  }
+};
+
+/**
+ * Scrolls the caret into view if needed, matching native textarea behavior.
+ * Creates a temporary marker at the caret position and uses scrollIntoView
+ * with { block: 'nearest' } to only scroll when the caret is outside
+ * the visible viewport.
+ */
+const scrollCaretIntoView = (flowArea: HTMLElement): void => {
+  const view = flowArea.ownerDocument.defaultView;
+  if (!view || typeof view.getSelection !== 'function') {
+    return;
+  }
+  const selection = view.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  if (!flowArea.contains(range.commonAncestorContainer)) {
+    return;
+  }
+  // Only scroll if content actually overflows
+  if (flowArea.scrollHeight <= flowArea.clientHeight) {
+    return;
+  }
+  // Create a temporary zero-width marker at the caret position
+  const marker = flowArea.ownerDocument.createElement('span');
+  marker.style.cssText = 'display: inline-block; width: 0; height: 0; overflow: hidden;';
+  range.insertNode(marker);
+  // Scroll the marker into view (textarea-like behavior: only if needed)
+  // Use try/finally to ensure marker is always removed, preventing DOM corruption
+  try {
+    marker.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  } finally {
+    marker.remove();
   }
 };
 
@@ -1294,41 +1341,47 @@ export function usePreviewArea(
     [snippetTokens]
   );
 
-  // While edit mode is ON the
-  // mouse serves the editor — the pointer sensor is NOT mounted for
-  // the editing surface. Both sensor sets are created by separate
-  // unconditional hooks (the hooks themselves are never
-  // conditionalized); the mounted array is filtered per mode:
-  // keyboard-only while editing, pointer + keyboard while not.
-  const pointerSensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: SNIPPET_DRAG_ACTIVATION,
-    })
+  // Create both sensor descriptors unconditionally (hooks must be
+  // called in the same order every render). When edit mode is ON,
+  // the pointer sensor is replaced with a no-op sensor that has no
+  // activators, so it never activates. This keeps the sensors array
+  // size stable (always 2) and avoids React's useEffect dependency
+  // array size mismatch warnings in DndContext's useSensorSetup.
+  const pointerSensor = useSensor(
+    (editEnabled ? NoOpPointerSensor : PointerSensor) as typeof PointerSensor,
+    editEnabled ? {} : { activationConstraint: SNIPPET_DRAG_ACTIVATION }
   );
-  const keyboardSensors = useSensors(
-    // the arrows step through ALL droppable landing
-    // positions (chips + word-boundary anchors) in reading order.
-    useSensor(KeyboardSensor, {
-      coordinateGetter: landingKeyboardCoordinates,
-    })
-  );
-  const sensors = useMemo(
-    () =>
-      editEnabled
-        ? keyboardSensors
-        : [...pointerSensors, ...keyboardSensors],
-    [editEnabled, pointerSensors, keyboardSensors]
-  );
+  const keyboardSensor = useSensor(KeyboardSensor, {
+    coordinateGetter: landingKeyboardCoordinates,
+  });
+  const sensors = useSensors(pointerSensor, keyboardSensor);
 
   const [activeSnippet, setActiveSnippet] = useState<SnippetToken | null>(null);
   // Insertion slot of the drop-indicator needle; null keeps it hidden
   // (no active drag, or no target resolves).
   const [dropLanding, setDropLanding] = useState<Landing | null>(null);
+  // Mirror of `dropLanding` kept in a ref so the drag-end handler can
+  // read the landing the indicator actually marked at the last
+  // drag-over, independent of dnd-kit's final `over` resolution (which
+  // can differ from the last reported target and silently drop the
+  // reorder).
+  const dropLandingRef = useRef<Landing | null>(null);
+  // Whether a drag-over has actually been reported since the drag
+  // started. The drag-start seeds an origin landing (and the
+  // indicator), but that must not override a drop that dnd-kit
+  // resolves through `over` when no drag-over event fired in between.
+  const dragOverOccurredRef = useRef(false);
+  const updateDropLanding = useCallback((landing: Landing | null) => {
+    setDropLanding(landing);
+    dropLandingRef.current = landing;
+  }, []);
 
   // ---- editable surface state ---------------------------
 
   // The segment-flow root (the contentEditable host while edit is ON).
   const flowRef = useRef<HTMLDivElement | null>(null);
+  // The FlowArea wrapper (the scrollable container).
+  const flowAreaRef = useRef<HTMLDivElement | null>(null);
   const [flowFocused, setFlowFocused] = useState(false);
   // The token snapshot the focused surface renders from: frozen while
   // edit is ON and the surface is focused (the browser owns the DOM),
@@ -1447,6 +1500,14 @@ export function usePreviewArea(
       return;
     }
     applyDocumentLimitClamp(parsePreviewDom(root, modelRef.current));
+
+    // Scroll caret into view after composition end (IME, emoji, etc.)
+    setTimeout(() => {
+      const flowArea = flowAreaRef.current;
+      if (flowArea) {
+        scrollCaretIntoView(flowArea);
+      }
+    }, 0);
   }, [applyDocumentLimitClamp]);
 
   const commitFlow = useCallback(() => {
@@ -1742,6 +1803,14 @@ export function usePreviewArea(
       } else {
         applyDocumentLimitClamp(parsePreviewDom(root, modelRef.current));
       }
+
+      // Scroll caret into view after input (typing, deletion, etc.)
+      setTimeout(() => {
+        const flowArea = flowAreaRef.current;
+        if (flowArea) {
+          scrollCaretIntoView(flowArea);
+        }
+      }, 0);
     },
     [applyDocumentLimitClamp, dispatchParsedSync]
   );
@@ -2139,6 +2208,14 @@ export function usePreviewArea(
         ensureTrailingLineAnchor(newlineNode);
         // Manual DOM edits fire no input event — sync explicitly.
         commitFlow();
+
+        // Scroll caret into view after Enter (new line)
+        setTimeout(() => {
+          const flowArea = flowAreaRef.current;
+          if (flowArea) {
+            scrollCaretIntoView(flowArea);
+          }
+        }, 0);
       }
     },
     [commitFlow, handleArrowNavigation]
@@ -2325,6 +2402,14 @@ export function usePreviewArea(
         ensureTrailingLineAnchor(inserted);
       }
       commitFlow();
+
+      // Scroll caret into view after paste
+      setTimeout(() => {
+        const flowArea = flowAreaRef.current;
+        if (flowArea) {
+          scrollCaretIntoView(flowArea);
+        }
+      }, 0);
     },
     [commitFlow]
   );
@@ -2338,11 +2423,13 @@ export function usePreviewArea(
       setActiveSnippet(index >= 0 ? snippetTokens[index] : null);
       // Pickup resolves to the dragged item itself: the needle starts
       // at the origin spot (the anchor covering "before the chip").
-      setDropLanding(
+      const initialLanding =
         index >= 0
           ? landingBeforeToken(previewDocument, tokenIndexOf(String(event.active.id)))
-          : null
-      );
+          : null;
+      updateDropLanding(initialLanding);
+      dropLandingRef.current = initialLanding;
+      dragOverOccurredRef.current = false;
       // a raised snippet suspends editing keydowns while
       // edit mode is on (the guard is inert while edit is off).
       keyboardSortActiveRef.current = true;
@@ -2353,10 +2440,11 @@ export function usePreviewArea(
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
+      dragOverOccurredRef.current = true;
       const { active, over } = event;
       const overId = over ? String(over.id) : null;
       if (overId === null) {
-        setDropLanding(null);
+        updateDropLanding(null);
         return;
       }
 
@@ -2380,7 +2468,7 @@ export function usePreviewArea(
             landing.boundaryOffset >= 0 &&
             landing.boundaryOffset <= target.text.length;
         }
-        setDropLanding(valid ? landing : null);
+        updateDropLanding(valid ? landing : null);
         return;
       }
 
@@ -2392,10 +2480,10 @@ export function usePreviewArea(
       const overSnippet = indexOfSortableId(overId);
       const overTokenIndex = tokenIndexOf(overId);
       if (fromSnippet < 0 || overSnippet < 0 || overTokenIndex < 0) {
-        setDropLanding(null);
+        updateDropLanding(null);
         return;
       }
-      setDropLanding(
+      updateDropLanding(
         fromSnippet < overSnippet
           ? landingAfterToken(previewDocument, overTokenIndex)
           : landingBeforeToken(previewDocument, overTokenIndex)
@@ -2408,7 +2496,11 @@ export function usePreviewArea(
     (event: DragEndEvent) => {
       notifyActiveDragChange(false);
       setActiveSnippet(null);
-      setDropLanding(null);
+      const appliedLanding = dropLandingRef.current;
+      const didDragOver = dragOverOccurredRef.current;
+      dropLandingRef.current = null;
+      dragOverOccurredRef.current = false;
+      updateDropLanding(null);
       // the sort ended — schedule the caret restoration
       // (after the drop's re-render; a no-op drop restores into the
       // unchanged chip).
@@ -2417,23 +2509,32 @@ export function usePreviewArea(
         setKeyboardSortActive(false);
         pendingCaretRestoreRef.current = savedSortCaretRef.current;
       }
-      const { active, over } = event;
-
-      if (!over || active.id === over.id) {
-        // Released on the item's own position or with no target: the
-        // merge order stays unchanged.
-        return;
-      }
-
-      const activeId = String(active.id);
+      const activeId = String(event.active.id);
       const fromIndex = indexOfSortableId(activeId);
       const fromTokenIndex = tokenIndexOf(activeId);
-      const overId = String(over.id);
 
       if (fromIndex < 0 || fromTokenIndex < 0) {
         // The dragged snippet vanished mid-drag: discard the reorder.
         return;
       }
+
+      // Prefer the landing the drop indicator actually marked during
+      // the drag: it is the user-visible target and is more reliable
+      // than re-deriving from dnd-kit's final `over` resolution. This
+      // also covers drops where dnd-kit reports no `over` (common at
+      // the document's trailing edge).
+      if (didDragOver && appliedLanding !== null) {
+        moveTokenToLanding(fromTokenIndex, appliedLanding);
+        return;
+      }
+
+      const { over } = event;
+      if (!over || event.active.id === over.id) {
+        // Released on the item's own position or with no target: the
+        // merge order stays unchanged.
+        return;
+      }
+      const overId = String(over.id);
 
       // a landing anchor — the word-boundary landing model.
       const landing = parseLandingId(overId);
@@ -2470,7 +2571,9 @@ export function usePreviewArea(
     (_event: DragCancelEvent) => {
       notifyActiveDragChange(false);
       setActiveSnippet(null);
-      setDropLanding(null);
+      dropLandingRef.current = null;
+      dragOverOccurredRef.current = false;
+      updateDropLanding(null);
       // cancelled — the snippet never moved; restore the
       // caret right away (the document is unchanged).
       if (keyboardSortActiveRef.current) {
@@ -2582,6 +2685,7 @@ export function usePreviewArea(
     mergedText,
     isDocumentEmpty: mergedText.length === 0,
     flowRef,
+    flowAreaRef,
     snippetTokens,
     sortableIds,
     sensors,

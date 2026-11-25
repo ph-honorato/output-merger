@@ -578,16 +578,16 @@ describe('enumerateLandingAnchors', () => {
     );
   });
 
-  it('omits the last text token trailing edge (the trailing anchor covers the document end)', () => {
+  it('keeps the last text token trailing edge as a droppable anchor (the document-end gap is redundant)', () => {
     const tokens: PreviewToken[] = [
       snippetToken('s1:alpha', 'Alpha'),
       ownText('t1', ' tail'),
     ];
     const ids = landingsOf(tokens);
-    expect(ids).not.toContain(
+    expect(ids).toContain(
       JSON.stringify({ kind: 'text-split', tokenIndex: 1, boundaryOffset: 5 })
     );
-    expect(ids).toContain(JSON.stringify({ kind: 'token-gap', tokenIndex: 2 }));
+    expect(ids).not.toContain(JSON.stringify({ kind: 'token-gap', tokenIndex: 2 }));
   });
 
   it('keeps chip before-anchors at the doc start, after chips, and after line breaks', () => {

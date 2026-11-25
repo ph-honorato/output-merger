@@ -71,7 +71,7 @@ When working on this project, agents should:
 5. Ensure proper separation of concerns between frontend and backend
 6. Write tests for new functionality
 7. Update documentation when necessary
-8. After a feature is implementad, go back to [roadmap.md](./roadmap.md) and update the status
+8. After a feature is implementad, go back to [roadmap.md](./roadmap.md) and update the status, including the implementation details path (e.g. `- implementation details on .specs/features/.../tasks/.../`)
 9. If there's a big decision is needed, ask before implementing!
 
 ### Task Resolution
@@ -89,7 +89,7 @@ Whenever starting the implementation of a task, the resolution must follow this 
    2. Call the Developer sub-agent to fix the problems
    3. Call Tester sub-agent
    4. This cycle can be called at maximum of 3 times. If more cycles are needed, report back to user
-5. **Report back**: If the tester sub-agent returns that everything is ok, return to the user telling everything is ready
+5. **Report back**: If the tester sub-agent returns that everything is ok, update `roadmap.md` status and add the implementation details path for the task, then return to the user telling everything is ready
 
 ### Git Operations
 

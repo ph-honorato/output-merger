@@ -52,7 +52,14 @@ export const TEXT_INPUT_MAX_CHARACTERS = readEnvNumber(
  * Hook for managing the TextInput component logic
  * @returns {Object} Object containing text state, tokens, needle descriptors and interaction handlers
  */
-export const useTextInput = (props: TextInputProps & { maxCharacters: number }) => {
+const MOBILE_LONG_PRESS_MS = 400;
+const MOBILE_MOVE_THRESHOLD = 8;
+
+type MobilePendingDrag =
+  | { kind: 'create'; anchor: Boundary; boundary: Boundary }
+  | { kind: 'resize'; snippetId: string; edge: 'start' | 'end'; boundary: Boundary };
+
+export const useTextInput = (props: TextInputProps & { maxCharacters: number; isMobile?: boolean }) => {
   const {
     mode = 'input',
     initialText = '',
@@ -60,6 +67,7 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number }) 
     maxCharacters,
     onTextChange,
     onChange,
+    isMobile = false,
   } = props;
 
   const [text, setText] = useState(initialText);
@@ -68,8 +76,38 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number }) 
   const [hoverSnippetId, setHoverSnippetId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag>(null);
   const viewRef = useRef<HTMLDivElement | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const pendingMobileDragRef = useRef<MobilePendingDrag | null>(null);
+  const mobilePointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const mobileCancelRef = useRef<(() => void) | null>(null);
 
   const tokens = useMemo(() => tokenize(text), [text]);
+
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current !== null) {
+        window.clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      if (mobileCancelRef.current) {
+        window.removeEventListener('pointerup', mobileCancelRef.current);
+        mobileCancelRef.current = null;
+      }
+    };
+  }, []);
+
+  const cancelMobilePending = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    pendingMobileDragRef.current = null;
+    mobilePointerStartRef.current = null;
+    if (mobileCancelRef.current) {
+      window.removeEventListener('pointerup', mobileCancelRef.current);
+      mobileCancelRef.current = null;
+    }
+  }, []);
 
   const findSnippetAtWord = useCallback(
     (wordStart: number, wordEnd: number): Snippet | undefined =>
@@ -124,6 +162,13 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number }) 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (mode !== 'view') return;
+      if (isMobile && longPressTimerRef.current !== null && mobilePointerStartRef.current) {
+        const dx = e.clientX - mobilePointerStartRef.current.x;
+        const dy = e.clientY - mobilePointerStartRef.current.y;
+        if (Math.hypot(dx, dy) > MOBILE_MOVE_THRESHOLD) {
+          cancelMobilePending();
+        }
+      }
       if (drag) {
         const boundary = resolvePointer(e)?.boundary ?? null;
         if (boundary === null) return;
@@ -175,12 +220,124 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number }) 
         setHoverSnippetId(null);
       }
     },
-    [mode, drag, snippets, resolvePointer, findSnippetAtWord, clampResizeBoundary]
+    [mode, drag, snippets, resolvePointer, findSnippetAtWord, clampResizeBoundary, isMobile, cancelMobilePending]
   );
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (mode !== 'view') return;
+      if (isMobile) {
+        cancelMobilePending();
+        const target = e.target as HTMLElement;
+        const needle = target.closest('[data-testid="text-input-needle"]');
+        if (needle) {
+          const role = needle.getAttribute('data-role');
+          const boundary = parseBoundary(needle.getAttribute('data-boundary'));
+          if (role === 'snippet-start' || role === 'snippet-end') {
+            setDrag({
+              type: 'resize',
+              snippetId: needle.getAttribute('data-snippet-id') ?? '',
+              edge: NEEDLE_ROLE_TO_EDGE[role],
+              boundary,
+            });
+            return;
+          }
+        }
+        const resolved = resolvePointer(e);
+        if (!resolved) return;
+        const tokenStart = resolved.token.start;
+        const tokenEnd = tokenStart + resolved.token.value.length;
+        const snippet = findSnippetAtWord(tokenStart, tokenEnd);
+        if (snippet) {
+          const isStartEdge = tokenStart === snippet.startIndex;
+          const isEndEdge = tokenEnd === snippet.endIndex;
+          if (!isStartEdge && !isEndEdge) return;
+          const edge = isStartEdge ? 'start' : 'end';
+          const boundary = isStartEdge ? snippet.startIndex : snippet.endIndex;
+          mobilePointerStartRef.current = { x: e.clientX, y: e.clientY };
+          pendingMobileDragRef.current = {
+            kind: 'resize',
+            snippetId: snippet.id,
+            edge,
+            boundary,
+          };
+          const timer = window.setTimeout(() => {
+            const pending = pendingMobileDragRef.current;
+            if (pending?.kind === 'resize') {
+              setDrag({
+                type: 'resize',
+                snippetId: pending.snippetId,
+                edge: pending.edge,
+                boundary: pending.boundary,
+              });
+            }
+            pendingMobileDragRef.current = null;
+            longPressTimerRef.current = null;
+            mobilePointerStartRef.current = null;
+            if (mobileCancelRef.current) {
+              window.removeEventListener('pointerup', mobileCancelRef.current);
+              mobileCancelRef.current = null;
+            }
+          }, MOBILE_LONG_PRESS_MS);
+          longPressTimerRef.current = timer;
+          const cancel = () => {
+            if (longPressTimerRef.current !== null) {
+              window.clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = null;
+            }
+            pendingMobileDragRef.current = null;
+            mobilePointerStartRef.current = null;
+            window.removeEventListener('pointerup', cancel);
+            mobileCancelRef.current = null;
+          };
+          mobileCancelRef.current = cancel;
+          window.addEventListener('pointerup', cancel);
+          return;
+        }
+        if (resolved.boundary === null) return;
+        const wordStart = resolved.token.start;
+        const wordEnd = wordStart + resolved.token.value.length;
+        mobilePointerStartRef.current = { x: e.clientX, y: e.clientY };
+        pendingMobileDragRef.current = {
+          kind: 'create',
+          anchor: wordStart,
+          boundary: wordEnd,
+        };
+        const createTimer = window.setTimeout(() => {
+          const pending = pendingMobileDragRef.current;
+          if (pending?.kind === 'create') {
+            setDrag({
+              type: 'create',
+              anchor: pending.anchor,
+              current: pending.boundary,
+              baseStart: pending.anchor,
+              baseEnd: pending.boundary,
+            });
+          }
+          pendingMobileDragRef.current = null;
+          longPressTimerRef.current = null;
+          mobilePointerStartRef.current = null;
+          if (mobileCancelRef.current) {
+            window.removeEventListener('pointerup', mobileCancelRef.current);
+            mobileCancelRef.current = null;
+          }
+        }, MOBILE_LONG_PRESS_MS);
+        longPressTimerRef.current = createTimer;
+        const cancelCreate = () => {
+          if (longPressTimerRef.current !== null) {
+            window.clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+          }
+          pendingMobileDragRef.current = null;
+          mobilePointerStartRef.current = null;
+          window.removeEventListener('pointerup', cancelCreate);
+          mobileCancelRef.current = null;
+        };
+        mobileCancelRef.current = cancelCreate;
+        window.addEventListener('pointerup', cancelCreate);
+        return;
+      }
+
       const target = e.target as HTMLElement;
       const needle = target.closest('[data-testid="text-input-needle"]');
       if (needle) {
@@ -209,14 +366,16 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number }) 
       const boundary = hoverBoundary ?? resolved.boundary;
       setDrag({ type: 'create', anchor: boundary, current: boundary });
     },
-    [mode, hoverBoundary, resolvePointer, findSnippetAtWord]
+    [mode, hoverBoundary, resolvePointer, findSnippetAtWord, isMobile, cancelMobilePending]
   );
 
   const commit = useCallback(() => {
     if (!drag) return;
     if (drag.type === 'create') {
-      const end = Math.max(drag.anchor, drag.current);
-      const start = trimRangeStart(text, Math.min(drag.anchor, drag.current), end);
+      const baseStart = drag.baseStart ?? drag.anchor;
+      const baseEnd = drag.baseEnd ?? drag.anchor;
+      const end = Math.max(baseEnd, drag.current, drag.anchor);
+      const start = trimRangeStart(text, Math.min(baseStart, drag.current, drag.anchor), end);
       if (start !== end) {
         const snippet: Snippet = {
           id: generateId(),
@@ -289,6 +448,39 @@ export const useTextInput = (props: TextInputProps & { maxCharacters: number }) 
 
   const getNeedles = (): NeedleDescriptor[] => {
     if (mode !== 'view') return [];
+    if (isMobile) {
+      const result: NeedleDescriptor[] = [];
+      if (drag) {
+        if (drag.type === 'create') {
+          // On mobile the live create range is shown as a highlight only;
+          // needles (handles) appear after release.
+          // (No needle rendering during mobile create drag.)
+        } else {
+          const snippet = snippets.find((s) => s.id === drag.snippetId);
+          if (snippet) {
+            result.push(
+              buildSnippetNeedle(
+                snippet,
+                'snippet-start',
+                drag.edge === 'start' ? drag.boundary : snippet.startIndex
+              ),
+              buildSnippetNeedle(
+                snippet,
+                'snippet-end',
+                drag.edge === 'end' ? drag.boundary : snippet.endIndex
+              )
+            );
+          }
+        }
+      }
+      for (const snippet of snippets) {
+        if (drag?.type === 'resize' && drag.snippetId === snippet.id) continue;
+        result.push(buildSnippetNeedle(snippet, 'snippet-start', snippet.startIndex));
+        result.push(buildSnippetNeedle(snippet, 'snippet-end', snippet.endIndex));
+      }
+      // Hover needles are desktop-only; mobile has no hover affordance.
+      return result;
+    }
     if (drag) {
       if (drag.type === 'create') {
         return [

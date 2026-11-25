@@ -43,8 +43,10 @@ export const computeSegments = (
 ): Segment[] => {
   const ranges: Segment[] = [];
   if (drag?.type === 'create') {
-    const end = Math.max(drag.anchor, drag.current);
-    const start = trimRangeStart(text, Math.min(drag.anchor, drag.current), end);
+    const baseStart = drag.baseStart ?? drag.anchor;
+    const baseEnd = drag.baseEnd ?? drag.anchor;
+    const end = Math.max(baseEnd, drag.current, drag.anchor);
+    const start = trimRangeStart(text, Math.min(baseStart, drag.current, drag.anchor), end);
     if (start !== end) {
       ranges.push({ start, end, color, alpha: 0.2 });
     }

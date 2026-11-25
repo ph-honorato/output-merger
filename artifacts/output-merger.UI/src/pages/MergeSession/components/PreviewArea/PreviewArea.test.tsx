@@ -6459,3 +6459,16 @@ describe("spacing-fix pass — visible corrections (inline)", () => {
     );
   });
 });
+
+describe('last pos after plain text', () => {
+  it('moves first snippet to end after plain text', () => {
+    const state = initialSnippetsState;
+    const sA = { kind: 'snippet', tokenId: 's:a', sourceSnippetId: 'a', sourceId: 't', color: 'red', text: 'Alpha', edited: false } as any;
+    const sep = { kind: 'text', tokenId: 'sep1', text: ' ' } as any;
+    const sB = { kind: 'snippet', tokenId: 's:b', sourceSnippetId: 'b', sourceId: 't', color: 'blue', text: 'Beta', edited: false } as any;
+    const text = { kind: 'text', tokenId: 'txt', text: 'hello' } as any;
+    const withTokens = { ...state, tokens: [sA, sep, sB, text] };
+    const next = snippetsReducer(withTokens, { type: 'MOVE_TOKEN_TO_LANDING', fromIndex: 0, landing: { kind: 'token-gap', tokenIndex: 4 } } as any);
+    expect(next.tokens.map((t: any) => (t.kind === 'snippet' ? t.tokenId : null)).filter(Boolean)).toEqual(['s:b', 's:a']);
+  });
+});
