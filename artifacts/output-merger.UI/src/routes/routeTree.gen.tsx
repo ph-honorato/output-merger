@@ -3,7 +3,7 @@
 // Run `npm run dev` or `npm run build` to regenerate this file
 
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
-import { Header } from '../components'
+import { Header, Footer } from '../components'
 import * as S from '../App.styles'
 import { Container } from '@mui/material'
 
@@ -22,6 +22,7 @@ export const rootRoute = createRootRoute({
           </S.PageContent>
         </Container>
       </S.MainContainer>
+      <Footer />
     </>
   ),
 })

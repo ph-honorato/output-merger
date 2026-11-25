@@ -50,5 +50,6 @@
   "textInput.needleStart": "Snippet start handle",
   "textInput.needleEnd": "Snippet end handle",
   "shortcuts.toggleEditing": "Toggle text editing",
-  "shortcuts.openPreviewModal": "Open preview modal"
+  "shortcuts.openPreviewModal": "Open preview modal",
+  "footer.github": "GitHub profile"
 }
