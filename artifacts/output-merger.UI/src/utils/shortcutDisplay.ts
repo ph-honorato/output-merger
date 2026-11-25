@@ -67,7 +67,8 @@ export function isMobileViewport(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false;
   }
-  return window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`).matches;
+  const mediaQueryList = window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`);
+  return !!mediaQueryList && mediaQueryList.matches;
 }
 
 export function createTooltipWithShortcut(
