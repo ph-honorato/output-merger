@@ -33,3 +33,9 @@ Implemented mobile-specific behaviors for the `TextInput` component: compact mob
 ## Follow-up Fixes (user-reported)
 - Collapsed root now shrinks to header height with ease transition; chevron points left when collapsed.
 - Mobile create drag no longer shows needles until release; live range remains highlighted.
+- Mobile snippet creation now highlights the held word immediately and keeps it as an endpoint while dragging.
+- Mobile snippet sorting no longer releases mid-drag; screen scroll is locked while holding a snippet.
+- Header hamburger menu now closes correctly when toggled on mobile.
+- Tooltip keyboard-shortcut hints are hidden on mobile viewports.
+- Mobile breakpoint (899px) centralized in `@theme` (MOBILE_MAX_WIDTH) and reused across styles/utilities.
+- OCR findings addressed: timer cleanup and hardcoded breakpoint extraction.
