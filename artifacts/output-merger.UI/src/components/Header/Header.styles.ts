@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import type { StyledTheme } from "@theme";
+import { type StyledTheme, MOBILE_MAX_WIDTH, BREAKPOINT_MD } from "@theme";
 
 export const StyledHeader = styled.header`
   background-color: ${({ theme }) =>
@@ -45,7 +45,7 @@ export const LogoText = styled.h1`
   white-space: nowrap;
   margin: 0;
 
-  @media (max-width: 600px) {
+  @media (max-width: ${MOBILE_MAX_WIDTH}px) {
     font-size: 1.25rem;
   }
 `;
@@ -177,7 +177,7 @@ export const MobileMenuButton = styled.button`
       (theme as StyledTheme).palette.action.hover};
   }
 
-  @media (min-width: 600px) {
+  @media (min-width: ${BREAKPOINT_MD}px) {
     display: none;
   }
 `;
@@ -187,7 +187,7 @@ export const DesktopActions = styled.div`
   align-items: center;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
 
-  @media (max-width: 599px) {
+  @media (max-width: ${MOBILE_MAX_WIDTH}px) {
     display: none;
   }
 `;
@@ -197,7 +197,7 @@ export const MobileActions = styled.div`
   align-items: center;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
 
-  @media (min-width: 600px) {
+  @media (min-width: ${BREAKPOINT_MD}px) {
     display: none;
   }
 `;

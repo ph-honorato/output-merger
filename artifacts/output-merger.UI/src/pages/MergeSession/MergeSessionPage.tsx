@@ -81,6 +81,7 @@ function MergeSessionWorkspace() {
         <Grid size={{ xs: 12, md: 4 }}>
           <TextInput
             key={`text-1:${returnEpoch}`}
+            inputNumber={1}
             color="#0080FF"
             mode={mergeStarted ? "view" : "input"}
             initialText={sourceTexts["text-1"] ?? ""}
@@ -92,6 +93,7 @@ function MergeSessionWorkspace() {
         <Grid size={{ xs: 12, md: 4 }}>
           <TextInput
             key={`text-2:${returnEpoch}`}
+            inputNumber={2}
             color="#FF1493"
             mode={mergeStarted ? "view" : "input"}
             initialText={sourceTexts["text-2"] ?? ""}

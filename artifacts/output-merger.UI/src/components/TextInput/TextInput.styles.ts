@@ -1,10 +1,11 @@
 import styled, { css } from "styled-components";
 import TextField from "@mui/material/TextField";
-import { type StyledTheme, CARD_HEIGHT } from "@theme";
+import IconButton from "@mui/material/IconButton";
+import { type StyledTheme, CARD_HEIGHT, MOBILE_MAX_WIDTH } from "@theme";
 import { slideUpFadeIn } from "@utils/animations";
 import { minimalistScrollbar } from "@utils/scrollbar";
 
-export const TextInputRoot = styled.div<{ $entranceDelay?: string }>`
+export const TextInputRoot = styled.div<{ $entranceDelay?: string; $minimized?: boolean }>`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
@@ -14,7 +15,9 @@ export const TextInputRoot = styled.div<{ $entranceDelay?: string }>`
    * textarea area (input mode) or the view container (view mode)
    * fills the fixed card and scrolls internally, and the optional
    * label and the counter stay inside it. */
-  height: ${CARD_HEIGHT};
+  height: ${({ $minimized }) => ($minimized ? '72px' : CARD_HEIGHT)};
+  transition: height 200ms ease;
+  overflow: hidden;
   box-sizing: border-box;
   background-color: ${({ theme }) =>
     (theme as StyledTheme).palette.background.paper};
@@ -50,6 +53,23 @@ export const Label = styled.span`
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.secondary};
+`;
+
+export const Header = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: ${({ theme }) => (theme as StyledTheme).spacing(1)};
+`;
+
+export const HeaderTitle = styled.span`
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
+`;
+
+export const MinimizeButton = styled(IconButton)`
+  /* Touch-friendly target on mobile */
 `;
 
 export const StyledTextField = styled(TextField)<{ $accent?: string }>`
@@ -99,6 +119,9 @@ export const TextViewContainer = styled.div<{ $dragging?: boolean }>`
   white-space: pre-wrap;
   word-break: break-word;
   touch-action: none;
+  @media (max-width: ${MOBILE_MAX_WIDTH}px) {
+    touch-action: pan-y;
+  }
   cursor: ${({ $dragging }) => ($dragging ? "ew-resize" : "default")};
   line-height: 1.8;
   color: ${({ theme }) => (theme as StyledTheme).palette.text.primary};
@@ -129,6 +152,15 @@ export const Needle = styled.span`
     bottom: -4px;
     left: -6px;
     right: -6px;
+  }
+
+  @media (max-width: ${MOBILE_MAX_WIDTH}px) {
+    &::before {
+      top: -20px;
+      bottom: -20px;
+      left: -20px;
+      right: -20px;
+    }
   }
 `;
 
