@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
@@ -24,19 +24,24 @@ const makeSnippet = (id: string, text: string): Snippet => ({
 const renderCounter = (
   updates: Array<[string, Snippet[]]>,
   ui = <PreviewCharCount />,
-) =>
-  render(
-    <I18nextProvider i18n={i18n}>
-      <MuiThemeProvider theme={theme}>
-        <StyledThemeProvider theme={theme}>
-          <SnippetsProvider>
-            {ui}
-            <SeedUpdates updates={updates} />
-          </SnippetsProvider>
-        </StyledThemeProvider>
-      </MuiThemeProvider>
-    </I18nextProvider>,
-  );
+) => {
+  let rendered!: ReturnType<typeof render>;
+  act(() => {
+    rendered = render(
+      <I18nextProvider i18n={i18n}>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            <SnippetsProvider>
+              {ui}
+              <SeedUpdates updates={updates} />
+            </SnippetsProvider>
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </I18nextProvider>,
+    );
+  });
+  return rendered;
+};
 
 const SeedUpdates = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
   const { setSourceSnippets } = useSnippets();
@@ -55,7 +60,9 @@ const css = () =>
 
 describe('PreviewCharCount', () => {
   afterEach(async () => {
-    await i18n.changeLanguage('en-US');
+    await act(async () => {
+      await i18n.changeLanguage('en-US');
+    });
   });
 
   it('renders the default count/limit form — the maximum allowed characters shows', () => {
@@ -90,20 +97,22 @@ describe('PreviewCharCount', () => {
     expect(screen.getByTestId('preview-char-count')).toHaveTextContent(
       `5/${PREVIEW_DOCUMENT_MAX_LENGTH}`,
     );
-    rerender(
-      <I18nextProvider i18n={i18n}>
-        <MuiThemeProvider theme={theme}>
-          <StyledThemeProvider theme={theme}>
-            <SnippetsProvider>
-              <PreviewCharCount />
-              <SeedUpdates
-                updates={[['text-1', [makeSnippet('a1', 'Alpha one')]]]}
-              />
-            </SnippetsProvider>
-          </StyledThemeProvider>
-        </MuiThemeProvider>
-      </I18nextProvider>,
-    );
+    act(() => {
+      rerender(
+        <I18nextProvider i18n={i18n}>
+          <MuiThemeProvider theme={theme}>
+            <StyledThemeProvider theme={theme}>
+              <SnippetsProvider>
+                <PreviewCharCount />
+                <SeedUpdates
+                  updates={[['text-1', [makeSnippet('a1', 'Alpha one')]]]}
+                />
+              </SnippetsProvider>
+            </StyledThemeProvider>
+          </MuiThemeProvider>
+        </I18nextProvider>,
+      );
+    });
     expect(screen.getByTestId('preview-char-count')).toHaveTextContent(
       `9/${PREVIEW_DOCUMENT_MAX_LENGTH}`,
     );
@@ -162,7 +171,9 @@ describe('PreviewCharCount', () => {
       'Contagem de caracteres',
     );
 
-    await i18n.changeLanguage('pt');
+    await act(async () => {
+      await i18n.changeLanguage('pt');
+    });
     expect(
       screen.getByTestId('preview-char-count'),
     ).toHaveAttribute('aria-label', 'Contagem de caracteres');

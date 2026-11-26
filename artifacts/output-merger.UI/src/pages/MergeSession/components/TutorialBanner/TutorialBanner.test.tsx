@@ -8,15 +8,19 @@ import { theme } from '@theme';
 import TutorialBanner from './TutorialBanner';
 
 const renderWithProviders = (component: React.ReactElement) => {
-  return render(
-    <I18nextProvider i18n={i18n}>
-      <MuiThemeProvider theme={theme}>
-        <StyledThemeProvider theme={theme}>
-          {component}
-        </StyledThemeProvider>
-      </MuiThemeProvider>
-    </I18nextProvider>
-  );
+  let rendered!: ReturnType<typeof render>;
+  act(() => {
+    rendered = render(
+      <I18nextProvider i18n={i18n}>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            {component}
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </I18nextProvider>
+    );
+  });
+  return rendered;
 };
 
 const TUTORIAL_KEYS = [
@@ -31,7 +35,9 @@ const TUTORIAL_KEYS = [
 ] as const;
 
 afterEach(async () => {
-  await i18n.changeLanguage('en-US');
+  await act(async () => {
+    await i18n.changeLanguage('en-US');
+  });
 });
 
 describe('TutorialBanner Component', () => {
