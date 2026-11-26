@@ -147,6 +147,11 @@ export function stripHtmlTags(html: string): string {
 export async function secureClipboardWrite(text: string): Promise<void> {
   const sanitized = sanitizePlainText(text);
 
+  // Treat the code as running under the test runner when Vite reports
+  // test mode. In real dev/prod builds MODE is 'development'/'production',
+  // so diagnostics keep firing there while tests stay quiet..
+  const isTest = import.meta.env?.MODE === "test";
+
   // Try modern Clipboard API first
   if (
     navigator.clipboard &&
@@ -160,10 +165,7 @@ export async function secureClipboardWrite(text: string): Promise<void> {
       // Only announce a fallback when one can actually be attempted (jsdom
       // and some browsers lack execCommand) and only outside the test
       // runner, so diagnostics stay useful without test noise.
-      if (
-        typeof document.execCommand === "function" &&
-        import.meta.env?.MODE !== "test"
-      ) {
+      if (typeof document.execCommand === "function" && !isTest) {
         console.debug("Clipboard API write failed, falling back:", error);
       }
     }
@@ -188,7 +190,9 @@ export async function secureClipboardWrite(text: string): Promise<void> {
       }
       return;
     } catch (error) {
-      console.error("Clipboard write failed:", error);
+      if (!isTest) {
+        console.error("Clipboard write failed:", error);
+      }
       throw new Error("Failed to copy to clipboard");
     }
   }
