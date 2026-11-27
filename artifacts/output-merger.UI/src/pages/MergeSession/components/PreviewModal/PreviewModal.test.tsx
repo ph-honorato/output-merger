@@ -67,18 +67,23 @@ const Harness = ({
 const renderWithProviders = (
   updates: Array<[string, Snippet[]]>,
   options: { document?: PreviewToken[] } = {},
-) =>
-  render(
-    <I18nextProvider i18n={i18n}>
-      <MuiThemeProvider theme={theme}>
-        <StyledThemeProvider theme={theme}>
-          <SnippetsProvider>
-            <Harness updates={updates} document={options.document} />
-          </SnippetsProvider>
-        </StyledThemeProvider>
-      </MuiThemeProvider>
-    </I18nextProvider>,
-  );
+) => {
+  let rendered!: ReturnType<typeof render>;
+  act(() => {
+    rendered = render(
+      <I18nextProvider i18n={i18n}>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            <SnippetsProvider>
+              <Harness updates={updates} document={options.document} />
+            </SnippetsProvider>
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </I18nextProvider>,
+    );
+  });
+  return rendered;
+};
 
 const seedInterleaved = (): Array<[string, Snippet[]]> => [
   ['text-1', [makeSnippet('a1', 'Alpha')]],
@@ -120,7 +125,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await i18n.changeLanguage('en-US');
+  await act(async () => {
+    await i18n.changeLanguage('en-US');
+  });
   vi.restoreAllMocks();
   installDefaultMatchMedia();
 });

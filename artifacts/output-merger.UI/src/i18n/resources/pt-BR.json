@@ -51,5 +51,7 @@
   "textInput.needleEnd": "Marcador de fim do trecho",
   "shortcuts.toggleEditing": "Alternar edição de texto",
   "shortcuts.openPreviewModal": "Abrir modal de prévia",
-  "footer.github": "Perfil no GitHub"
+  "footer.github": "Perfil no GitHub",
+  "footer.issuePrompt": "Encontrou algum problema? Por favor,",
+  "footer.reportHere": "reporte aqui"
 }

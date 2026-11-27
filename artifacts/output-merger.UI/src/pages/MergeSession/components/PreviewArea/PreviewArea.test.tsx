@@ -98,21 +98,28 @@ const Harness = ({ updates }: { updates: Array<[string, Snippet[]]> }) => {
   );
 };
 
-const renderWithProviders = (updates: Array<[string, Snippet[]]>) =>
-  render(
-    <I18nextProvider i18n={i18n}>
-      <MuiThemeProvider theme={theme}>
-        <StyledThemeProvider theme={theme}>
-          <SnippetsProvider>
-            <Harness updates={updates} />
-          </SnippetsProvider>
-        </StyledThemeProvider>
-      </MuiThemeProvider>
-    </I18nextProvider>,
-  );
+const renderWithProviders = (updates: Array<[string, Snippet[]]>) => {
+  let rendered!: ReturnType<typeof render>;
+  act(() => {
+    rendered = render(
+      <I18nextProvider i18n={i18n}>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            <SnippetsProvider>
+              <Harness updates={updates} />
+            </SnippetsProvider>
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </I18nextProvider>,
+    );
+  });
+  return rendered;
+};
 
 afterEach(async () => {
-  await i18n.changeLanguage("en-US");
+  await act(async () => {
+    await i18n.changeLanguage("en-US");
+  });
 });
 
 const seedInterleaved = (): Array<[string, Snippet[]]> => [
@@ -1815,7 +1822,9 @@ const collapseSelectionAtEnd = (root: HTMLElement): boolean => {
 
 describe("PreviewArea editable surface", () => {
   afterEach(async () => {
-    await i18n.changeLanguage("en-US");
+    await act(async () => {
+      await i18n.changeLanguage("en-US");
+    });
   });
 
   it("renders no editing attributes while edit mode is OFF (today's flow)", () => {
