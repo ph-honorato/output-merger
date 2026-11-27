@@ -1,4 +1,4 @@
-import DOMPurify from 'dompurify';
+import DOMPurify from "dompurify";
 
 /**
  * Sanitization configuration for user-generated content.
@@ -7,9 +7,9 @@ import DOMPurify from 'dompurify';
  */
 const SANITIZE_CONFIG = {
   // Allow only safe formatting tags
-  ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 'a', 'br', 'p', 'span'],
+  ALLOWED_TAGS: ["b", "strong", "i", "em", "u", "a", "br", "p", "span"],
   // Allow only safe attributes
-  ALLOWED_ATTR: ['href', 'title', 'rel', 'target', 'style'],
+  ALLOWED_ATTR: ["href", "title", "rel", "target", "style"],
   // Allow safe protocols in href
   ALLOWED_URI_REGEXP: /^(?:https?|mailto):/i,
   // Keep content of removed tags (unwrap instead of strip)
@@ -18,31 +18,25 @@ const SANITIZE_CONFIG = {
   RETURN_DOM_FRAGMENT: false,
   // Strip dangerous attributes globally
   FORBID_TAGS: [
-    'script',
-    'iframe',
-    'frame',
-    'frameset',
-    'object',
-    'embed',
-    'applet',
-    'meta',
-    'link',
-    'style',
-    'base',
-    'form',
-    'input',
-    'button',
-    'textarea',
-    'select',
-    'option',
+    "script",
+    "iframe",
+    "frame",
+    "frameset",
+    "object",
+    "embed",
+    "applet",
+    "meta",
+    "link",
+    "style",
+    "base",
+    "form",
+    "input",
+    "button",
+    "textarea",
+    "select",
+    "option",
   ],
-  FORBID_ATTR: [
-    'on*',
-    'style',
-    'xmlns*',
-    'form*',
-    'data-*',
-  ],
+  FORBID_ATTR: ["on*", "style", "xmlns*", "form*", "data-*"],
 };
 
 /**
@@ -52,8 +46,8 @@ const SANITIZE_CONFIG = {
  * @returns Sanitized plain text (tags stripped) or sanitized HTML if needed
  */
 export function sanitizeClipboardHtml(html: string): string {
-  if (!html || typeof html !== 'string') {
-    return '';
+  if (!html || typeof html !== "string") {
+    return "";
   }
 
   // Use DOMPurify to sanitize - it returns safe HTML
@@ -69,9 +63,9 @@ export function sanitizeClipboardHtml(html: string): string {
 
   // Create a temporary element to extract text content
   // This ensures we get clean plain text without any HTML entities
-  const tempDiv = document.createElement('div');
+  const tempDiv = document.createElement("div");
   tempDiv.innerHTML = cleanHtml;
-  return tempDiv.textContent ?? '';
+  return tempDiv.textContent ?? "";
 }
 
 /**
@@ -81,8 +75,8 @@ export function sanitizeClipboardHtml(html: string): string {
  * @returns Sanitized HTML with only safe tags/attributes
  */
 export function sanitizeRichText(html: string): string {
-  if (!html || typeof html !== 'string') {
-    return '';
+  if (!html || typeof html !== "string") {
+    return "";
   }
 
   return DOMPurify.sanitize(html, SANITIZE_CONFIG);
@@ -95,20 +89,22 @@ export function sanitizeRichText(html: string): string {
  * @returns Sanitized plain text
  */
 export function sanitizePlainText(text: string): string {
-  if (!text || typeof text !== 'string') {
-    return '';
+  if (!text || typeof text !== "string") {
+    return "";
   }
 
-  return text
-    // Remove null bytes
-    .replace(/\0/g, '')
-    // Remove control characters except newline, tab, carriage return
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    // Normalize line endings to \n
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    // Limit excessive whitespace (optional, based on requirements)
-    .replace(/[ \t]{100,}/g, ' '.repeat(100));
+  return (
+    text
+      // Remove null bytes
+      .replace(/\0/g, "")
+      // Remove control characters except newline, tab, carriage return
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+      // Normalize line endings to \n
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      // Limit excessive whitespace (optional, based on requirements)
+      .replace(/[ \t]{100,}/g, " ".repeat(100))
+  );
 }
 
 /**
@@ -118,7 +114,10 @@ export function sanitizePlainText(text: string): string {
  * @param maxLength - Maximum allowed characters (default 500)
  * @returns Sanitized text within limits
  */
-export function validateAndSanitizeInput(text: string, maxLength = 500): string {
+export function validateAndSanitizeInput(
+  text: string,
+  maxLength = 500,
+): string {
   const sanitized = sanitizePlainText(text);
   return sanitized.slice(0, maxLength);
 }
@@ -130,13 +129,13 @@ export function validateAndSanitizeInput(text: string, maxLength = 500): string 
  * @returns Plain text content
  */
 export function stripHtmlTags(html: string): string {
-  if (!html || typeof html !== 'string') {
-    return '';
+  if (!html || typeof html !== "string") {
+    return "";
   }
 
-  const tempDiv = document.createElement('div');
+  const tempDiv = document.createElement("div");
   tempDiv.innerHTML = html;
-  return tempDiv.textContent ?? '';
+  return tempDiv.textContent ?? "";
 }
 
 /**
@@ -148,43 +147,58 @@ export function stripHtmlTags(html: string): string {
 export async function secureClipboardWrite(text: string): Promise<void> {
   const sanitized = sanitizePlainText(text);
 
+  // Treat the code as running under the test runner when Vite reports
+  // test mode. In real dev/prod builds MODE is 'development'/'production',
+  // so diagnostics keep firing there while tests stay quiet..
+  const isTest = import.meta.env?.MODE === "test";
+
   // Try modern Clipboard API first
-  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+  if (
+    navigator.clipboard &&
+    typeof navigator.clipboard.writeText === "function"
+  ) {
     try {
       await navigator.clipboard.writeText(sanitized);
       return;
     } catch (error) {
-      // Fall through to fallback if permission denied or other error
-      console.debug('Clipboard API write failed, falling back:', error);
+      // Fall through to fallback if permission denied or other error.
+      // Only announce a fallback when one can actually be attempted (jsdom
+      // and some browsers lack execCommand) and only outside the test
+      // runner, so diagnostics stay useful without test noise.
+      if (typeof document.execCommand === "function" && !isTest) {
+        console.debug("Clipboard API write failed, falling back:", error);
+      }
     }
   }
 
   // Fallback: use execCommand (deprecated but widely supported)
   // Check if execCommand is available (not available in jsdom/test environments)
-  if (typeof document.execCommand === 'function') {
+  if (typeof document.execCommand === "function") {
     try {
-      const textArea = document.createElement('textarea');
+      const textArea = document.createElement("textarea");
       textArea.value = sanitized;
-      textArea.style.position = 'fixed';
-      textArea.style.opacity = '0';
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
       document.body.appendChild(textArea);
       textArea.focus();
       textArea.select();
-      const successful = document.execCommand('copy');
+      const successful = document.execCommand("copy");
       document.body.removeChild(textArea);
 
       if (!successful) {
-        throw new Error('execCommand copy failed');
+        throw new Error("execCommand copy failed");
       }
       return;
     } catch (error) {
-      console.error('Clipboard write failed:', error);
-      throw new Error('Failed to copy to clipboard');
+      if (!isTest) {
+        console.error("Clipboard write failed:", error);
+      }
+      throw new Error("Failed to copy to clipboard");
     }
   }
 
   // No clipboard API available
-  throw new Error('Clipboard write not available in this environment');
+  throw new Error("Clipboard write not available in this environment");
 }
 
 /**
@@ -194,19 +208,22 @@ export async function secureClipboardWrite(text: string): Promise<void> {
  */
 export async function secureClipboardRead(): Promise<string> {
   // Try modern Clipboard API first
-  if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+  if (
+    navigator.clipboard &&
+    typeof navigator.clipboard.readText === "function"
+  ) {
     try {
       const text = await navigator.clipboard.readText();
       return sanitizePlainText(text);
     } catch (error) {
       // Permission denied or other error - fall through
-      console.debug('Clipboard API read failed:', error);
+      console.debug("Clipboard API read failed:", error);
     }
   }
 
   // Fallback: try to read from a pasted event (not directly possible without user interaction)
   // This is a limitation - we can't read clipboard without user paste action in fallback
-  throw new Error('Clipboard read not available - requires user paste action');
+  throw new Error("Clipboard read not available - requires user paste action");
 }
 
 /**
@@ -214,16 +231,19 @@ export async function secureClipboardRead(): Promise<string> {
  * @param event - ClipboardEvent from paste handler (React or native)
  * @returns Sanitized plain text from clipboard
  */
-export function handleSecurePaste(event: React.ClipboardEvent<HTMLDivElement> | ClipboardEvent): string {
+export function handleSecurePaste(
+  event: React.ClipboardEvent<HTMLDivElement> | ClipboardEvent,
+): string {
   // Get clipboardData from native event if available (React synthetic event)
   // or directly from the event (native ClipboardEvent)
-  const clipboardData = 'nativeEvent' in event
-    ? event.nativeEvent.clipboardData
-    : event.clipboardData;
+  const clipboardData =
+    "nativeEvent" in event
+      ? event.nativeEvent.clipboardData
+      : event.clipboardData;
 
   // Get both HTML and plain text from clipboard
-  const html = clipboardData?.getData('text/html');
-  const plainText = clipboardData?.getData('text/plain') ?? '';
+  const html = clipboardData?.getData("text/html");
+  const plainText = clipboardData?.getData("text/plain") ?? "";
 
   // Prefer plain text when available - it's already clean and doesn't need
   // sanitization. HTML from clipboard (especially from our own preview area)
@@ -231,7 +251,7 @@ export function handleSecurePaste(event: React.ClipboardEvent<HTMLDivElement> | 
   let text = plainText;
   if (!text && html && html.trim().length > 0) {
     // Fall back to sanitized HTML only when plain text is empty
-    text = sanitizeClipboardHtml(html) || '';
+    text = sanitizeClipboardHtml(html) || "";
   }
 
   return sanitizePlainText(text);

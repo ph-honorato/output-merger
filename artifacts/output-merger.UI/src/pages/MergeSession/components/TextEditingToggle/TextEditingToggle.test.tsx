@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
 import { I18nextProvider } from 'react-i18next';
@@ -17,20 +17,27 @@ const TogglePair = () => (
   </>
 );
 
-const renderToggle = (ui = <TextEditingToggle />) =>
-  render(
-    <I18nextProvider i18n={i18n}>
-      <MuiThemeProvider theme={theme}>
-        <StyledThemeProvider theme={theme}>
-          <SnippetsProvider>{ui}</SnippetsProvider>
-        </StyledThemeProvider>
-      </MuiThemeProvider>
-    </I18nextProvider>,
-  );
+const renderToggle = (ui = <TextEditingToggle />) => {
+  let rendered!: ReturnType<typeof render>;
+  act(() => {
+    rendered = render(
+      <I18nextProvider i18n={i18n}>
+        <MuiThemeProvider theme={theme}>
+          <StyledThemeProvider theme={theme}>
+            <SnippetsProvider>{ui}</SnippetsProvider>
+          </StyledThemeProvider>
+        </MuiThemeProvider>
+      </I18nextProvider>,
+    );
+  });
+  return rendered;
+};
 
 describe('TextEditingToggle', () => {
   afterEach(async () => {
-    await i18n.changeLanguage('en-US');
+    await act(async () => {
+      await i18n.changeLanguage('en-US');
+    });
   });
 
   it('renders an icon-only toggle button with the Title icon and the edit-toggle testid', () => {
@@ -153,7 +160,9 @@ describe('TextEditingToggle', () => {
       'Disable text editing (Ctrl+E)',
     );
 
-    await i18n.changeLanguage('pt');
+    await act(async () => {
+      await i18n.changeLanguage('pt');
+    });
     expect(screen.getByTestId('preview-edit-toggle')).toHaveAttribute(
       'aria-label',
       'Desativar edição de texto (Ctrl+E)',

@@ -69,7 +69,7 @@ When working on this project, agents should:
 3. Follow the established patterns and conventions
 4. Create focused, single-purpose components when implementing UI elements
 5. Ensure proper separation of concerns between frontend and backend
-6. Write tests for new functionality
+6. Write tests for new functionality, check out `/vitest-act-cautions` skill
 7. Update documentation when necessary
 8. After a feature is implementad, go back to [roadmap.md](./roadmap.md) and update the status, including the implementation details path (e.g. `- implementation details on .specs/features/.../tasks/.../`)
 9. If there's a big decision is needed, ask before implementing!
@@ -99,10 +99,10 @@ Whenever starting the implementation of a task, the resolution must follow this 
 
 ## Implementation Guidelines
 
-| Guideline             | Description                                                                                                                                                                            | Applies To                             |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Guideline              | Description                                                                                                                                                                                                                                                                                    | Applies To                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | **Comment Discipline** | Code comments describe only how the code works (functions/components/props/mechanisms). Never put round numbers, dates, user decisions, review cycles, or spec/ADR/requirement references in code comments — decisions and history are recorded in `.specs/**/implementation.md` and `spec.md` | All code files                         |
-| **Styling**           | Implement styling using MUI and Styled Components consistently across all components                                                                                                   | All UI components                      |
-| **State Management**  | Implement state management using React Context + useReducer for global state                                                                                                           | All features requiring shared state    |
-| **Integration Tests** | Write integration tests for key user workflows using Vitest. Test files should be placed alongside the implementation files or in a `__tests__` directory following Vitest conventions | All features (complete user workflows) |
-| **Unit Tests**        | Implement unit tests only for UI components (in `src/components` or in a page/context `components` folder) and future API functions (in `artifacts/output-merger.API`)                 | Components and API functions only      |
+| **Styling**            | Implement styling using MUI and Styled Components consistently across all components                                                                                                                                                                                                           | All UI components                      |
+| **State Management**   | Implement state management using React Context + useReducer for global state                                                                                                                                                                                                                   | All features requiring shared state    |
+| **Integration Tests**  | Write integration tests for key user workflows using Vitest. Test files should be placed alongside the implementation files or in a `__tests__` directory following Vitest conventions                                                                                                         | All features (complete user workflows) |
+| **Unit Tests**         | Implement unit tests only for UI components (in `src/components` or in a page/context `components` folder) and future API functions (in `artifacts/output-merger.API`)                                                                                                                         | Components and API functions only      |
